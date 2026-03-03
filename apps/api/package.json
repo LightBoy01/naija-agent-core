@@ -1,0 +1,22 @@
+{
+  "name": "@naija-agent/api",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node-dev src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@naija-agent/firebase": "*",
+    "@naija-agent/types": "*",
+    "bullmq": "^5.1.0",
+    "dotenv": "^16.4.1",
+    "fastify": "^4.26.0",
+    "fastify-raw-body": "^4.3.0",
+    "ioredis": "^5.3.2"
+  },
+  "devDependencies": {
+    "ts-node-dev": "^2.0.0"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@naija-agent/types",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "zod": "^3.22.4"
+  }
+}
