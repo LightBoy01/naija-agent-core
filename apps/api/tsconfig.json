@@ -4,5 +4,9 @@
     "rootDir": "./src",
     "outDir": "./dist"
   },
+  "references": [
+    { "path": "../../packages/types" },
+    { "path": "../../packages/firebase" }
+  ],
   "include": ["src/**/*"]
 }
