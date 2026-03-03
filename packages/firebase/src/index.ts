@@ -1,13 +1,35 @@
 import * as admin from 'firebase-admin';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
 
 dotenv.config({ path: '../../.env' });
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
+  let credential;
+  const localKeyPath = path.join(__dirname, '/../serviceAccountKey.json');
+
+  if (fs.existsSync(localKeyPath)) {
+    // 1. Try local file (Termux)
+    credential = admin.credential.cert(localKeyPath);
+  } else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    // 2. Try Environment Variable (Cloud / Railway)
+    try {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT.replace(/[^\x20-\x7E]/g, ''));
+      credential = admin.credential.cert(serviceAccount);
+    } catch (e) {
+      console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT ENV', e);
+      process.exit(1);
+    }
+  } else {
+    console.error('❌ Firebase Error: No serviceAccountKey.json found and FIREBASE_SERVICE_ACCOUNT ENV is missing.');
+    process.exit(1);
+  }
+
   admin.initializeApp({
-    credential: admin.credential.cert(__dirname + '/../serviceAccountKey.json'),
+    credential,
     projectId: 'naija-agent-core'
   });
 }
