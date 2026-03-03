@@ -18,5 +18,11 @@
     "declarationMap": true,
     "composite": true
   },
+  "references": [
+    { "path": "packages/types" },
+    { "path": "packages/firebase" },
+    { "path": "apps/api" },
+    { "path": "apps/worker" }
+  ],
   "exclude": ["node_modules", "dist"]
 }
