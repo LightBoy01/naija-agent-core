@@ -6,7 +6,9 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
+    "build:packages": "npm run build --workspace=@naija-agent/types && npm run build --workspace=@naija-agent/firebase",
+    "build:apps": "npm run build --workspace=@naija-agent/api && npm run build --workspace=@naija-agent/worker",
+    "build": "npm run build:packages && npm run build:apps",
     "dev": "npm run dev --workspaces",
     "start": "npm run start --workspaces"
   },
