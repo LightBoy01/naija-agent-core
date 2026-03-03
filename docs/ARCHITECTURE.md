@@ -1,78 +1,56 @@
-# System Architecture & Tech Stack
+# System Architecture & Tech Stack (Cloud Native)
 
 ## 1. Technology Stack
 
 | Component | Technology | Reasoning |
 | :--- | :--- | :--- |
-| **Runtime** | **Node.js (v20 LTS)** | Robust ecosystem, excellent for I/O heavy tasks. |
-| **Language** | **TypeScript** | Type safety for complex logic and maintainability. |
-| **Web Framework** | **Fastify** | High performance, low overhead, schema-based validation. |
-| **Database** | **Firebase Firestore** | NoSQL over HTTPS. Bypasses IPv6/TCP connection issues in Termux. |
-| **Task Queue** | **BullMQ + Redis** | Decouples webhook ingestion from AI processing to prevent timeouts. |
-| **AI Model** | **Gemini 1.5 Flash** | Lowest cost/performance ratio, 1M context, Native Audio. |
-| **WhatsApp Provider** | **Meta Cloud API** | Direct integration (No markup), official stability. |
-| **Hosting** | **Railway / Hetzner** | Docker-based, predictable pricing, easy scaling. |
+| **Runtime** | **Node.js (v20 LTS)** | Industry standard for high-concurrency event-driven apps. |
+| **Language** | **TypeScript** | Strict typing for financials and complex state management. |
+| **Web Framework** | **Fastify** | Lowest overhead for webhook ingestion. |
+| **Database** | **Firebase Firestore** | Serverless, globally distributed NoSQL over HTTPS. |
+| **Task Queue** | **BullMQ + Railway Redis** | Production-grade managed queue system. |
+| **AI Model** | **Gemini 1.5 Flash** | Multimodal (Audio/Vision) support at 1/10th the cost of GPT-4. |
+| **Hosting** | **Railway.app (Docker)** | Automated deployments from GitHub with public SSL endpoints. |
 
-## 2. High-Level Architecture
+## 2. Production Architecture
 
 ```mermaid
 graph TD
     User((User)) -->|WhatsApp Message| MetaAPI[Meta Cloud API]
-    MetaAPI -->|Webhook (POST)| WebhookSvc[Webhook Service (Fastify)]
-    WebhookSvc -->|1. Verify Signature| WebhookSvc
-    WebhookSvc -->|2. Push Job| Redis[(Redis Queue)]
-    WebhookSvc -->|3. Return 200 OK| MetaAPI
+    MetaAPI -->|Webhook (POST)| RailwayAPI[Railway API Service]
     
-    Worker[AI Worker (Node.js)] -->|Pop Job| Redis
-    Worker -->|Fetch Context| DB[(Firestore)]
-    Worker -->|Generate Response| Gemini[Gemini 1.5 Flash API]
-    
-    subgraph "AI Processing"
-        Gemini -->|Tool Call?| Worker
-        Worker -->|Execute Tool| ExternalAPIs[External APIs / DBs]
-        ExternalAPIs -->|Result| Worker
-        Worker -->|Final Response| Gemini
+    subgraph "Railway.app Cloud"
+        RailwayAPI -->|Verify Signature| RailwayAPI
+        RailwayAPI -->|Push Job| RailwayRedis[(Managed Redis)]
+        RailwayWorker[Railway Worker Service] -->|Pop Job| RailwayRedis
     end
     
-    Worker -->|Send Reply| MetaAPI
-    Worker -->|Save History| DB
+    subgraph "Google Cloud"
+        RailwayWorker -->|Context & Transactions| Firestore[(Firestore)]
+        RailwayWorker -->|Inference| Gemini[Gemini 1.5 Flash]
+    end
+    
+    RailwayWorker -->|Send Text/Audio| MetaAPI
+    MetaAPI -->|WhatsApp Reply| User
 ```
 
-## 3. Data Model (NoSQL / Firestore)
+## 3. Data Model (Final Production)
 
-### `organizations` (Collection)
-*   `id` (Doc ID)
-*   `name` (String)
-*   `whatsappPhoneId` (String, Unique Index)
-*   `systemPrompt` (Text)
-*   `config` (Map: tools: string[])
-*   `balance` (Number, Kobo)
-*   `costPerReply` (Number, Kobo)
+### `organizations`
+*   Managed via Firestore Transactions for **Prepaid Credit** integrity.
+*   Multi-tenant routing via `whatsappPhoneId`.
 
-### `chats` (Collection)
-*   `id` (Doc ID: {orgId}_{userPhone})
-*   `organizationId` (String)
-*   `whatsappUserId` (String)
-*   `userName` (String)
-*   `summary` (Text)
-*   `messages` (Sub-collection)
-    *   `role` (user/assistant)
-    *   `content` (Text)
-    *   `type` (text/audio)
-    *   `timestamp` (ServerTimestamp)
+### `chats`
+*   Doc ID format: `{orgId}_{userPhone}` for O(1) lookup.
+*   Conversational history stored in `messages` sub-collection.
 
-## 4. Key Workflows
+## 4. Operational Workflows (Production)
 
-### 4.1 Ingestion (Fast Lane)
-1.  **Receive:** Endpoint `/webhook` accepts POST payload.
-2.  **Verify:** Check `X-Hub-Signature-256` against `APP_SECRET`.
-3.  **Queue:** Extract minimal data (`from`, `id`, `text`/`audio`, `timestamp`) and push to `whatsapp-queue`.
-4.  **Respond:** Return HTTP 200 immediately.
+### 4.1 Hybrid Authentication
+The `@naija-agent/firebase` package uses a fall-through strategy for credentials:
+1.  **Local (Termux):** Reads `serviceAccountKey.json`.
+2.  **Cloud (Railway):** Parses `FIREBASE_SERVICE_ACCOUNT` environment variable.
 
-### 4.2 Processing (Slow Lane)
-1.  **Job Start:** Worker picks up job.
-2.  **Context:** Fetch last 10 messages from Firestore sub-collection.
-3.  **AI Request:** Send System Prompt + History + New Message (Text or Audio Buffer) to Gemini.
-4.  **Action:** If Gemini requests a function call, execute it and feed result back.
-5.  **Reply:** Send final text response via Meta Graph API.
-6.  **Accounting:** Deduct `costPerReply` from `organizations` doc via a **Firestore Transaction**.
+### 4.2 Webhook Security
+*   **Signature Verification:** Every Meta request is verified against `WHATSAPP_APP_SECRET` using SHA256 HMAC.
+*   **Idempotency:** `message_id` is tracked in Redis for 1 hour to prevent double-processing during Meta retries.

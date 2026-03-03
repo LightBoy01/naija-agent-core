@@ -25,8 +25,11 @@ WORKDIR /app
 # Copy built artifacts
 COPY --from=builder /app ./
 
+# Make start.sh executable
+RUN chmod +x ./start.sh
+
 # Expose API port
 EXPOSE 3000
 
-# Start API (We will run Worker separately or via a start script)
-CMD ["npm", "start", "--workspace=@naija-agent/api"]
+# Start API and Worker
+CMD ["./start.sh"]

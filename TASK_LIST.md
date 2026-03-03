@@ -14,29 +14,25 @@
     - [x] Implement Chat History (Sub-collections)
     - [x] Seed First Organization
 
-- [x] **API Service (Webhook Receiver)**
+- [x] **API Service (Production)**
     - [x] Setup Fastify Server
     - [x] Implement Signature Verification
-    - [x] Implement Firestore Tenant Lookup
-    - [x] Push Job to BullMQ
+    - [x] Dockerize for Cloud Deployment
+    - [x] **Deploy to Railway.app** (Active)
 
 - [x] **Worker Service (The "Slow Lane")**
-    - [x] Connect to Redis Queue
-    - [x] Implement Firestore Persistence
+    - [x] Connect to Production Redis (Railway)
+    - [x] Implement Hybrid Auth (File + ENV)
     - [x] Implement Native Audio Handling (Buffer -> Gemini)
-    - [x] Verified Build Success (100%)
 
 ## Phase 2: Intelligence (The "Brain")
 
-- [ ] **AI Logic Integration**
-    - [ ] Add `GEMINI_API_KEY` to `.env`
-    - [ ] Test Text Processing (Pidgin awareness)
-    - [ ] Test Audio Processing (Native Multimodal)
-
-- [ ] **WhatsApp Connectivity**
-    - [ ] Add `WHATSAPP_API_TOKEN` to `.env`
-    - [ ] Add `WHATSAPP_PHONE_ID` to `.env`
-    - [ ] Implement outbound message sending (Meta Graph API)
+- [x] **WABA Ignition**
+    - [x] Register WhatsApp Test Number (Success)
+    - [x] Add Recipient Allowlist
+- [ ] **AI Integration**
+    - [ ] Perform First Production AI Reply
+    - [ ] Verify Native Audio Multimodal Support in Cloud
 
 ## Phase 3: Finance & Ops (The "Bank")
 
@@ -47,7 +43,7 @@
     - [ ] Implement "Low Balance" WhatsApp Alerts
     - [ ] Implement #STOP / #START Safety Commands
 
-## Phase 4: Features (High Value)
+## Phase 4: Features (The Moat)
 
 - [ ] **Fake Alert Buster**
     - [ ] Implement Gemini Vision for receipt extraction
@@ -55,9 +51,9 @@
 - [ ] **Rider Tracking**
     - [ ] Implement "Group Chat Spy" for GPS coordinates
 
-## Phase 5: Deployment & Scale
+## Phase 5: Scale
 
-- [ ] **Production Readiness**
-    - [ ] Dockerize API & Worker
-    - [ ] Deploy to Railway (Staging)
+- [ ] **Infrastructure Optimization**
+    - [ ] Setup sidecar process for Worker in Railway
     - [ ] Setup Structured Logging (Pino)
+    - [ ] Monitoring (Sentry/Logtail)

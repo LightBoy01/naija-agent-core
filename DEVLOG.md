@@ -56,28 +56,26 @@
 *   **Red Team Analysis (Ops):** Documented risks regarding SIM limits, Trust Deficits, and Emergency Failures, with specific mitigations (Client SIM Ownership, Freemium Trials, #STOP command).
 *   **Pain Points:** Documented high-value features (Receipt Verification, Rider Tracking) in `docs/PAIN_POINTS_FEATURES.md`.
 
-## Session 6: The Firebase Pivot & Infrastructure Stability (2026-03-01)
+## Session 7: Cloud Native & Production Launch (2026-03-03)
 
 **Status:** 🟢 **Completed**
 
 ### **Actions Taken:**
-*   **The Supabase Block:** Identified that Supabase's IPv6-only direct connection is incompatible with many mobile/Termux environments, causing persistent `ETIMEDOUT`.
-*   **Architectural Pivot:** Moved the entire database layer from Drizzle/SQL to **Firebase Firestore**.
-*   **Project Automation:** Created the `naija-agent-core` Firebase project directly via CLI.
-*   **Admin SDK Implementation:** Created `@naija-agent/firebase` package.
-    *   Implemented `deductBalance` using Firestore Transactions for ACID compliance.
-    *   Implemented `saveMessage` and `getChatHistory` using sub-collections.
-*   **Service Migration:** Updated `apps/api` and `apps/worker` to use the new Firebase helpers.
-*   **Security & Auth:** Resolved a complex bug where invisible characters in the `.env` file were breaking JSON parsing of the service account. Moved to a direct file-read strategy for the key.
-*   **Seeding:** Successfully seeded the first "NaijaAgent HQ" organization into the live Firestore database.
-*   **Health Check:** Verified 100% build success across the monorepo.
+*   **Tunnel Fatigue:** Exhausted all free tunnel options (`ngrok`, `serveo`, `localhost.run`, `pinggy`) due to Meta's aggressive security filters and Termux DNS issues.
+*   **Production Move:** Decided to move the API from Termux to **Railway.app** for a permanent public URL.
+*   **Dockerization:** Created a multi-stage `Dockerfile` to build the TypeScript monorepo and serve the API.
+*   **GitHub Integration:** Created `LightBoy01/naija-agent-core` repo and pushed the codebase via `gh` CLI.
+*   **Hybrid Auth Fix:** Updated `@naija-agent/firebase` to support a hybrid initialization strategy: reads from local `serviceAccountKey.json` if present (Termux), otherwise falls back to `FIREBASE_SERVICE_ACCOUNT` environment variable (Railway).
+*   **Redis Provisioning:** Set up Railway Redis and linked it to the API service via internal networking variables.
+*   **WABA Ignition:** Successfully registered the WhatsApp Test Number via manual API call after resolving the `Account not registered` (133010) error.
+*   **Gemini Activation:** Integrated the Gemini API Key into the production environment.
 
 ### **Self-Assessment:**
-*   **Good:** High agility in pivoting when infrastructure failed. Minimized "sunk cost" by stopping the Supabase struggle early.
-*   **Weak:** Initial setup didn't account for Termux's IPv6 limitations. JSON parsing from `.env` is brittle in this environment.
-*   **Missing:** Real-world API keys (Gemini/Meta) to perform the first "End-to-End" audio test.
+*   **Good:** Meticulous debugging of the Meta "Account not registered" error. Proactive move to Docker/Cloud when local tunnels proved too unstable for production-grade testing.
+*   **Weak:** Spent significant time fighting free tunnels before realizing they were the primary bottleneck.
+*   **Missing:** Final outbound message confirmation from the AI Worker (awaiting Railway deployment finish).
 
-### **Next Steps (Session 7):**
-*   [ ] **Connect Gemini:** Add `GEMINI_API_KEY` and test audio buffer processing.
-*   [ ] **Connect Meta:** Add `WHATSAPP_API_TOKEN` and `WHATSAPP_PHONE_ID`.
-*   [ ] **Live Webhook Test:** Expose via `ngrok` and send the first voice note.
+### **Next Steps (Session 8):**
+*   [ ] **Verify Railway URL:** Perform the first "Hello" test against the production URL.
+*   [ ] **Worker Activation:** Ensure the Worker process is running alongside the API in Railway (using a process manager or sidecar).
+*   [ ] **Multi-Media Test:** Send a voice note and verify Gemini's native audio processing in the cloud.
