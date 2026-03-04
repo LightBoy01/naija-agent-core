@@ -2,26 +2,11 @@
 FROM node:20 AS builder
 WORKDIR /app
 
-# Copy root package files
-COPY package*.json ./
-
-# Create workspace directories
-RUN mkdir -p apps/api apps/worker packages/firebase packages/types
-
-# Copy workspace package files
-COPY apps/api/package*.json ./apps/api/
-COPY apps/worker/package*.json ./apps/worker/
-COPY packages/firebase/package*.json ./packages/firebase/
-COPY packages/types/package*.json ./packages/types/
-
-# Debug: List files to verify structure
-RUN ls -R
+# Copy all files (Simple approach to test context)
+COPY . .
 
 # Install dependencies
 RUN npm install
-
-# Copy all source code
-COPY . .
 
 # Build
 RUN npm run build
