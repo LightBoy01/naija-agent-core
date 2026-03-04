@@ -1,8 +1,6 @@
 {
-  "extends": "../../tsconfig.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "./src",
-    "outDir": "./dist",
     "baseUrl": ".",
     "paths": {
       "@naija-agent/types": ["../../packages/types/src"],
