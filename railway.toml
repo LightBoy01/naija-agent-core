@@ -1,15 +1,15 @@
 [build]
-builder = "nixpacks"
-buildCommand = "npm run build"
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "ls -R apps && npm run start:api"
+startCommand = "npm run start:api"
 restartPolicyType = "ON_FAILURE"
 
 [[services]]
 name = "api"
-startCommand = "ls -R apps && npm run start:api"
+startCommand = "npm run start:api"
 
 [[services]]
 name = "worker"
-startCommand = "ls -R apps && npm run start:worker"
+startCommand = "npm run start:worker"
