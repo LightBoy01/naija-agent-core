@@ -18,19 +18,21 @@
     - [x] Setup Fastify Server
     - [x] Implement Signature Verification
     - [x] Dockerize for Cloud Deployment
-    - [x] **Deploy to Railway.app** (Active)
+    - [x] **Deploy to Railway.app** (In Progress - Fix Applied)
 
 - [x] **Worker Service (The "Slow Lane")**
     - [x] Connect to Production Redis (Railway)
     - [x] Implement Hybrid Auth (File + ENV)
     - [x] Implement Native Audio Handling (Buffer -> Gemini)
+    - [x] Fix ESM Module Imports (.js extensions)
 
 ## Phase 2: Intelligence (The "Brain")
 
 - [x] **WABA Ignition**
     - [x] Register WhatsApp Test Number (Success)
     - [x] Add Recipient Allowlist
-- [ ] **AI Integration**
+- [x] **AI Integration**
+    - [x] Update ConfigSchema for `gemini-2.5-flash`
     - [ ] Perform First Production AI Reply
     - [ ] Verify Native Audio Multimodal Support in Cloud
 

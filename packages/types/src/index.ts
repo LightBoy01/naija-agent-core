@@ -69,7 +69,7 @@ export type JobData = z.infer<typeof JobDataSchema>;
 
 export const ConfigSchema = z.object({
   systemPrompt: z.string(),
-  model: z.enum(['gemini-1.5-flash', 'gemini-1.5-pro']).default('gemini-1.5-flash'),
+  model: z.enum(['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash']).default('gemini-1.5-flash'),
   tools: z.array(z.string()).default([]), // List of enabled tool names
 });
 

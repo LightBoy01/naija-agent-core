@@ -2,7 +2,7 @@ import { Worker } from 'bullmq';
 import { Redis } from 'ioredis';
 import dotenv from 'dotenv';
 import { JobData } from '@naija-agent/types';
-import { WhatsAppService } from './services/whatsapp';
+import { WhatsAppService } from './services/whatsapp.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { 
   getOrgById, 
