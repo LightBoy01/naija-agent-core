@@ -5,35 +5,39 @@ WORKDIR /app
 # Copy root package files
 COPY package*.json ./
 
-# Copy workspace package files (using a more robust glob if possible, or listing them)
-# Alpine's 'cp' or Docker's 'COPY' with wildcards can be tricky with directories.
-# Listing them explicitly is safest for monorepo consistency.
+# Create workspace directories
+RUN mkdir -p apps/api apps/worker packages/firebase packages/types
+
+# Copy workspace package files
 COPY apps/api/package*.json ./apps/api/
 COPY apps/worker/package*.json ./apps/worker/
 COPY packages/firebase/package*.json ./packages/firebase/
 COPY packages/types/package*.json ./packages/types/
 
-# Install dependencies (this will respect the monorepo structure)
+# Debug: List files to verify structure
+RUN ls -R
+
+# Install dependencies
 RUN npm install
 
-# Copy the rest of the source code
+# Copy all source code
 COPY . .
 
-# Build the entire monorepo using Project References
+# Build
 RUN npm run build
 
 # Stage 2: Runtime
 FROM node:20-slim
 WORKDIR /app
 
-# Copy built artifacts from builder stage
+# Copy built artifacts
 COPY --from=builder /app ./
 
-# Ensure start.sh is executable (it was copied in the previous step)
+# Make start.sh executable
 RUN chmod +x ./start.sh
 
 # Expose API port
 EXPOSE 3000
 
-# Start API and Worker using the start script
+# Start API and Worker
 CMD ["./start.sh"]
