@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM node:20-alpine AS builder
+FROM node:20 AS builder
 WORKDIR /app
 
 # Copy root package files
@@ -23,7 +23,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Runtime
-FROM node:20-alpine
+FROM node:20-slim
 WORKDIR /app
 
 # Copy built artifacts from builder stage
