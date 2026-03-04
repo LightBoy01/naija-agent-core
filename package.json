@@ -6,7 +6,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "tsc -b",
+    "clean": "rm -rf apps/*/dist packages/*/dist apps/*/.tsbuildinfo packages/*/.tsbuildinfo",
+    "build": "npm run clean && tsc -b",
     "dev": "npm run dev --workspaces",
     "start": "npm run start --workspaces"
   },
