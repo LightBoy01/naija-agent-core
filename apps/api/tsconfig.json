@@ -2,12 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist",
-    "baseUrl": ".",
-    "paths": {
-      "@naija-agent/types": ["../../packages/types/src"],
-      "@naija-agent/firebase": ["../../packages/firebase/src"]
-    }
+    "outDir": "dist"
   },
   "references": [
     { "path": "../../packages/types" },
