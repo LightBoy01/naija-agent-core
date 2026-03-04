@@ -10,8 +10,8 @@
     "build": "npm run clean && tsc -b",
     "dev": "npm run dev --workspaces",
     "start": "npm run start --workspaces",
-    "start:api": "npm run start --workspace=@naija-agent/api",
-    "start:worker": "ls -R /app && npm run start --workspace=@naija-agent/worker"
+    "start:api": "node apps/api/dist/index.js",
+    "start:worker": "node apps/worker/dist/index.js"
   },
   "devDependencies": {
     "typescript": "^5.3.3",
