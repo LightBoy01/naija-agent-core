@@ -81,11 +81,18 @@
 *   **AI Refinement:** Updated `ConfigSchema` in `@naija-agent/types` to include `gemini-2.5-flash` in the allowed model enum.
 *   **Verification:** Successfully ran `npx tsc -b --force` locally to ensure all project references build correctly in sequence.
 
-### **Self-Assessment:**
-*   **Good:** Quickly identified the `tsc` declaration failure root cause (missing zod in root scope and NodeNext ESM strictness).
-*   **Weak:** Initial attempts to use `replace` failed silently; switched to `write_file` for guaranteed consistency.
+## Session 9: Runtime Path Correction (2026-03-04)
 
-### **Next Steps (Session 9):**
+**Status:** 🟢 **Completed**
+
+### **Actions Taken:**
+*   **Runtime Fix (Railway):** Resolved `MODULE_NOT_FOUND` crash on Railway by modifying the `start` scripts in `apps/api/package.json` and `apps/worker/package.json` to use absolute paths from the monorepo root (e.g., `node apps/worker/dist/index.js`). This ensures the commands work regardless of the execution directory.
+*   **Start Script Update:** Updated `start.sh` to reflect the new `start` commands.
+
+### **Self-Assessment:**
+*   **Good:** Quickly identified the root cause of the runtime crash (working directory mismatch) and implemented a robust fix.
+
+### **Next Steps (Session 10):**
 *   [ ] **Trigger Railway Deploy:** Push changes to GitHub and monitor the production build.
 *   [ ] **Test Webhook:** Send a "Hello" to the WhatsApp number and check Railway logs for successful processing.
 *   [ ] **Audit Stop Command:** Implement the #STOP safety feature.

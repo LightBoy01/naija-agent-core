@@ -9,7 +9,6 @@ if (!TOKEN) {
   process.exit(1);
 }
 
-// Helper to run a query
 function queryGraphQL(query) {
   return new Promise((resolve, reject) => {
     const req = https.request(ENDPOINT, {
@@ -39,8 +38,7 @@ function queryGraphQL(query) {
   });
 }
 
-// 1. Query Project + Deployments (detailed)
-const PROJECT_QUERY = `
+const SERVICE_QUERY = `
   query {
     project(id: "${PROJECT_ID}") {
       name
@@ -49,16 +47,15 @@ const PROJECT_QUERY = `
           node {
             id
             name
-          }
-        }
-      }
-      deployments(first: 5) {
-        edges {
-          node {
-            id
-            status
-            staticUrl
-            createdAt
+            deployments(first: 3) {
+              edges {
+                node {
+                  id
+                  status
+                  createdAt
+                }
+              }
+            }
           }
         }
       }
@@ -66,7 +63,6 @@ const PROJECT_QUERY = `
   }
 `;
 
-// 2. Query Logs for Deployment
 const LOGS_QUERY = (deploymentId) => `
   query {
     deploymentLogs(deploymentId: "${deploymentId}") {
@@ -79,59 +75,47 @@ const LOGS_QUERY = (deploymentId) => `
 
 async function main() {
   try {
-    console.log(`🔍 Fetching details for project: ${PROJECT_ID}...`);
-    
-    const data = await queryGraphQL(PROJECT_QUERY);
-    const project = data.project;
+    const data = await queryGraphQL(SERVICE_QUERY);
+    const services = data.project.services.edges;
 
-    if (!project) {
-      console.error("❌ Project not found.");
-      return;
+    for (const serviceEdge of services) {
+      const service = serviceEdge.node;
+      console.log(`\n🛠️  Service: ${service.name} (${service.id})`);
+      
+      const deployments = service.deployments.edges;
+      if (deployments.length === 0) {
+        console.log("No deployments found.");
+        continue;
+      }
+
+      for (const depEdge of deployments) {
+        const dep = depEdge.node;
+        console.log(`🚀 Deployment: ${dep.status} (${dep.id}) - ${dep.createdAt}`);
+        
+        if (dep.status === 'CRASHED' || dep.status === 'REMOVED' || dep.status === 'FAILED') {
+           // Skip old failed ones unless it's the latest
+           if (depEdge === deployments[0]) {
+             await fetchAndPrintLogs(dep.id);
+           }
+        } else if (dep.status === 'BUILDING' || dep.status === 'DEPLOYING' || dep.status === 'SUCCESS') {
+           await fetchAndPrintLogs(dep.id);
+        }
+      }
     }
-
-    console.log(`✅ Project: ${project.name}`);
-    
-    // List Services
-    console.log("🛠️  Services:");
-    project.services.edges.forEach(edge => {
-        console.log(`   - ${edge.node.name} (${edge.node.id})`);
-    });
-
-    // Fetch logs for the latest deployment
-    const latestDeployment = project.deployments.edges[0]?.node;
-    if (latestDeployment) {
-        console.log(`🚀 Latest Deployment: ${latestDeployment.status} (${latestDeployment.id})`);
-        await fetchAndPrintLogs(latestDeployment.id);
-    }
-
-    // Also check the one before that if the latest has no logs
-    const prevDeployment = project.deployments.edges[1]?.node;
-    if (prevDeployment) {
-        console.log("\n" + "-".repeat(40));
-        console.log(`🔙 Previous Deployment: ${prevDeployment.status} (${prevDeployment.id})`);
-        await fetchAndPrintLogs(prevDeployment.id);
-    }
-
   } catch (error) {
-    console.error("❌ Unexpected Error:", error);
+    console.error("❌ Error:", JSON.stringify(error, null, 2));
   }
 }
 
 async function fetchAndPrintLogs(deploymentId) {
-    console.log(`📜 Fetching Logs for ${deploymentId}...`);
-    try {
-        const logsData = await queryGraphQL(LOGS_QUERY(deploymentId));
-        if (logsData.deploymentLogs && logsData.deploymentLogs.length > 0) {
-          const sortedLogs = logsData.deploymentLogs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-          sortedLogs.forEach(log => {
-             const time = new Date(log.timestamp).toLocaleTimeString();
-             console.log(`[${time}] ${log.message}`);
-          });
-        } else {
-          console.log("No logs available.");
-        }
-    } catch (logError) {
-        console.error("❌ Failed to fetch logs:", JSON.stringify(logError, null, 2));
+    console.log(`📜 Logs for ${deploymentId}:`);
+    const logsData = await queryGraphQL(LOGS_QUERY(deploymentId));
+    if (logsData.deploymentLogs?.length > 0) {
+       logsData.deploymentLogs.slice(-5).forEach(log => {
+         console.log(`[${new Date(log.timestamp).toLocaleTimeString()}] ${log.message}`);
+       });
+    } else {
+      console.log("No logs available.");
     }
 }
 
