@@ -54,8 +54,7 @@ async function main() {
   // Build Worker to .mjs
   await build('apps/worker', 'apps/worker/src/index.ts', 'apps/worker/dist/index.mjs');
   
-  console.log("
-🎉 All apps bundled successfully!");
+  console.log("\n🎉 All apps bundled successfully!");
 }
 
 main();

@@ -19,9 +19,8 @@ RUN npm ci
 # Copy the rest of the source code
 COPY . .
 
-# Build all workspaces via BUNDLING
-# We use node to run the script because esbuild is installed as a devDependency
-RUN node scripts/build.js
+# Build all workspaces via monorepo command
+RUN npm run build
 
 # SAFETY CHECK: Fail the build if any artifact is missing
 RUN ls -la apps/api/dist/index.mjs || (echo "❌ CRITICAL ERROR: apps/api/dist/index.mjs was NOT created!" && ls -R apps && exit 1)
