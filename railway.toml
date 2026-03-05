@@ -1,8 +1,8 @@
-# No top-level build/deploy blocks when using multiple services.
-# Each service gets its own configuration.
+# Corrected railway.toml with exact service names from Railway UI
+# This ensures Railway links these settings (Dockerfile builder) to the correct services.
 
 [[services]]
-name = "api"
+name = "@naija-agent/api"
 [services.build]
   builder = "dockerfile"
   dockerfilePath = "Dockerfile"
@@ -11,7 +11,7 @@ name = "api"
   restartPolicyType = "ON_FAILURE"
 
 [[services]]
-name = "worker"
+name = "@naija-agent/worker"
 [services.build]
   builder = "dockerfile"
   dockerfilePath = "Dockerfile"
