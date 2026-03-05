@@ -22,15 +22,13 @@ COPY . .
 # Build all workspaces
 RUN npm run build
 
-# SAFETY CHECK: Fail the build if the artifact is missing
-# This guarantees that the container will never be created if the build failed silently
+# SAFETY CHECK: Fail the build if any artifact is missing
+RUN ls -la packages/types/dist/index.js || (echo "❌ CRITICAL ERROR: packages/types/dist/index.js was NOT created!" && ls -R packages && exit 1)
+RUN ls -la packages/firebase/dist/index.js || (echo "❌ CRITICAL ERROR: packages/firebase/dist/index.js was NOT created!" && ls -R packages && exit 1)
 RUN ls -la apps/api/dist/index.js || (echo "❌ CRITICAL ERROR: apps/api/dist/index.js was NOT created!" && ls -R apps && exit 1)
 RUN ls -la apps/worker/dist/index.js || (echo "❌ CRITICAL ERROR: apps/worker/dist/index.js was NOT created!" && ls -R apps && exit 1)
 
-# --- DEBUG: Single Stage (Using Builder as Runner) ---
-# For debugging purposes, we skip the multi-stage copy.
-# This eliminates potential issues with symlinks or file permissions during COPY.
-
+# --- Single Stage for Debugging ---
 ENV NODE_ENV=production
 
 # Default command (can be overridden by docker-compose or Railway)
