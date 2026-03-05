@@ -1,15 +1,20 @@
-[build]
-builder = "dockerfile"
-dockerfilePath = "Dockerfile"
-
-[deploy]
-startCommand = "npm run start:api"
-restartPolicyType = "ON_FAILURE"
+# No top-level build/deploy blocks when using multiple services.
+# Each service gets its own configuration.
 
 [[services]]
 name = "api"
-startCommand = "npm run start:api"
+[services.build]
+  builder = "dockerfile"
+  dockerfilePath = "Dockerfile"
+[services.deploy]
+  startCommand = "npm run start:api"
+  restartPolicyType = "ON_FAILURE"
 
 [[services]]
 name = "worker"
-startCommand = "npm run start:worker"
+[services.build]
+  builder = "dockerfile"
+  dockerfilePath = "Dockerfile"
+[services.deploy]
+  startCommand = "npm run start:worker"
+  restartPolicyType = "ON_FAILURE"
