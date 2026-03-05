@@ -37,6 +37,11 @@ async function build(appName, entryPath, outPath) {
       external: externals,
       sourcemap: true,
       logLevel: 'info',
+      // CRITICAL: Point to SOURCE instead of DIST to avoid the "dist/index.js not found" error
+      alias: {
+        '@naija-agent/types': path.resolve(process.cwd(), 'packages/types/src/index.ts'),
+        '@naija-agent/firebase': path.resolve(process.cwd(), 'packages/firebase/src/index.ts'),
+      },
     });
     console.log(`✅ ${appName} built successfully!`);
   } catch (e) {
