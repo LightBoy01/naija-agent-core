@@ -3,24 +3,47 @@ import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 
-dotenv.config({ path: '../../.env' });
+// Fix for __dirname in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env relative to the source/dist file to support both apps and scripts
+// src/index.ts -> ../../.env
+// dist/index.js -> ../../../.env (if built)
+const envPaths = [
+  path.join(__dirname, '../../.env'),
+  path.join(__dirname, '../../../.env'),
+  path.join(process.cwd(), '.env')
+];
+
+for (const envPath of envPaths) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    break;
+  }
+}
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
   let credential;
-  const localKeyPath = path.join(__dirname, '/../serviceAccountKey.json');
+  // Look for serviceAccountKey.json relative to this file
+  const localKeyPath = path.join(__dirname, '../serviceAccountKey.json');
+  const localKeyPathDist = path.join(__dirname, '../../serviceAccountKey.json');
 
   if (fs.existsSync(localKeyPath)) {
-    // 1. Try local file (Termux)
     credential = admin.credential.cert(localKeyPath);
+  } else if (fs.existsSync(localKeyPathDist)) {
+    credential = admin.credential.cert(localKeyPathDist);
   } else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    // 2. Try Environment Variable (Cloud / Railway)
     try {
-      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT.replace(/[^\x20-\x7E]/g, ''));
+      // Robust JSON parsing for multiline env vars
+      const serviceAccountStr = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
+      const serviceAccount = JSON.parse(serviceAccountStr);
       credential = admin.credential.cert(serviceAccount);
     } catch (e) {
-      console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT ENV', e);
+      console.error('❌ Firebase Error: Failed to parse FIREBASE_SERVICE_ACCOUNT ENV', e);
       process.exit(1);
     }
   } else {
@@ -30,7 +53,7 @@ if (!admin.apps.length) {
 
   admin.initializeApp({
     credential,
-    projectId: 'naija-agent-core'
+    projectId: process.env.FIREBASE_PROJECT_ID || 'naija-agent-core'
   });
 }
 
