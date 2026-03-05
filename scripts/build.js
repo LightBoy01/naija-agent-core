@@ -2,26 +2,37 @@ const esbuild = require('esbuild');
 const fs = require('fs');
 const path = require('path');
 
-// Function to get dependencies from a package.json
-function getDependencies(packageJsonPath) {
-  try {
-    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-    return Object.keys(pkg.dependencies || {});
-  } catch (e) {
-    console.warn(`⚠️ Could not read ${packageJsonPath}: ${e.message}`);
-    return [];
-  }
+// Function to collect all dependencies from the entire monorepo
+function getAllDependencies() {
+  const deps = new Set();
+  const packagePaths = [
+    'package.json',
+    'apps/api/package.json',
+    'apps/worker/package.json',
+    'packages/firebase/package.json',
+    'packages/types/package.json'
+  ];
+
+  packagePaths.forEach(p => {
+    try {
+      const fullPath = path.join(process.cwd(), p);
+      if (fs.existsSync(fullPath)) {
+        const pkg = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+        Object.keys(pkg.dependencies || {}).forEach(d => deps.add(d));
+      }
+    } catch (e) {
+      console.warn(`⚠️ Warning: Could not read ${p}`);
+    }
+  });
+
+  return Array.from(deps).filter(d => !d.startsWith('@naija-agent/'));
 }
 
 async function build(appName, entryPath, outPath) {
   console.log(`
 🔨 Building ${appName} to ESM (.mjs)...`);
 
-  const packageJsonPath = path.join(process.cwd(), appName, 'package.json');
-  const allDeps = getDependencies(packageJsonPath);
-
-  // CRITICAL: We want to bundle local packages (@naija-agent/*) but keep external ones external
-  const externals = allDeps.filter(dep => !dep.startsWith('@naija-agent/'));
+  const externals = getAllDependencies();
 
   console.log(`📦 Externalizing ${externals.length} packages (e.g., fastify, firebase-admin)`);
   console.log(`🔗 Bundling local packages: @naija-agent/*`);
