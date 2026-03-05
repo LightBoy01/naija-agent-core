@@ -27,14 +27,11 @@ RUN npm run build
 RUN ls -la apps/api/dist/index.js || (echo "❌ CRITICAL ERROR: apps/api/dist/index.js was NOT created!" && ls -R apps && exit 1)
 RUN ls -la apps/worker/dist/index.js || (echo "❌ CRITICAL ERROR: apps/worker/dist/index.js was NOT created!" && ls -R apps && exit 1)
 
-# Stage 2: Runner
-FROM node:20-alpine AS runner
+# --- DEBUG: Single Stage (Using Builder as Runner) ---
+# For debugging purposes, we skip the multi-stage copy.
+# This eliminates potential issues with symlinks or file permissions during COPY.
 
-WORKDIR /app
 ENV NODE_ENV=production
-
-# Copy everything from builder (including the verified dist folder)
-COPY --from=builder /app ./
 
 # Default command (can be overridden by docker-compose or Railway)
 CMD ["npm", "run", "start:api"]
