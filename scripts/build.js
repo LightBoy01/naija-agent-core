@@ -37,11 +37,6 @@ async function build(appName, entryPath, outPath) {
       external: externals,
       sourcemap: true,
       logLevel: 'info',
-      // Explicitly tell esbuild how to find our local packages if node_modules fails
-      alias: {
-        '@naija-agent/types': path.resolve(process.cwd(), 'packages/types/dist/index.js'),
-        '@naija-agent/firebase': path.resolve(process.cwd(), 'packages/firebase/dist/index.js'),
-      },
     });
     console.log(`✅ ${appName} built successfully!`);
   } catch (e) {
