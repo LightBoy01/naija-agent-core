@@ -10,8 +10,8 @@
     "build": "npm run clean && tsc -b",
     "dev": "npm run dev --workspaces",
     "start": "npm run start --workspaces",
-    "start:api": "node apps/api/dist/index.js",
-    "start:worker": "node apps/worker/dist/index.js"
+    "start:api": "node apps/api/dist/index.mjs",
+    "start:worker": "node apps/worker/dist/index.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

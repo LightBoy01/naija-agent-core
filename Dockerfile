@@ -24,8 +24,8 @@ COPY . .
 RUN node scripts/build.js
 
 # SAFETY CHECK: Fail the build if any artifact is missing
-RUN ls -la apps/api/dist/index.js || (echo "❌ CRITICAL ERROR: apps/api/dist/index.js was NOT created!" && ls -R apps && exit 1)
-RUN ls -la apps/worker/dist/index.js || (echo "❌ CRITICAL ERROR: apps/worker/dist/index.js was NOT created!" && ls -R apps && exit 1)
+RUN ls -la apps/api/dist/index.mjs || (echo "❌ CRITICAL ERROR: apps/api/dist/index.mjs was NOT created!" && ls -R apps && exit 1)
+RUN ls -la apps/worker/dist/index.mjs || (echo "❌ CRITICAL ERROR: apps/worker/dist/index.mjs was NOT created!" && ls -R apps && exit 1)
 
 # --- Single Stage for Debugging ---
 # We keep this single stage for now to ensure all dependencies (node_modules) are available

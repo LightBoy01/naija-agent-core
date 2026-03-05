@@ -14,7 +14,8 @@ function getDependencies(packageJsonPath) {
 }
 
 async function build(appName, entryPath, outPath) {
-  console.log(`\n🔨 Building ${appName}...`);
+  console.log(`
+🔨 Building ${appName} to ESM (.mjs)...`);
 
   const packageJsonPath = path.join(process.cwd(), appName, 'package.json');
   const allDeps = getDependencies(packageJsonPath);
@@ -47,13 +48,14 @@ async function build(appName, entryPath, outPath) {
 async function main() {
   console.log("🚀 Starting Monorepo Bundle Build...");
   
-  // Build API
-  await build('apps/api', 'apps/api/src/index.ts', 'apps/api/dist/index.js');
+  // Build API to .mjs
+  await build('apps/api', 'apps/api/src/index.ts', 'apps/api/dist/index.mjs');
   
-  // Build Worker
-  await build('apps/worker', 'apps/worker/src/index.ts', 'apps/worker/dist/index.js');
+  // Build Worker to .mjs
+  await build('apps/worker', 'apps/worker/src/index.ts', 'apps/worker/dist/index.mjs');
   
-  console.log("\n🎉 All apps bundled successfully!");
+  console.log("
+🎉 All apps bundled successfully!");
 }
 
 main();
