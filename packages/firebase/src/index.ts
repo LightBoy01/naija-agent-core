@@ -28,6 +28,12 @@ for (const envPath of envPaths) {
   }
 }
 
+// DIAGNOSTIC: Log detected environment keys (Safe: no values logged)
+const detectedKeys = Object.keys(process.env).filter(k => 
+  k.startsWith('FIREBASE_') || k.startsWith('WHATSAPP_') || k.startsWith('GEMINI_')
+);
+console.log('🔍 [DIAGNOSTIC] Detected ENV Keys:', detectedKeys.join(', '));
+
 // Initialize Firebase Admin
 if (!firebaseAdmin.apps.length) {
   let credential;
