@@ -92,7 +92,22 @@
 ### **Self-Assessment:**
 *   **Good:** Quickly identified the root cause of the runtime crash (working directory mismatch) and implemented a robust fix.
 
-### **Next Steps (Session 10):**
-*   [ ] **Trigger Railway Deploy:** Push changes to GitHub and monitor the production build.
-*   [ ] **Test Webhook:** Send a "Hello" to the WhatsApp number and check Railway logs for successful processing.
-*   [ ] **Audit Stop Command:** Implement the #STOP safety feature.
+## Session 10: Robust Bundling & ESM Interop (2026-03-06)
+
+**Status:** 🟢 **Completed**
+
+### **Actions Taken:**
+*   **Build Optimization:** Rewrote `scripts/build.js` to use an `esbuild` plugin that automatically externalizes all non-relative imports. This ensures complex libraries like `firebase-admin` and `bullmq` are loaded from `node_modules` at runtime rather than being broken by bundling.
+*   **Source-Based Bundling:** Updated the build process to bundle local packages (`@naija-agent/*`) directly from their `src/index.ts` files, eliminating the dependency on pre-compiled `dist` folders and resolving "Module Not Found" errors in Docker.
+*   **ESM/CJS Interop:** Fixed a critical `TypeError` in `@naija-agent/firebase` by correctly handling the `firebase-admin` default export for ESM compatibility.
+*   **Docker Freshness:** Updated `.dockerignore` to exclude `*.tsbuildinfo` files, forcing a fresh build in every deployment and preventing stale cache interference.
+*   **Verification:** Implemented versioning (`1.0.2`) and diagnostic logs to confirm the latest code is running. Verified that the app now starts successfully and correctly identifies missing production environment variables.
+
+### **Self-Assessment:**
+*   **Good:** Systematically debugged three layers of deployment failure (Watch Paths, Bundling, and ESM Interop).
+*   **Lessons Learned:** Bare-specifier externalization is safer than allow-listing for complex monorepo bundles.
+
+### **Next Steps (Session 11):**
+*   [ ] **Configure Production ENV:** Add `FIREBASE_SERVICE_ACCOUNT` to Railway and confirm green status.
+*   [ ] **Perform First Production AI Reply:** Verify end-to-end flow from WhatsApp -> API -> Queue -> Worker -> Gemini -> WhatsApp.
+*   [ ] **Test Audio Processing:** Verify multimodal support with real audio messages.
