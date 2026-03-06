@@ -1,9 +1,12 @@
-import * as admin from 'firebase-admin';
+import admin from 'firebase-admin';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+
+// Fix for ESM/CJS interop for firebase-admin
+const firebaseAdmin = (admin as any).default || admin;
 
 // Fix for __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -26,22 +29,22 @@ for (const envPath of envPaths) {
 }
 
 // Initialize Firebase Admin
-if (!admin.apps.length) {
+if (!firebaseAdmin.apps.length) {
   let credential;
   // Look for serviceAccountKey.json relative to this file
   const localKeyPath = path.join(__dirname, '../serviceAccountKey.json');
   const localKeyPathDist = path.join(__dirname, '../../serviceAccountKey.json');
 
   if (fs.existsSync(localKeyPath)) {
-    credential = admin.credential.cert(localKeyPath);
+    credential = firebaseAdmin.credential.cert(localKeyPath);
   } else if (fs.existsSync(localKeyPathDist)) {
-    credential = admin.credential.cert(localKeyPathDist);
+    credential = firebaseAdmin.credential.cert(localKeyPathDist);
   } else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     try {
       // Robust JSON parsing for multiline env vars
       const serviceAccountStr = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
       const serviceAccount = JSON.parse(serviceAccountStr);
-      credential = admin.credential.cert(serviceAccount);
+      credential = firebaseAdmin.credential.cert(serviceAccount);
     } catch (e) {
       console.error('❌ Firebase Error: Failed to parse FIREBASE_SERVICE_ACCOUNT ENV', e);
       process.exit(1);
@@ -51,7 +54,7 @@ if (!admin.apps.length) {
     process.exit(1);
   }
 
-  admin.initializeApp({
+  firebaseAdmin.initializeApp({
     credential,
     projectId: process.env.FIREBASE_PROJECT_ID || 'naija-agent-core'
   });
