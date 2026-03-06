@@ -2,40 +2,24 @@ const esbuild = require('esbuild');
 const fs = require('fs');
 const path = require('path');
 
-// Function to collect all dependencies from the entire monorepo
-function getAllDependencies() {
-  const deps = new Set();
-  const packagePaths = [
-    'package.json',
-    'apps/api/package.json',
-    'apps/worker/package.json',
-    'packages/firebase/package.json',
-    'packages/types/package.json'
-  ];
-
-  packagePaths.forEach(p => {
-    try {
-      const fullPath = path.join(process.cwd(), p);
-      if (fs.existsSync(fullPath)) {
-        const pkg = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
-        Object.keys(pkg.dependencies || {}).forEach(d => deps.add(d));
-      }
-    } catch (e) {
-      console.warn(`⚠️ Warning: Could not read ${p}`);
-    }
-  });
-
-  return Array.from(deps).filter(d => !d.startsWith('@naija-agent/'));
-}
-
 async function build(appName, entryPath, outPath) {
   console.log(`
 🔨 Building ${appName} to ESM (.mjs)...`);
 
-  const externals = getAllDependencies();
-
-  console.log(`📦 Externalizing ${externals.length} packages (e.g., fastify, firebase-admin)`);
-  console.log(`🔗 Bundling local packages: @naija-agent/*`);
+  // Plugin to externalize ALL dependencies except @naija-agent/*
+  const externalizeDepsPlugin = {
+    name: 'externalize-deps',
+    setup(build) {
+      build.onResolve({ filter: /^[^.{}/]/ }, (args) => {
+        // If it's one of our local packages, let esbuild bundle it (using the alias)
+        if (args.path.startsWith('@naija-agent/')) {
+          return null; 
+        }
+        // Otherwise, mark it as external (e.g., fastify, firebase-admin, bullmq)
+        return { path: args.path, external: true };
+      });
+    },
+  };
 
   try {
     await esbuild.build({
@@ -45,9 +29,9 @@ async function build(appName, entryPath, outPath) {
       platform: 'node',
       target: 'node20',
       format: 'esm',
-      external: externals,
       sourcemap: true,
       logLevel: 'info',
+      plugins: [externalizeDepsPlugin],
       // CRITICAL: Point to SOURCE instead of DIST to avoid the "dist/index.js not found" error
       alias: {
         '@naija-agent/types': path.resolve(process.cwd(), 'packages/types/src/index.ts'),
