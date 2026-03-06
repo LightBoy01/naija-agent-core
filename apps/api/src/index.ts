@@ -1,6 +1,8 @@
 import Fastify from 'fastify';
 import fastifyRawBody from 'fastify-raw-body';
 import dotenv from 'dotenv';
+
+console.log('🚀 [VERSION 1.0.2] API Service Starting...');
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import crypto from 'crypto';

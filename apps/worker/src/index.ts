@@ -1,6 +1,8 @@
 import { Worker } from 'bullmq';
 import { Redis } from 'ioredis';
 import dotenv from 'dotenv';
+
+console.log('🚀 [VERSION 1.0.2] Worker Service Starting...');
 import { JobData } from '@naija-agent/types';
 import { WhatsAppService } from './services/whatsapp.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
