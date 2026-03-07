@@ -81,4 +81,34 @@ export class WhatsAppService {
       throw new Error('Failed to download media');
     }
   }
+
+  async sendTemplate(to: string, templateName: string, languageCode: string = 'en_US'): Promise<string> {
+    try {
+      const response = await axios.post(
+        `https://graph.facebook.com/v21.0/${this.phoneId}/messages`, // Updated to v21.0
+        {
+          messaging_product: 'whatsapp',
+          to: to,
+          type: 'template',
+          template: {
+            name: templateName,
+            language: {
+              code: languageCode
+            }
+          },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.apiToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      return response.data;
+    } catch (error: any) {
+      console.error('WhatsApp Send Template Error:', error.response?.data || error.message);
+      throw error;
+    }
+  }
 }

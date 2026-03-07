@@ -69,7 +69,10 @@ const whatsappQueue = new Queue('whatsapp-queue', { connection: redisConfig });
 function verifySignature(payload: string, signature: string, secret: string): boolean {
   if (!signature) return false;
   const hmac = crypto.createHmac('sha256', secret);
-  const digest = Buffer.from('sha256=' + hmac.update(payload).digest('hex'), 'utf8');
+  const calculated = 'sha256=' + hmac.update(payload).digest('hex');
+  console.log('🛡️ [DEBUG] Signature Received:', signature);
+  console.log('🛡️ [DEBUG] Signature Calculated:', calculated);
+  const digest = Buffer.from(calculated, 'utf8');
   const checksum = Buffer.from(signature, 'utf8');
   return digest.length === checksum.length && crypto.timingSafeEqual(digest, checksum);
 }
