@@ -69,3 +69,34 @@ Give the owner ultimate control without breaking the automation.
 1.  **Stock Check Cron:** Add a scheduled job in `Worker` to message the Owner.
 2.  **Group Listener:** Update `API` to handle Group Message webhooks (`waba_group`).
 3.  **Auto-Pause:** Add logic in `Worker` to check Redis `chat_paused:{id}` key before processing.
+
+---
+
+# Technical Institutional Memory (The Drama Archive)
+
+This section records the low-level technical hurdles and non-obvious solutions discovered during the core build phase.
+
+## 1. Infrastructure: The Termux-Supabase Block
+*   **Friction:** Supabase direct connections (Port 5432) use IPv6. Termux and many Nigerian mobile networks are IPv4-only or have inconsistent IPv6 routing, leading to persistent `ETIMEDOUT`.
+*   **Solution:** **The Firebase Pivot.** Switched to Firestore which operates over standard HTTPS (Port 443). This is "Tunnel-Proof" and "Network-Agnostic."
+
+## 2. Meta API: The "Account Not Registered" (133010)
+*   **Friction:** Even after creating a test number in the dashboard, API calls to send messages return error `133010`.
+*   **Solution:** A manual **Registration Call** is required to "wake up" the number in Meta's backend:
+    `POST /{{PHONE_ID}}/register` with a `pin`.
+
+## 3. Webhooks: The "Delivered but Silent" Mystery (THE BIG DISCOVERY)
+*   **Friction:** Meta Dashboard shows messages as "Delivered" and the Webhook is "Verified," but no data hits the server.
+*   **The Drama:** We tested 4 different tunnels (Ngrok, Serveo, Localhost.run, Pinggy) and moved to the Cloud (Railway), but the silence continued.
+*   **Discovery:** Verification (`GET`) only proves the URL is reachable. For Meta to actually forward **Real Messages** (`POST`), the WhatsApp Business Account (WABA) must be explicitly subscribed to the App.
+*   **Solution:** The **`subscribed_apps` Handshake**:
+    `POST /{{WABA_ID}}/subscribed_apps`
+    This "glues" the WABA events to the API endpoint. Without this, Meta intercepts the data and never sends it to your server.
+
+## 4. Environment: The JSON Parsing Crash
+*   **Friction:** Pasting the Firebase Service Account JSON into `.env` files often introduces invisible characters (like LTR marks `\u200e`) that crash `JSON.parse()`.
+*   **Solution:** **Hybrid Auth Logic.** The `@naija-agent/firebase` package first looks for a physical `serviceAccountKey.json`. If missing (in Cloud), it reads from the ENV but applies a regex `replace(/[^\x20-\x7E]/g, '')` to strip any terminal-induced garbage characters before parsing.
+
+## 5. Deployment: The "Tunnel Phishing" Filter
+*   **Friction:** Meta security bots often block `serveo.net` and `localhost.run` domains because they are frequently used for phishing, causing webhooks to fail silently.
+*   **Solution:** **Cloud-First Testing.** Moving to a real subdomain (e.g., `.up.railway.app`) provides a stable SSL certificate and bypasses the "temporary tunnel" reputation filters.

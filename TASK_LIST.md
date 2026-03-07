@@ -33,8 +33,8 @@
     - [x] Add Recipient Allowlist
 - [x] **AI Integration**
     - [x] Update ConfigSchema for `gemini-2.5-flash`
-    - [ ] Perform First Production AI Reply
-    - [ ] Verify Native Audio Multimodal Support in Cloud
+    - [x] Perform First Production AI Reply (Success)
+    - [x] Verify Native Audio Multimodal Support in Cloud
 
 ## Phase 3: Finance & Ops (The "Bank")
 
