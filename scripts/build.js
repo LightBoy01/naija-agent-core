@@ -36,6 +36,7 @@ async function build(appName, entryPath, outPath) {
       alias: {
         '@naija-agent/types': path.resolve(process.cwd(), 'packages/types/src/index.ts'),
         '@naija-agent/firebase': path.resolve(process.cwd(), 'packages/firebase/src/index.ts'),
+        '@naija-agent/payments': path.resolve(process.cwd(), 'packages/payments/src/index.ts'),
       },
     });
     console.log(`✅ ${appName} built successfully!`);

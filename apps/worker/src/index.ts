@@ -6,6 +6,7 @@ console.log('🚀 [VERSION 1.0.2] Worker Service Starting...');
 import { JobData } from '@naija-agent/types';
 import { WhatsAppService } from './services/whatsapp.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getProvider, PaymentProvider } from '@naija-agent/payments';
 import { 
   getOrgById, 
   findOrCreateChat, 
@@ -27,6 +28,15 @@ if (!process.env.GEMINI_API_KEY) {
   process.exit(1);
 }
 
+// --- Payment Provider Setup ---
+let paymentProvider: PaymentProvider | null = null;
+if (process.env.PAYSTACK_SECRET_KEY) {
+  console.log('💳 Payment Provider: Paystack Enabled');
+  paymentProvider = getProvider('paystack', process.env.PAYSTACK_SECRET_KEY);
+} else {
+  console.warn('⚠️ Payment Provider: Disabled (Missing PAYSTACK_SECRET_KEY)');
+}
+
 // --- Configuration ---
 const redisConfig = {
   host: process.env.REDIS_HOST || 'localhost',
@@ -45,7 +55,31 @@ const whatsappService = new WhatsAppService(
 );
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+// Define Tools
+const tools = paymentProvider ? [
+  {
+    functionDeclarations: [
+      {
+        name: "verify_transaction",
+        description: "Verifies a bank transaction using its reference code and amount. Use this when a user sends a receipt.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            reference: { type: "STRING", description: "The transaction reference code from the receipt." },
+            amount: { type: "NUMBER", description: "The expected amount in Naira." }
+          },
+          required: ["reference", "amount"]
+        }
+      }
+    ]
+  }
+] : [];
+
+const model = genAI.getGenerativeModel({ 
+  model: "gemini-2.5-flash",
+  tools: tools
+});
 
 console.log('🚀 Worker Starting...');
 
@@ -92,7 +126,14 @@ const worker = new Worker<JobData>(
         return { success: false, reason: 'Org inactive' };
       }
 
-      const systemPrompt = org.systemPrompt || "You are a helpful assistant.";
+      let systemPrompt = org.systemPrompt || "You are a helpful assistant.";
+      
+      // Update System Prompt for Hybrid Verification
+      if (paymentProvider) {
+        systemPrompt += `\n\n[PAYMENT VERIFICATION]: You have access to a 'verify_transaction' tool. If the user sends a receipt image, extract the Reference Code and Amount, and call this tool to verify it. Do not verify visually if you can use the tool.`;
+      } else {
+        systemPrompt += `\n\n[PAYMENT VERIFICATION]: You DO NOT have access to bank APIs. If the user sends a receipt, perform a VISUAL ANALYSIS (Check Date, Time, Amount, Font Consistency). Warn the user: "I can only check the image visually, not the bank account. Please confirm the alert manually."`;
+      }
 
       // 1.5 Balance Check (The "No Pay, No Chat" Rule)
       const balance = org.balance || 0;
@@ -160,7 +201,7 @@ const worker = new Worker<JobData>(
            promptParts.push("The user sent an image.");
         }
         
-        promptParts.push("Analyze this image and the caption (if any). If it looks like a forwarded message or news, fact-check it. If it's general, describe it or answer the user's question about it.");
+        promptParts.push("Analyze this image. If it is a payment receipt, extract the Reference and Amount to verify it.");
       }
 
       // 5. Call Gemini with Context
@@ -170,18 +211,56 @@ const worker = new Worker<JobData>(
         history: [
           {
             role: "user",
-            parts: [{ text: `System Instruction: ${systemPrompt}\n\n[CONTEXT] Current Business Credit Balance: ${balance} kobo (Note: 100 kobo = 1 Naira). If the user asks for their balance, you can provide this information accurately.` }],
+            parts: [{ text: `System Instruction: ${systemPrompt}\n\n[CONTEXT] Current Business Credit Balance: ${balance} kobo (Note: 100 kobo = 1 Naira).` }],
           },
           {
             role: "model",
-            parts: [{ text: "Understood. I am ready to assist with full context of the business operations and balance." }],
+            parts: [{ text: "Understood. I am ready to assist." }],
           },
           ...historyContext,
         ],
       });
 
-      const result = await chatSession.sendMessage(promptParts);
-      const responseText = result.response.text();
+      let result = await chatSession.sendMessage(promptParts);
+      let responseText = result.response.text(); // Initial response (might be tool call)
+      
+      // Handle Tool Calls (if any)
+      const functionCalls = result.response.functionCalls();
+      if (functionCalls && functionCalls.length > 0) {
+        console.log('🛠️ Gemini requested Tool Calls:', functionCalls.length);
+        
+        const functionResponses = [];
+        
+        for (const call of functionCalls) {
+          if (call.name === 'verify_transaction') {
+            const args = call.args as any;
+            console.log(`🔎 Verifying Transaction: ${args.reference}, Amount: ${args.amount}`);
+            
+            let toolResult;
+            if (paymentProvider) {
+                const tx = await paymentProvider.verify(args.reference, args.amount);
+                toolResult = tx ? { status: 'verified', data: tx } : { status: 'failed', reason: 'Transaction not found or invalid' };
+            } else {
+                toolResult = { status: 'error', reason: 'Payment provider not configured' };
+            }
+            
+            functionResponses.push({
+              functionResponse: {
+                name: 'verify_transaction',
+                response: toolResult
+              }
+            });
+          }
+        }
+        
+        // Feed tool results back to Gemini
+        if (functionResponses.length > 0) {
+           console.log('Sending tool results back to Gemini...');
+           result = await chatSession.sendMessage(functionResponses);
+           responseText = result.response.text();
+        }
+      }
+      
       console.log(`Gemini Reply: ${responseText}`);
 
       // 6. Send Reply to WhatsApp
@@ -202,6 +281,7 @@ const worker = new Worker<JobData>(
         content: responseText,
         type: 'text',
       });
+
 
       // Deduct Balance (Atomic Transaction)
       const newBalance = await deductBalance(orgId, costPerReply);
