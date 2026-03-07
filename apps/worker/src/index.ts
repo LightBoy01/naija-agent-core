@@ -54,6 +54,16 @@ const worker = new Worker<JobData>(
     const { from, content, type, orgId, messageId } = job.data;
     console.log(`Processing job ${job.id} for ${from} (${type})`);
 
+    // --- Special Job: Outbound Template ---
+    if (job.name === 'send-template') {
+      if (!content.templateName) {
+        throw new Error('Missing templateName for send-template job');
+      }
+      console.log(`Sending template '${content.templateName}' to ${from}`);
+      await whatsappService.sendTemplate(from, content.templateName, content.languageCode || 'en_US');
+      return { success: true };
+    }
+
     // --- 0. Rate Limiting (DoS Protection) ---
     // Key: rate_limit:{orgId}:{userPhone}
     const rateLimitKey = `rate_limit:${orgId}:${from}`;

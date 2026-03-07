@@ -48,17 +48,19 @@ export type WhatsAppMessage = z.infer<typeof WhatsAppMessageSchema>;
 // --- Internal Job Schemas (Queue) ---
 
 export const JobDataSchema = z.object({
-  type: z.enum(['text', 'audio']),
-  orgId: z.string().uuid(),
+  type: z.enum(['text', 'audio', 'template']),
+  orgId: z.string().uuid().optional(), // Optional for outbound system messages
   phoneId: z.string(), // The business phone ID
-  from: z.string(), // The user's phone number
+  from: z.string(), // The user's phone number (recipient for outbound)
   name: z.string().optional(), // User's profile name
-  messageId: z.string(),
+  messageId: z.string().optional(), // Optional for outbound
   timestamp: z.number(),
   content: z.object({
     text: z.string().optional(),
     audioId: z.string().optional(), // We fetch the URL in the worker
     mimeType: z.string().optional(),
+    templateName: z.string().optional(),
+    languageCode: z.string().optional(),
   }),
 });
 

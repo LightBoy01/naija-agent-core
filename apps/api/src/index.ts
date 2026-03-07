@@ -196,6 +196,53 @@ fastify.post('/webhook', async (request, reply) => {
   return reply.status(200).send('OK');
 });
 
+// 4. Outbound Message (POST)
+fastify.post('/send', async (request, reply) => {
+  const apiKey = request.headers['x-api-key'];
+  if (apiKey !== process.env.ADMIN_API_KEY) {
+    return reply.status(401).send('Unauthorized');
+  }
+
+  const schema = z.object({
+    to: z.string(),
+    templateName: z.string(),
+    languageCode: z.string().default('en_US'),
+    phoneId: z.string().optional(), // Optional, defaults to env or first org
+  });
+
+  const result = schema.safeParse(request.body);
+  if (!result.success) {
+    return reply.status(400).send(result.error);
+  }
+
+  const { to, templateName, languageCode, phoneId } = result.data;
+  
+  // Use provided phoneId or fallback to the one in env (if single tenant)
+  // For multi-tenant, phoneId is mandatory
+  const effectivePhoneId = phoneId || process.env.WHATSAPP_PHONE_ID;
+
+  if (!effectivePhoneId) {
+     return reply.status(400).send('phoneId is required');
+  }
+
+  const jobData: JobData = {
+    type: 'template',
+    phoneId: effectivePhoneId,
+    from: to, // In outbound context, 'from' is the recipient
+    timestamp: Date.now(),
+    content: {
+      templateName,
+      languageCode,
+    },
+  };
+
+  await whatsappQueue.add('send-template', jobData, {
+    removeOnComplete: true,
+  });
+
+  return { success: true, jobId: jobData.timestamp };
+});
+
 // Start Server
 const start = async () => {
   try {

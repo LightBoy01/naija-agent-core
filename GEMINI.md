@@ -5,8 +5,12 @@
 - **Environment:** Android (Termux).
 - **Build Command:** `npm run build --workspaces`
 - **Audio Processing:** Verified working in production (Session 13). `gemini-2.5-flash` correctly transcribes and responds to WhatsApp voice notes.
+- **Admin Key:** `ADMIN_API_KEY` added to `.env` for `POST /send` endpoint auth.
 
 ## Recent Changes
+- Implemented `POST /send` endpoint in `apps/api` for outbound template messages.
+- Updated `apps/worker` to handle `send-template` jobs.
+- Updated `@naija-agent/types` schema to support `template` job type.
 - Confirmed Native Audio support in production. User successfully sent a Voice Note, and the agent transcribed ("I want buy 2 iPhones...") and replied in character.
 - Implemented robust `esbuild` externalization plugin in `scripts/build.js` to fix production crashes.
 - Resolved ESM/CJS interop issues for `firebase-admin` in `@naija-agent/firebase`.
@@ -21,5 +25,7 @@
 ## Next Steps
 - [x] Test end-to-end WhatsApp messaging flow in production (Verified: Session 12).
 - [x] **Verify Audio Processing** with `gemini-2.5-flash` (Verified: Session 13).
-- [ ] Implement `POST /send` endpoint for outbound template messages.
-- [ ] Add `FIREBASE_SERVICE_ACCOUNT` to Railway environment variables (if pending).
+- [x] Implement `POST /send` endpoint for outbound template messages (Session 13).
+- [ ] Add `ADMIN_API_KEY` to Railway environment variables.
+- [ ] Verify outbound template sending in production.
+- [ ] Implement "Low Balance" alerts using outbound messaging.
