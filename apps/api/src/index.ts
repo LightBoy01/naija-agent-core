@@ -24,6 +24,11 @@ if (!process.env.WHATSAPP_APP_SECRET) {
 
 const fastify = Fastify({ logger: true });
 
+fastify.setErrorHandler((error, request, reply) => {
+  console.error('🔥 [CRITICAL ERROR]:', error);
+  reply.status(500).send({ error: 'Internal Server Error', details: error.message });
+});
+
 // Register Raw Body plugin to access raw payload for signature verification
 fastify.register(fastifyRawBody, {
   field: 'rawBody',
