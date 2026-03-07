@@ -170,4 +170,31 @@
 *   [ ] **Phase 4b: Financial Verification:** Connect the "Vision" (Reading the receipt) to "Reality" (Checking the bank account via Monnify/Paystack).
 *   [ ] **Safety & Compliance:** Implement `#STOP` and `#START` commands to comply with WhatsApp Business Policy.
 
+## Session 15: The Money & The Law (2026-03-07)
+
+**Status:** 🟢 **Completed**
+
+### **Actions Taken:**
+*   **Compliance (Phase 4b):**
+    *   Implemented strict `#STOP`/`#START` command handling at the API Ingestion Layer.
+    *   Added `isOptedOut` field to Firestore Chat documents.
+    *   **Gatekeeper Logic:** The API now silently drops messages from opted-out users, saving worker resources and AI tokens.
+*   **Financial Verification (Phase 4c):**
+    *   **New Package:** Created `@naija-agent/payments` to encapsulate payment provider logic.
+    *   **Provider:** Implemented `PaystackProvider` for verifying transaction references via API.
+    *   **Hybrid Worker Logic:**
+        *   **Level 1 (Visual):** If no API key is present, Gemini performs a visual analysis of the receipt (Date, Time, Amount) and warns the user it cannot verify with the bank.
+        *   **Level 2 (API):** If `PAYSTACK_SECRET_KEY` is present, Gemini uses the `verify_transaction` tool to get a definitive status from the bank.
+    *   **Build System:** Updated `scripts/build.js` to correctly bundle the new local package.
+
+### **Self-Assessment:**
+*   **Strong:** The modular architecture allowed adding a payments layer without touching the core API logic. The hybrid fallback is a great user experience feature for the Nigerian market.
+*   **Weak:** Currently relies on a single `PAYSTACK_SECRET_KEY` in `.env`, which breaks multi-tenancy.
+*   **Critical Gap:** No protection against **Replay Attacks** (using the same valid receipt twice).
+
+### **Next Steps:**
+*   [ ] **Security Patch:** Implement **Replay Protection** by logging verified transaction references in Firestore.
+*   [ ] **Multi-Tenancy:** Move API keys from `.env` to the `Organization` document in Firestore.
+
+
 

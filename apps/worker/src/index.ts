@@ -13,6 +13,8 @@ import {
   getChatHistory, 
   saveMessage, 
   deductBalance,
+  checkTransaction,
+  logTransaction,
   Message
 } from '@naija-agent/firebase';
 
@@ -237,9 +239,23 @@ const worker = new Worker<JobData>(
             console.log(`🔎 Verifying Transaction: ${args.reference}, Amount: ${args.amount}`);
             
             let toolResult;
-            if (paymentProvider) {
+            
+            // 1. Replay Protection: Check if already used
+            const existingTx = await checkTransaction(orgId, args.reference);
+            if (existingTx) {
+               console.warn(`⚠️ Replay Attack Detected: ${args.reference} already used.`);
+               toolResult = { status: 'failed', reason: 'DUPLICATE_RECEIPT: This transaction reference has already been verified and used.' };
+            } else if (paymentProvider) {
+                // 2. Call Provider
                 const tx = await paymentProvider.verify(args.reference, args.amount);
-                toolResult = tx ? { status: 'verified', data: tx } : { status: 'failed', reason: 'Transaction not found or invalid' };
+                
+                if (tx && tx.status === 'success') {
+                    // 3. Log Successful Transaction (Replay Protection)
+                    await logTransaction(orgId, args.reference, tx);
+                    toolResult = { status: 'verified', data: tx };
+                } else {
+                    toolResult = { status: 'failed', reason: 'Transaction not found or invalid' };
+                }
             } else {
                 toolResult = { status: 'error', reason: 'Payment provider not configured' };
             }

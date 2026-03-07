@@ -117,6 +117,24 @@ export async function getOrgByPhoneId(phoneId: string): Promise<Organization | n
   return { id: doc.id, ...doc.data() } as Organization;
 }
 
+// --- Transaction Helpers (Replay Protection) ---
+
+export async function checkTransaction(orgId: string, reference: string): Promise<any | null> {
+  const txId = `${orgId}_${reference}`;
+  const doc = await db.collection('transactions').doc(txId).get();
+  return doc.exists ? doc.data() : null;
+}
+
+export async function logTransaction(orgId: string, reference: string, data: any): Promise<void> {
+  const txId = `${orgId}_${reference}`;
+  await db.collection('transactions').doc(txId).set({
+    orgId,
+    reference,
+    ...data,
+    verifiedAt: FieldValue.serverTimestamp(),
+  });
+}
+
 export async function getOrgById(orgId: string): Promise<Organization | null> {
   const doc = await orgsRef.doc(orgId).get();
   if (!doc.exists) return null;
