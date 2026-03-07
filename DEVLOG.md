@@ -148,3 +148,26 @@
 *   [ ] **Client Dashboard:** Plan a simple web view for organizations to check their balance and chat history.
 *   [ ] **Service Level:** Implement #STOP / #START commands for user privacy/opt-out.
 
+## Session 14: The Eyes of the Agent (2026-03-07)
+
+**Status:** 🟢 **Completed**
+
+### **Actions Taken:**
+*   **Schema Evolution:** Updated `@naija-agent/types` to support `image` job types, including `imageId`, `caption`, and `mimeType`.
+*   **API Ingestion:** Enhanced `apps/api` webhook handler to parse incoming WhatsApp image messages and map them to the new `JobData` structure.
+*   **Vision Pipeline (Worker):**
+    1.  Implemented `whatsappService.downloadMedia` for images (reusing existing logic).
+    2.  Constructed **Multimodal Prompts** for Gemini 2.5 Flash: `[Image Data]` + `[User Caption]` + `[System Instructions]`.
+    3.  **Credit Logic:** Implemented a higher cost tier for image processing (default 2.5x text cost) to reflect the token intensity of vision tasks.
+    4.  **System Prompt:** Added specific instructions for the model to "analyze" and "fact-check" images, rather than just describing them.
+*   **Simulation:** Created `scripts/simulate-image-webhook.ts` to mock WhatsApp image payloads and verify the end-to-end flow locally.
+
+### **Self-Assessment:**
+*   **Good:** Rapid implementation of Phase 4a. The architecture (Queue + Worker) made adding a new modality (Vision) seamless.
+*   **Achievement:** **Naija Agent can now 'see'.** It can analyze receipts, products, or screenshots sent by users.
+
+### **Next Steps:**
+*   [ ] **Phase 4b: Financial Verification:** Connect the "Vision" (Reading the receipt) to "Reality" (Checking the bank account via Monnify/Paystack).
+*   [ ] **Safety & Compliance:** Implement `#STOP` and `#START` commands to comply with WhatsApp Business Policy.
+
+

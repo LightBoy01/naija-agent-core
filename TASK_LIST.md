@@ -47,8 +47,11 @@
 ## Phase 4: Features (The Moat)
 
 - [ ] **Fake Alert Buster**
-    - [ ] Implement Gemini Vision for receipt extraction
+    - [x] Implement Gemini Vision for receipt extraction
     - [ ] Integrate Monnify/Paystack for transaction verification
+- [ ] **Safety & Compliance (Essential)**
+    - [ ] Implement `#STOP` and `#START` commands (User Opt-out)
+    - [ ] Rate limit strictness for Image/Audio spam
 - [ ] **Outbound Engine**
     - [x] Implement `POST /send` endpoint (Success)
     - [ ] Automated follow-ups for abandoned carts

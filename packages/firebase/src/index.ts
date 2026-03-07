@@ -97,6 +97,19 @@ export interface Message {
 
 export const getDb = () => db;
 
+export async function setOptOut(orgId: string, userPhone: string, status: boolean): Promise<void> {
+  const chatId = `${orgId}_${userPhone}`;
+  const chatRef = chatsRef.doc(chatId);
+  await chatRef.set({ isOptedOut: status, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+}
+
+export async function checkOptOut(orgId: string, userPhone: string): Promise<boolean> {
+  const chatId = `${orgId}_${userPhone}`;
+  const chatRef = chatsRef.doc(chatId);
+  const doc = await chatRef.get();
+  return doc.exists ? (doc.data()?.isOptedOut || false) : false;
+}
+
 export async function getOrgByPhoneId(phoneId: string): Promise<Organization | null> {
   const snapshot = await orgsRef.where('whatsappPhoneId', '==', phoneId).limit(1).get();
   if (snapshot.empty) return null;
@@ -171,6 +184,7 @@ export async function findOrCreateChat(orgId: string, userPhone: string, userNam
       organizationId: orgId,
       whatsappUserId: userPhone,
       userName,
+      isOptedOut: false, // Default
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });

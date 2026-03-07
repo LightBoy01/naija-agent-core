@@ -12,7 +12,11 @@ import {
   JobData, 
   WhatsAppMessage 
 } from '@naija-agent/types';
-import { getOrgByPhoneId } from '@naija-agent/firebase';
+import { 
+  getOrgByPhoneId, 
+  setOptOut, 
+  checkOptOut 
+} from '@naija-agent/firebase';
 
 dotenv.config();
 
@@ -163,6 +167,32 @@ fastify.post('/webhook', async (request, reply) => {
   
   if (!org) {
     fastify.log.warn(`Unknown Business Phone ID: ${businessPhoneId}`);
+    return reply.status(200).send('OK');
+  }
+
+  // --- Phase 4b: Compliance (Opt-In/Opt-Out) ---
+  const textBody = message.type === 'text' ? message.text?.body?.trim().toUpperCase() : '';
+  
+  // 1. Check for STOP Commands
+  if (textBody && ['STOP', 'UNSUBSCRIBE', 'CANCEL', 'END'].includes(textBody)) {
+    console.log(`🚫 User ${from} opted OUT.`);
+    await setOptOut(org.id, from, true);
+    // Ideally queue a confirmation message here: "You have been unsubscribed."
+    return reply.status(200).send('OK');
+  }
+
+  // 2. Check for START Commands
+  if (textBody && ['START', 'SUBSCRIBE', 'UNSTOP'].includes(textBody)) {
+    console.log(`✅ User ${from} opted IN.`);
+    await setOptOut(org.id, from, false);
+    // Ideally queue a confirmation message here: "Welcome back!"
+    return reply.status(200).send('OK');
+  }
+
+  // 3. Check Status (The Gatekeeper)
+  const isOptedOut = await checkOptOut(org.id, from);
+  if (isOptedOut) {
+    console.log(`Skipping message from opted-out user ${from}`);
     return reply.status(200).send('OK');
   }
 
