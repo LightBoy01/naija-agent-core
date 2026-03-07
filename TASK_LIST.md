@@ -41,17 +41,20 @@
 - [x] **Credit System Design**
     - [x] AI Credits Model (Prepaid)
     - [x] Debit Logic in Worker (Transactions)
-- [ ] **Alerts & Safety**
-    - [ ] Implement "Low Balance" WhatsApp Alerts
-    - [ ] Implement #STOP / #START Safety Commands
+    - [x] **Low Balance Alerts** (Implementation + Redis Cooldown)
+    - [x] **Balance Context Injection** (Gemini is balance-aware)
 
 ## Phase 4: Features (The Moat)
 
 - [ ] **Fake Alert Buster**
     - [ ] Implement Gemini Vision for receipt extraction
     - [ ] Integrate Monnify/Paystack for transaction verification
+- [ ] **Outbound Engine**
+    - [x] Implement `POST /send` endpoint (Success)
+    - [ ] Automated follow-ups for abandoned carts
 - [ ] **Rider Tracking**
     - [ ] Implement "Group Chat Spy" for GPS coordinates
+
 
 ## Phase 5: Scale
 

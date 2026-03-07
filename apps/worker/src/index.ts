@@ -96,7 +96,12 @@ const worker = new Worker<JobData>(
 
       // 1.5 Balance Check (The "No Pay, No Chat" Rule)
       const balance = org.balance || 0;
-      const costPerReply = org.costPerReply || 0; // Default 2000 kobo (20.00)
+      let costPerReply = org.costPerReply || 2000; // Default 2000 kobo (20.00 NGN)
+      
+      if (type === 'image') {
+          // Images are more expensive. Fallback to 2x text cost if not explicitly set.
+          costPerReply = org.costPerImage || (costPerReply * 2.5); 
+      }
 
       if (balance < costPerReply) {
         console.warn(`Org ${org.name} (${orgId}) has insufficient balance: ${balance} < ${costPerReply}`);
@@ -136,6 +141,26 @@ const worker = new Worker<JobData>(
           },
         });
         promptParts.push("The user sent a voice note. Please reply in text.");
+      } else if (type === 'image' && content.imageId) {
+        console.log(`Downloading image ${content.imageId}...`);
+        const { buffer, mimeType } = await whatsappService.downloadMedia(content.imageId);
+        
+        userMessageContent = content.caption ? `[IMAGE] ${content.caption}` : "[IMAGE]";
+        
+        promptParts.push({
+          inlineData: {
+            data: buffer.toString('base64'),
+            mimeType: mimeType,
+          },
+        });
+        
+        if (content.caption) {
+           promptParts.push(`The user sent an image with the caption: "${content.caption}".`);
+        } else {
+           promptParts.push("The user sent an image.");
+        }
+        
+        promptParts.push("Analyze this image and the caption (if any). If it looks like a forwarded message or news, fact-check it. If it's general, describe it or answer the user's question about it.");
       }
 
       // 5. Call Gemini with Context

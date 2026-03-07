@@ -168,7 +168,7 @@ fastify.post('/webhook', async (request, reply) => {
 
   // Construct Job Data
   const jobData: JobData = {
-    type: message.type === 'audio' ? 'audio' : 'text',
+    type: message.type === 'audio' ? 'audio' : message.type === 'image' ? 'image' : 'text',
     orgId: org.id,
     phoneId: businessPhoneId,
     from: from,
@@ -178,7 +178,9 @@ fastify.post('/webhook', async (request, reply) => {
     content: {
       text: message.type === 'text' ? message.text?.body : undefined,
       audioId: message.type === 'audio' ? message.audio?.id : undefined,
-      mimeType: message.type === 'audio' ? message.audio?.mime_type : undefined,
+      imageId: message.type === 'image' ? message.image?.id : undefined,
+      caption: message.type === 'image' ? message.image?.caption : undefined,
+      mimeType: message.type === 'audio' ? message.audio?.mime_type : (message.type === 'image' ? message.image?.mime_type : undefined),
     },
   };
 
