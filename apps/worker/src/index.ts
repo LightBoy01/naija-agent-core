@@ -36,6 +36,7 @@ const redisConfig = {
 };
 
 // Dedicated Redis client for rate limiting and other tasks
+// [FORCE REDEPLOY] Triggering worker rebuild to ensure new ENV variables and firebase diagnostic updates are included.
 const redisClient = new Redis(redisConfig);
 
 const whatsappService = new WhatsAppService(

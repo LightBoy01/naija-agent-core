@@ -30,7 +30,7 @@ for (const envPath of envPaths) {
 
 // DIAGNOSTIC: Log detected environment keys (Safe: no values logged)
 const detectedKeys = Object.keys(process.env).filter(k => 
-  k.startsWith('FIREBASE_') || k.startsWith('WHATSAPP_') || k.startsWith('GEMINI_')
+  k.startsWith('FIREBASE_') || k.startsWith('WHATSAPP_') || k.startsWith('GEMINI_') || k.startsWith('ADMIN_')
 );
 console.log('🔍 [DIAGNOSTIC] Detected ENV Keys:', detectedKeys.join(', '));
 

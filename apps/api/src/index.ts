@@ -22,6 +22,7 @@ if (!process.env.WHATSAPP_APP_SECRET) {
   process.exit(1);
 }
 
+// [FORCE REDEPLOY] This comment is here to trigger a build so new ENV variables are picked up.
 const fastify = Fastify({ logger: true });
 
 fastify.setErrorHandler((error, request, reply) => {
