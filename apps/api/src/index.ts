@@ -33,6 +33,12 @@ fastify.register(fastifyRawBody, {
   routes: [] 
 });
 
+// GLOBAL DEBUG: Log EVERY request before any processing
+fastify.addHook('onRequest', async (request, reply) => {
+  console.log(`\n🔵 [INCOMING] ${request.method} ${request.url}`);
+  console.log(`   Headers:`, JSON.stringify(request.headers, null, 2));
+});
+
 fastify.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
   if (body instanceof Buffer) {
     const bodyStr = body.toString('utf8');
@@ -111,7 +117,8 @@ fastify.post('/webhook', async (request, reply) => {
 
   // Security: Verify Signature
   if (!verifySignature(rawBody, signature, process.env.WHATSAPP_APP_SECRET || '')) {
-    fastify.log.warn('Invalid Webhook Signature');
+    const expected = crypto.createHmac('sha256', process.env.WHATSAPP_APP_SECRET || '').update(rawBody).digest('hex');
+    fastify.log.warn(`❌ Invalid Webhook Signature! Received: ${signature}, Expected: sha256=${expected}`);
     return reply.status(403).send('Invalid Signature');
   }
 
