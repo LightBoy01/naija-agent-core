@@ -145,11 +145,11 @@ const worker = new Worker<JobData>(
         history: [
           {
             role: "user",
-            parts: [{ text: `System Instruction: ${systemPrompt}` }],
+            parts: [{ text: `System Instruction: ${systemPrompt}\n\n[CONTEXT] Current Business Credit Balance: ${balance} kobo (Note: 100 kobo = 1 Naira). If the user asks for their balance, you can provide this information accurately.` }],
           },
           {
             role: "model",
-            parts: [{ text: "Understood. I am ready to assist." }],
+            parts: [{ text: "Understood. I am ready to assist with full context of the business operations and balance." }],
           },
           ...historyContext,
         ],
