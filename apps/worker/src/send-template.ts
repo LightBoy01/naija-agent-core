@@ -13,7 +13,7 @@ const RECIPIENT = '2347042310893'; // 07042310893 in international format
 
 async function main() {
   // Dynamic import to bypass some ESM/TS-Node resolution quirks
-  const { WhatsAppService } = await import('./services/whatsapp.ts');
+  const { WhatsAppService } = await import('./services/whatsapp.js');
 
   if (!TOKEN || !PHONE_ID) {
     console.error('❌ Error: WHATSAPP_API_TOKEN or WHATSAPP_PHONE_ID is missing.');

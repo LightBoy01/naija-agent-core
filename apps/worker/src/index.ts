@@ -178,9 +178,35 @@ const worker = new Worker<JobData>(
       });
 
       // Deduct Balance (Atomic Transaction)
-      const deducted = await deductBalance(orgId, costPerReply);
-      if (!deducted) {
+      const newBalance = await deductBalance(orgId, costPerReply);
+      if (newBalance === null) {
         console.error(`Failed to deduct balance for org ${orgId}`);
+      } else {
+        console.log(`Remaining Balance for ${orgId}: ${newBalance}`);
+
+        // --- Low Balance Alert ---
+        const LOW_BALANCE_THRESHOLD = 1000; // 10.00 NGN (in kobo)
+        if (newBalance <= LOW_BALANCE_THRESHOLD) {
+           const alertKey = `alert:low_balance:${orgId}`;
+           const hasAlerted = await redisClient.get(alertKey);
+
+           if (!hasAlerted) {
+             console.warn(`⚠️ Low Balance Alert for ${orgId} (${newBalance})`);
+             // TODO: In a real multi-tenant system, we would look up the admin's phone number.
+             // For now, we assume the 'from' user is the owner if they are testing, 
+             // OR we just log it. 
+             // Ideally, we queue a 'send-template' job to the specific admin phone number.
+             
+             // Example: queue job to admin (if we had admin phone stored)
+             // const adminPhone = org.adminPhone;
+             // if (adminPhone) {
+             //   await whatsappService.sendTemplate(adminPhone, 'low_balance_alert');
+             // }
+             
+             // Set cooldown for 24 hours (86400 seconds)
+             await redisClient.setex(alertKey, 86400, '1');
+           }
+        }
       }
 
     } catch (error: any) {

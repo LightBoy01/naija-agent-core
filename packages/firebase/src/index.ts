@@ -110,27 +110,29 @@ export async function getOrgById(orgId: string): Promise<Organization | null> {
   return { id: doc.id, ...doc.data() } as Organization;
 }
 
-export async function deductBalance(orgId: string, amount: number): Promise<boolean> {
+export async function deductBalance(orgId: string, amount: number): Promise<number | null> {
   const orgRef = orgsRef.doc(orgId);
+  let newBalance: number | null = null;
   
   try {
-    await db.runTransaction(async (t) => {
+    await db.runTransaction(async (t: any) => { // Use 'any' to bypass strict TS check for now if needed, or proper Transaction type
       const doc = await t.get(orgRef);
       if (!doc.exists) throw new Error('Org not found');
       
       const data = doc.data() as Organization;
-      const newBalance = (data.balance || 0) - amount;
-      
-      if (newBalance < 0) {
-        throw new Error('Insufficient balance');
+      const currentBalance = data.balance || 0;
+
+      if (currentBalance < amount) {
+        throw new Error(`Insufficient balance: ${currentBalance} < ${amount}`);
       }
       
+      newBalance = currentBalance - amount;
       t.update(orgRef, { balance: newBalance });
     });
-    return true;
+    return newBalance;
   } catch (e) {
     console.warn(`Balance deduction failed for ${orgId}:`, e);
-    return false;
+    return null;
   }
 }
 
