@@ -290,7 +290,7 @@ const worker = new Worker<JobData>(
       // 4. Prepare New Message Input
       const promptParts: any[] = [];
       let userMessageContent = "";
-      let permanentUrl: string | undefined = undefined;
+      let mediaTask: Promise<string> | null = null;
 
       if (type === 'text' && content.text) {
         userMessageContent = content.text;
@@ -298,40 +298,23 @@ const worker = new Worker<JobData>(
       } else if (type === 'audio' && content.audioId) {
         const { buffer, mimeType } = await whatsappService.downloadMedia(content.audioId);
         
-        // --- Persistence: Save to Firebase Storage ---
-        try {
-          permanentUrl = await uploadMedia(orgId, `audio_${messageId || Date.now()}.mp3`, buffer, mimeType, { from, type: 'audio' });
-          console.log(`✅ Audio archived: ${permanentUrl}`);
-        } catch (e) {
-          console.warn('❌ Media upload failed (Audio):', e);
-        }
+        // --- Persistence: Background Task (Don't await yet) ---
+        mediaTask = uploadMedia(orgId, `audio_${messageId || Date.now()}.mp3`, buffer, mimeType, { from, type: 'audio' })
+          .catch(e => { console.warn('❌ Media upload failed (Audio):', e); return ''; });
 
         userMessageContent = "[AUDIO MESSAGE]";
-        promptParts.push({
-          inlineData: {
-            data: buffer.toString('base64'),
-            mimeType: mimeType,
-          },
-        });
+        promptParts.push({ inlineData: { data: buffer.toString('base64'), mimeType } });
         promptParts.push("The user sent a voice note. Please reply in text.");
+
       } else if (type === 'image' && content.imageId) {
         const { buffer, mimeType } = await whatsappService.downloadMedia(content.imageId);
         
-        // --- Persistence: Save to Firebase Storage ---
-        try {
-          permanentUrl = await uploadMedia(orgId, `img_${messageId || Date.now()}.jpg`, buffer, mimeType, { from, type: 'image' });
-          console.log(`✅ Image archived: ${permanentUrl}`);
-        } catch (e) {
-          console.warn('❌ Media upload failed (Image):', e);
-        }
+        // --- Persistence: Background Task (Don't await yet) ---
+        mediaTask = uploadMedia(orgId, `img_${messageId || Date.now()}.jpg`, buffer, mimeType, { from, type: 'image' })
+          .catch(e => { console.warn('❌ Media upload failed (Image):', e); return ''; });
 
         userMessageContent = content.caption ? `[IMAGE] ${content.caption}` : "[IMAGE]";
-        promptParts.push({
-          inlineData: {
-            data: buffer.toString('base64'),
-            mimeType: mimeType,
-          },
-        });
+        promptParts.push({ inlineData: { data: buffer.toString('base64'), mimeType } });
         promptParts.push(content.caption 
           ? `The user sent an image with the caption: "${content.caption}". Analyze it. If it's a receipt, verify it.`
           : "The user sent an image. Analyze it. If it's a receipt, verify it.");
@@ -429,10 +412,19 @@ const worker = new Worker<JobData>(
         }
       }
       
-      // 6. Send Reply
+      // 6. Security & Finance Check: Deduct balance BEFORE sending reply
+      const newBalance = await deductBalance(orgId, costPerReply);
+      if (newBalance === null && !isAdmin) {
+        console.error(`❌ Balance deduction failed for ${orgId}. Aborting reply.`);
+        await whatsappService.sendText(from, "Service temporarily unavailable. Please try again later.");
+        return { success: false, reason: 'Balance deduction failed' };
+      }
+
+      // 7. Send Reply to WhatsApp
       await whatsappService.sendText(from, responseText);
 
-      // 7. Persist & Deduct
+      // 8. Finalize Persistence
+      const permanentUrl = mediaTask ? await mediaTask : undefined;
       await saveMessage(chatId, { 
         role: 'user', 
         content: userMessageContent, 
@@ -441,7 +433,7 @@ const worker = new Worker<JobData>(
       });
       await saveMessage(chatId, { role: 'assistant', content: responseText, type: 'text' });
 
-      const newBalance = await deductBalance(orgId, costPerReply);
+      // 9. Low Balance Warning
       if (newBalance !== null && newBalance <= 1000) {
          const alertKey = `alert:low_balance:${orgId}`;
          const hasAlerted = await redisClient.get(alertKey);
