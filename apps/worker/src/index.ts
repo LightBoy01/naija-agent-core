@@ -462,10 +462,7 @@ const worker = new Worker<JobData>(
         return { success: false, reason: 'Balance deduction failed' };
       }
 
-      // 7. Send Reply to WhatsApp
-      await whatsappService.sendText(from, responseText);
-
-      // 8. Finalize Persistence
+      // 7. Finalize Persistence
       const permanentUrl = mediaTask ? await mediaTask : undefined;
       await saveMessage(chatId, { 
         role: 'user', 
@@ -474,6 +471,9 @@ const worker = new Worker<JobData>(
         metadata: { messageId, permanentUrl } 
       });
       await saveMessage(chatId, { role: 'assistant', content: responseText, type: 'text' });
+
+      // 8. Send Reply to WhatsApp (ONLY at the very end of a successful process)
+      await whatsappService.sendText(from, responseText);
 
       // 9. Low Balance Warning
       if (newBalance !== null && newBalance <= 1000) {
