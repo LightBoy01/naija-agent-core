@@ -471,12 +471,12 @@ const worker = new Worker<JobData>(
       }
 
       // 8. Finalize Persistence
-      const permanentUrl = mediaTask ? await mediaTask : null;
+      const storageUrl = mediaTask ? await mediaTask : null;
       await saveMessage(chatId, { 
         role: 'user', 
         content: userMessageContent, 
         type: type as any, 
-        metadata: { messageId, permanentUrl } 
+        metadata: { messageId, storageUrl } 
       });
 
       await saveMessage(chatId, { role: 'assistant', content: responseText, type: 'text' });

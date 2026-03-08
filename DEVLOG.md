@@ -192,10 +192,6 @@
 *   **Weak:** Currently relies on a single `PAYSTACK_SECRET_KEY` in `.env`, which breaks multi-tenancy.
 *   **Secure:** Replay Protection is now active. Duplicate receipts are instantly flagged.
 
-### **Next Steps:**
-*   [x] **Security Patch:** Implement **Replay Protection** by logging verified transaction references in Firestore.
-*   [ ] **Multi-Tenancy:** Move API keys from `.env` to the `Organization` document in Firestore.
-
 ## Session 16: The Master-Tenant Strategy (2026-03-08)
 
 **Status:** 🟢 **Planning Complete**
@@ -250,6 +246,36 @@
 *   **Resilience:** Zero balance leakage and high-speed customer experience.
 *   **Scale:** The Master Bot can now spawn a fleet of diversified business agents.
 
+## Session 21: The Sovereign Command Center (2026-03-08)
 
+**Status:** 🟢 **Completed**
 
+### **Actions Taken:**
+*   **Web Portal Scaffolding:** Initialized `apps/web` using Next.js 15.1.7 and React 19.2.4.
+*   **Monorepo React Conflict Resolution:** Resolved critical `useContext` errors during build by strictly aligning React versions (19.2.4) across the workspace and the root.
+*   **Sovereign Dashboard Implementation:** 
+    *   **Landing Page (`/`):** Created a public-facing "One-Pager" for marketing the Naija Agent brand.
+    *   **Command Center (`/dashboard`):** Implemented a high-level view for the Sovereign with network-wide stats (Total Vault, Active Clients) and a Portfolio table.
+    *   **Media Vault (`/vault`):** Built a gallery view to audit archived receipts and voice notes using Firestore Collection Group queries.
+    *   **Chat Logs (`/chats`):** Created a detailed list for auditing all active WhatsApp conversations in real-time.
+*   **Iron-Clad Web Security:** 
+    *   **Middleware:** Implemented `middleware.ts` to protect all Sovereign routes from unauthorized access.
+    *   **Server Actions:** Created secure `authenticate` and `logout` actions using HTTP-only cookies and PIN-based verification.
+*   **Infrastructure & Data Pipeline:** 
+    *   **Firestore Indexes:** Generated `firestore.indexes.json` and deployed composite indexes via Firebase CLI to enable network-wide media discovery.
+    *   **Media Persistence Fix:** Updated the Worker (`apps/worker/src/index.ts`) to explicitly save the permanent `storageUrl` in message metadata, ensuring the Media Vault has valid links.
+*   **Verification:** Successfully performed a production build (`Generating static pages 10/10`) confirming system stability.
 
+### **Self-Assessment:**
+*   **Strong:** Transitioned the project from a "Bot" to a "SaaS Platform" with a secure, professional web interface.
+*   **Good:** Proactively identified and resolved the Firestore index requirement and monorepo React conflicts.
+*   **Lessons Learned:** Security must be "Baked In" (Middleware) rather than "Painted On" (UI links).
+
+### **Strategic Value:**
+*   **Visibility:** The Sovereign now has a single "Source of Truth" to audit their entire business network.
+*   **Trust:** The combination of a public landing page and a secure portal builds high credibility for potential clients.
+
+### **Next Steps:**
+*   [ ] **Phase 4l: Real-time Bank Verification:** Complete Monnify/Paystack API integration for automated fraud prevention.
+*   [ ] **SMS Relay Prototype:** Build the Android "Bridge" app to listen for Bank SMS notifications.
+*   [ ] **Dashboard Polish:** Implement real-time Firestore listeners for "Live Chat" updates.

@@ -58,6 +58,9 @@
     - [x] **Master Bot Identity:** COO bot for Sovereign management.
     - [x] **Automated Onboarding:** `create_tenant` tool for instant client setup.
     - [x] **Network Stats:** Real-time reporting for the Sovereign.
+- [ ] **Sovereign Auth Hardening (Phase 4m)**
+    - [ ] Implement WhatsApp-based MFA (Bot sends 6-digit code to Boss).
+    - [ ] Secure Session Rotation (Short-lived tokens).
 - [ ] **The "Fake Alert" Finale**
     - [x] Implement Gemini Vision for receipt extraction.
     - [ ] Integrate Monnify/Paystack for real-time bank verification.
@@ -66,8 +69,8 @@
 
 ## Phase 5: Scale 🟡
 
-- [ ] **The "Boss" Dashboard (Web)**
-    - [ ] Next.js Portal for viewing archived receipts and live chats.
+- [x] **The "Boss" Dashboard (Web)**
+    - [x] Next.js Portal for viewing archived receipts and live chats.
     - [ ] Real-time "Takeover" mode for high-stakes conversations.
 - [ ] **Infrastructure Optimization**
     - [ ] Setup Structured Logging (Pino)

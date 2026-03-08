@@ -63,7 +63,8 @@ if (!firebaseAdmin.apps.length) {
 
   firebaseAdmin.initializeApp({
     credential,
-    projectId: process.env.FIREBASE_PROJECT_ID || 'naija-agent-core'
+    projectId: process.env.FIREBASE_PROJECT_ID || 'naija-agent-core',
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'naija-agent-core.firebasestorage.app'
   });
 }
 
@@ -183,8 +184,54 @@ export async function createTenant(data: {
 }
 
 /**
+ * Verifies the Sovereign (Master) PIN for dashboard access
+ */
+export async function verifySovereignPin(phone: string, pin: string): Promise<boolean> {
+  const masterOrg = await getOrgById('naija-agent-master');
+  if (!masterOrg) return false;
+
+  // Ensure the phone matches the configured adminPhone for the Master Bot
+  if (masterOrg.config.adminPhone !== phone) return false;
+  
+  // Direct PIN comparison (Simple for now, can be hashed later)
+  return masterOrg.config.adminPin === pin;
+}
+
+/**
  * Aggregates network-wide statistics for the Sovereign
  */
+/**
+ * Fetches all media (images/audio) across the network using a collection group query
+ */
+export async function getNetworkMedia(limit = 24): Promise<any[]> {
+  const snapshot = await db.collectionGroup('messages')
+    .where('type', 'in', ['image', 'audio'])
+    .orderBy('timestamp', 'desc')
+    .limit(limit)
+    .get();
+
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    chatId: doc.ref.parent.parent?.id,
+    ...doc.data()
+  }));
+}
+
+/**
+ * Fetches all active conversations across the network for the Sovereign
+ */
+export async function getNetworkChats(limit = 20): Promise<any[]> {
+  const snapshot = await chatsRef
+    .orderBy('lastMessageAt', 'desc')
+    .limit(limit)
+    .get();
+
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }));
+}
+
 export async function getNetworkStats(): Promise<any> {
   const snapshot = await orgsRef.get();
   let totalBalance = 0;
