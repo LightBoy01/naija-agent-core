@@ -8,6 +8,7 @@
 - **Credit Awareness:** Gemini is now balance-aware (Context Injection) and responds to balance queries.
 
 ## Recent Changes
+- **Phase 4d: Multi-Tenancy Key Isolation:** Implemented per-tenant `paymentConfig` and `model` selection. The Worker now instantiates `PaymentProvider` and `Gemini Model` dynamically based on the Organization's Firestore configuration, ensuring absolute security isolation between businesses.
 - **Strategic Vision 2026:** Created `docs/STRATEGIC_VISION_2026.md` to document the "Billion Euro View," focusing on Digital Trust Infrastructure, scaling scenarios, the "Boss" Dashboard model, and the Networking Effect.
 - **Phase 4 (Vision):** Implemented full image analysis pipeline. Worker downloads WhatsApp images, performs vision analysis, and supports higher credit costs (2.5x).
 - **Verified Outbound:** Successfully sent a `hello_world` template via production API and Railway Worker.

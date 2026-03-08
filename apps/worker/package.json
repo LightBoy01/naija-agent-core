@@ -12,6 +12,7 @@
     "@google/generative-ai": "^0.24.1",
     "@naija-agent/firebase": "*",
     "@naija-agent/payments": "*",
+    "@naija-agent/storage": "*",
     "@naija-agent/types": "*",
     "axios": "^1.6.7",
     "bullmq": "^5.1.0",

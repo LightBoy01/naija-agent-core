@@ -7,6 +7,7 @@ import { JobData } from '@naija-agent/types';
 import { WhatsAppService } from './services/whatsapp.js';
 import { GoogleGenerativeAI, SchemaType, Tool } from '@google/generative-ai';
 import { getProvider, PaymentProvider } from '@naija-agent/payments';
+import { uploadMedia } from '@naija-agent/storage';
 import { 
   getOrgById, 
   findOrCreateChat, 
@@ -180,12 +181,22 @@ const worker = new Worker<JobData>(
       // 4. Prepare New Message Input
       const promptParts: any[] = [];
       let userMessageContent = "";
+      let permanentUrl: string | undefined = undefined;
 
       if (type === 'text' && content.text) {
         userMessageContent = content.text;
         promptParts.push(content.text);
       } else if (type === 'audio' && content.audioId) {
         const { buffer, mimeType } = await whatsappService.downloadMedia(content.audioId);
+        
+        // --- Persistence: Save to Firebase Storage ---
+        try {
+          permanentUrl = await uploadMedia(orgId, `audio_${messageId || Date.now()}.mp3`, buffer, mimeType, { from, type: 'audio' });
+          console.log(`✅ Audio archived: ${permanentUrl}`);
+        } catch (e) {
+          console.warn('❌ Media upload failed (Audio):', e);
+        }
+
         userMessageContent = "[AUDIO MESSAGE]";
         promptParts.push({
           inlineData: {
@@ -196,6 +207,15 @@ const worker = new Worker<JobData>(
         promptParts.push("The user sent a voice note. Please reply in text.");
       } else if (type === 'image' && content.imageId) {
         const { buffer, mimeType } = await whatsappService.downloadMedia(content.imageId);
+        
+        // --- Persistence: Save to Firebase Storage ---
+        try {
+          permanentUrl = await uploadMedia(orgId, `img_${messageId || Date.now()}.jpg`, buffer, mimeType, { from, type: 'image' });
+          console.log(`✅ Image archived: ${permanentUrl}`);
+        } catch (e) {
+          console.warn('❌ Media upload failed (Image):', e);
+        }
+
         userMessageContent = content.caption ? `[IMAGE] ${content.caption}` : "[IMAGE]";
         promptParts.push({
           inlineData: {
@@ -260,7 +280,12 @@ const worker = new Worker<JobData>(
       await whatsappService.sendText(from, responseText);
 
       // 7. Persist & Deduct
-      await saveMessage(chatId, { role: 'user', content: userMessageContent, type: type as any, metadata: { messageId } });
+      await saveMessage(chatId, { 
+        role: 'user', 
+        content: userMessageContent, 
+        type: type as any, 
+        metadata: { messageId, permanentUrl } 
+      });
       await saveMessage(chatId, { role: 'assistant', content: responseText, type: 'text' });
 
       const newBalance = await deductBalance(orgId, costPerReply);

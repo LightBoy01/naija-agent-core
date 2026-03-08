@@ -211,16 +211,34 @@
 
 ## Session 17: Multi-Tenancy Key Isolation (2026-03-08)
 
+**Status:** 🟢 **Completed**
+
+### **Actions Taken:**
+*   **Schema Evolution:** Updated `Organization` and `Config` schemas to support per-tenant `paymentConfig` (Secret Keys in Firestore).
+*   **Worker Refactoring:** Refactored the Worker to instantiate `PaymentProvider` and `Gemini Model` dynamically based on the specific Organization ID in the job payload.
+*   **Build System:** Updated `scripts/build.js` and `apps/worker/tsconfig.json` to handle the new `packages/payments` dependency and dynamic imports.
+*   **Verification:** Created `scripts/update-org-config.ts` and successfully updated the demo organization with its own Paystack key.
+
+## Session 18: Media Persistence & Storage Integration (2026-03-08)
+
 **Status:** 🟡 **In Progress**
 
 ### **Actions Taken:**
-*   **Schema Evolution:** Updating `Organization` and `Config` schemas to support per-tenant `paymentConfig` (Secret Keys in Firestore).
-*   **Worker Refactoring:** Preparing the Worker to instantiate `PaymentProvider` and `Gemini Model` (with tools) dynamically per-request.
+*   **New Package:** Created `@naija-agent/storage` to manage media persistence via Firebase Storage.
+*   **Pipeline Implementation:** Modified the Worker to:
+    1.  Download media from WhatsApp (RAM buffer).
+    2.  Upload to Firebase Storage (`orgs/{orgId}/media/{filename}`).
+    3.  Persist the permanent URL in Firestore message metadata.
+*   **Monorepo Alignment:** Registered the storage package in NPM workspaces and updated `scripts/build.js` aliases for production bundling.
+
+### **Strategic Value:**
+*   **Merchant Trust:** Business owners can now audit receipts and voice notes via a future dashboard.
+*   **Compliance:** Provides a 90-day retention log for dispute resolution.
+*   **Scalability:** Offloads media handling from the worker RAM to persistent cloud storage.
 
 ### **Next Steps:**
-*   [ ] Implement dynamic `paymentProvider` instantiation in Worker.
-*   [ ] Update `ConfigSchema` and `Organization` types.
-*   [ ] Seed a test organization with its own Paystack key.
+*   [ ] Verify production media uploads via WhatsApp.
+*   [ ] Implement auto-deletion (TTL) logic for storage buckets.
 
 
 
