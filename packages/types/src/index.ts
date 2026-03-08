@@ -85,6 +85,7 @@ export const ConfigSchema = z.object({
   payment: PaymentConfigSchema.optional(), // Per-tenant payment config
   adminPhone: z.string().optional(), // The Boss's phone number
   adminPin: z.string().optional(), // 4-digit PIN for high-value actions
+  isMaster: z.boolean().optional(), // Sovereign powers flag
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

@@ -22,6 +22,8 @@ import {
   updateActivity,
   verifyAdminSession,
   setAdminAuth,
+  createTenant,
+  getNetworkStats,
   Message
 } from '@naija-agent/firebase';
 
@@ -256,6 +258,34 @@ const worker = new Worker<JobData>(
         });
       }
 
+      // 4. MASTER POWERS (Sovereign only)
+      if (isAdmin && org.config?.isMaster) {
+        tenantTools.push({
+          functionDeclarations: [
+            {
+              name: "create_tenant",
+              description: "Onboards a new client business. (Requires Authentication)",
+              parameters: {
+                type: SchemaType.OBJECT,
+                properties: {
+                  id: { type: SchemaType.STRING, description: "Unique slug (e.g. bims_gadgets)" },
+                  name: { type: SchemaType.STRING, description: "Display name" },
+                  adminPhone: { type: SchemaType.STRING, description: "The client boss phone (234...)" },
+                  phoneId: { type: SchemaType.STRING, description: "Their WhatsApp Phone ID" },
+                  prompt: { type: SchemaType.STRING, description: "Their AI personality" }
+                },
+                required: ["id", "name", "adminPhone", "phoneId", "prompt"]
+              } as any
+            },
+            {
+              name: "get_network_stats",
+              description: "Retrieves network-wide stats like total clients and total revenue. (Requires Authentication)",
+              parameters: { type: SchemaType.OBJECT, properties: {} }
+            }
+          ]
+        });
+      }
+
       const tenantModelName = org.config?.model || "gemini-2.5-flash";
       const model = genAI.getGenerativeModel({ 
         model: tenantModelName,
@@ -373,7 +403,7 @@ const worker = new Worker<JobData>(
               functionResponses.push({ functionResponse: { name: 'verify_admin_pin', response: { status: 'error', message: 'Incorrect PIN. Access denied.' } } });
             }
 
-          } else if (['save_knowledge', 'delete_knowledge', 'manage_activity'].includes(call.name) && isAdmin) {
+          } else if (['save_knowledge', 'delete_knowledge', 'manage_activity', 'create_tenant', 'get_network_stats'].includes(call.name) && isAdmin) {
             if (!isAuth) {
               functionResponses.push({ functionResponse: { name: call.name, response: { status: 'error', message: 'SECURITY_LOCKED: You must verify your PIN before doing this.' } } });
               continue;
@@ -389,6 +419,18 @@ const worker = new Worker<JobData>(
               } else if (call.name === 'manage_activity') {
                 await updateActivity(orgId, args.id, args.type, { summary: args.summary });
                 functionResponses.push({ functionResponse: { name: 'manage_activity', response: { status: 'success', message: `${args.type} '${args.id}' has been recorded.` } } });
+              } else if (call.name === 'create_tenant' && org.config?.isMaster) {
+                await createTenant({
+                  id: args.id,
+                  name: args.name,
+                  whatsappPhoneId: args.phoneId,
+                  adminPhone: args.adminPhone,
+                  systemPrompt: args.prompt
+                });
+                functionResponses.push({ functionResponse: { name: 'create_tenant', response: { status: 'success', message: `Tenant '${args.name}' created successfully.` } } });
+              } else if (call.name === 'get_network_stats' && org.config?.isMaster) {
+                const stats = await getNetworkStats();
+                functionResponses.push({ functionResponse: { name: 'get_network_stats', response: { status: 'success', data: stats } } });
               }
             } catch (e: any) {
               functionResponses.push({ functionResponse: { name: call.name, response: { status: 'error', message: e.message } } });

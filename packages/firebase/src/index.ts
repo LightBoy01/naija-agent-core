@@ -85,6 +85,7 @@ export interface Organization {
     model?: string;
     adminPhone?: string;
     adminPin?: string;
+    isMaster?: boolean;
   };
   isActive: boolean;
   balance: number; // In Kobo
@@ -156,8 +157,56 @@ export async function updateActivity(
 }
 
 /**
- * Simple Redis-style session check for Admin PIN (stored in Firestore for MVP)
+ * Spawns a new tenant organization (Onboarding)
  */
+export async function createTenant(data: {
+  id: string;
+  name: string;
+  whatsappPhoneId: string;
+  adminPhone: string;
+  systemPrompt: string;
+}): Promise<void> {
+  await orgsRef.doc(data.id).set({
+    ...data,
+    isActive: true,
+    balance: 100000, // Starting bonus: 1000.00 NGN
+    currency: 'NGN',
+    costPerReply: 2000,
+    config: {
+      tools: ['web_search'],
+      model: 'gemini-2.5-flash',
+      adminPin: '1234'
+    },
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+/**
+ * Aggregates network-wide statistics for the Sovereign
+ */
+export async function getNetworkStats(): Promise<any> {
+  const snapshot = await orgsRef.get();
+  let totalBalance = 0;
+  let activeClients = 0;
+  const clients: any[] = [];
+
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    if (doc.id !== 'naija-agent-master') {
+      totalBalance += data.balance || 0;
+      activeClients++;
+      clients.push({ id: doc.id, name: data.name, balance: data.balance });
+    }
+  });
+
+  return {
+    activeClients,
+    totalVaultKobo: totalBalance,
+    clients
+  };
+}
+
 export async function verifyAdminSession(orgId: string, adminPhone: string): Promise<boolean> {
   const chatId = `${orgId}_${adminPhone}`;
   const chatDoc = await chatsRef.doc(chatId).get();
