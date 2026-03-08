@@ -16,6 +16,8 @@ import {
   deductBalance,
   checkTransaction,
   logTransaction,
+  saveKnowledge,
+  getAllKnowledge,
   Message
 } from '@naija-agent/firebase';
 
@@ -108,62 +110,102 @@ const worker = new Worker<JobData>(
         return { success: false, reason: 'Org inactive' };
       }
 
+      const isAdmin = org.config?.adminPhone === from;
+      console.log(`👤 Identity: ${isAdmin ? 'BOSS' : 'CUSTOMER'} (${from})`);
+
       // --- Per-Tenant Payment Provider Setup ---
       let tenantPaymentProvider: PaymentProvider | null = null;
       if (org.config?.payment) {
-        console.log(`💳 Tenant Payment: ${org.config.payment.provider} Enabled for ${org.name}`);
         tenantPaymentProvider = getProvider(org.config.payment.provider, org.config.payment.secretKey);
       } else if (process.env.PAYSTACK_SECRET_KEY) {
-        console.log(`💳 Global Payment: Paystack Enabled (Fallback) for ${org.name}`);
         tenantPaymentProvider = getProvider('paystack', process.env.PAYSTACK_SECRET_KEY);
       }
 
-      let systemPrompt = org.systemPrompt || "You are a helpful assistant.";
-      
-      // Update System Prompt for Hybrid Verification
-      if (tenantPaymentProvider) {
-        systemPrompt += `\n\n[PAYMENT VERIFICATION]: You have access to a 'verify_transaction' tool. If the user sends a receipt image, extract the Reference Code and Amount, and call this tool to verify it. Do not verify visually if you can use the tool.`;
+      // --- Knowledge Base Fetching ---
+      const businessKnowledge = await getAllKnowledge(orgId);
+      const knowledgeContext = Object.entries(businessKnowledge)
+        .map(([key, val]) => `- ${key}: ${val}`)
+        .join('\n');
+
+      // --- Identity-Based System Prompt ---
+      let systemPrompt = "";
+      if (isAdmin) {
+        systemPrompt = `You are the Business Manager for ${org.name}. You are talking to your BOSS. 
+        Be professional, helpful, and efficient. 
+        Your primary job is to help the Boss manage the business.
+        Use 'save_knowledge' to store new facts, prices, or policies the Boss tells you.
+        Current Knowledge Base:\n${knowledgeContext || 'Empty'}`;
       } else {
-        systemPrompt += `\n\n[PAYMENT VERIFICATION]: You DO NOT have access to bank APIs. If the user sends a receipt, perform a VISUAL ANALYSIS (Check Date, Time, Amount, Font Consistency). Warn the user: "I can only check the image visually, not the bank account. Please confirm the alert manually."`;
+        systemPrompt = org.systemPrompt || "You are a helpful sales assistant.";
+        systemPrompt += `\n\n[BUSINESS KNOWLEDGE]: Use the following verified facts to answer the customer:\n${knowledgeContext || 'No specific facts provided yet.'}`;
+        
+        if (tenantPaymentProvider) {
+          systemPrompt += `\n\n[PAYMENT]: You have access to 'verify_transaction'. Use it for receipts.`;
+        } else {
+          systemPrompt += `\n\n[PAYMENT]: Perform VISUAL analysis only. Warn the user you cannot check the bank.`;
+        }
       }
 
-      // --- Per-Tenant Model & Tools Setup ---
-      const tenantTools: Tool[] = tenantPaymentProvider ? [
-        {
+      // --- Identity-Based Tools ---
+      const tenantTools: Tool[] = [];
+
+      // Tool: Verify Transaction (Available to everyone if provider exists)
+      if (tenantPaymentProvider) {
+        tenantTools.push({
           functionDeclarations: [
             {
               name: "verify_transaction",
-              description: "Verifies a bank transaction using its reference code and amount. Use this when a user sends a receipt.",
+              description: "Verifies a bank transaction reference and amount.",
               parameters: {
                 type: SchemaType.OBJECT,
                 properties: {
-                  reference: { type: SchemaType.STRING, description: "The transaction reference code from the receipt." },
-                  amount: { type: SchemaType.NUMBER, description: "The expected amount in Naira." }
+                  reference: { type: SchemaType.STRING, description: "Reference code" },
+                  amount: { type: SchemaType.NUMBER, description: "Amount in Naira" }
                 },
                 required: ["reference", "amount"]
               } as any
             }
           ]
-        }
-      ] : [];
+        });
+      }
+
+      // Tool: Save Knowledge (BOSS ONLY)
+      if (isAdmin) {
+        tenantTools.push({
+          functionDeclarations: [
+            {
+              name: "save_knowledge",
+              description: "Saves a business fact, price, or policy to the permanent knowledge base.",
+              parameters: {
+                type: SchemaType.OBJECT,
+                properties: {
+                  key: { type: SchemaType.STRING, description: "Short descriptive name (e.g., iPhone_15_Price)" },
+                  content: { type: SchemaType.STRING, description: "The full fact or value to store." }
+                },
+                required: ["key", "content"]
+              } as any
+            }
+          ]
+        });
+      }
 
       const tenantModelName = org.config?.model || "gemini-2.5-flash";
       const model = genAI.getGenerativeModel({ 
         model: tenantModelName,
-        tools: tenantTools
+        tools: tenantTools.length > 0 ? tenantTools : undefined
       });
 
-      // 1.5 Balance Check
+      // 1.5 Balance Check (Boss is free)
       const balance = org.balance || 0;
-      let costPerReply = org.costPerReply || 2000;
+      let costPerReply = isAdmin ? 0 : (org.costPerReply || 2000);
       
-      if (type === 'image') {
+      if (!isAdmin && type === 'image') {
           costPerReply = org.costPerImage || Math.floor(costPerReply * 2.5); 
       }
 
-      if (balance < costPerReply) {
+      if (!isAdmin && balance < costPerReply) {
         console.warn(`Org ${org.name} (${orgId}) has insufficient balance: ${balance} < ${costPerReply}`);
-        await whatsappService.sendText(from, "Service suspended: Insufficient balance. Please contact the business owner.");
+        await whatsappService.sendText(from, "Service suspended: Insufficient balance.");
         return { success: true, reason: 'Insufficient balance' };
       }
 
@@ -268,6 +310,25 @@ const worker = new Worker<JobData>(
                 toolResult = { status: 'error', reason: 'NO_PROVIDER' };
             }
             functionResponses.push({ functionResponse: { name: 'verify_transaction', response: toolResult } });
+          } else if (call.name === 'save_knowledge' && isAdmin) {
+            const args = call.args as any;
+            console.log(`🧠 Saving Knowledge: ${args.key} = ${args.content}`);
+            try {
+              await saveKnowledge(orgId, args.key, args.content);
+              functionResponses.push({
+                functionResponse: {
+                  name: 'save_knowledge',
+                  response: { status: 'success', message: `Knowledge '${args.key}' has been updated.` }
+                }
+              });
+            } catch (e: any) {
+              functionResponses.push({
+                functionResponse: {
+                  name: 'save_knowledge',
+                  response: { status: 'error', message: e.message }
+                }
+              });
+            }
           }
         }
         if (functionResponses.length > 0) {

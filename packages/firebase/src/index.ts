@@ -83,6 +83,8 @@ export interface Organization {
     tools: string[];
     payment?: PaymentConfig;
     model?: string;
+    adminPhone?: string;
+    adminPin?: string;
   };
   isActive: boolean;
   balance: number; // In Kobo
@@ -102,6 +104,31 @@ export interface Message {
 // --- Helpers ---
 
 export const getDb = () => db;
+
+/**
+ * Saves a piece of business knowledge (Price, Policy, Fact)
+ */
+export async function saveKnowledge(orgId: string, key: string, content: string): Promise<void> {
+  const slug = key.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  await orgsRef.doc(orgId).collection('knowledge').doc(slug).set({
+    key,
+    content,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+/**
+ * Fetches all knowledge for an organization
+ */
+export async function getAllKnowledge(orgId: string): Promise<Record<string, string>> {
+  const snapshot = await orgsRef.doc(orgId).collection('knowledge').get();
+  const knowledge: Record<string, string> = {};
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    knowledge[data.key] = data.content;
+  });
+  return knowledge;
+}
 
 export async function setOptOut(orgId: string, userPhone: string, status: boolean): Promise<void> {
   const chatId = `${orgId}_${userPhone}`;

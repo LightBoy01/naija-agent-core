@@ -83,6 +83,8 @@ export const ConfigSchema = z.object({
   model: z.enum(['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash']).default('gemini-1.5-flash'),
   tools: z.array(z.string()).default([]), // List of enabled tool names
   payment: PaymentConfigSchema.optional(), // Per-tenant payment config
+  adminPhone: z.string().optional(), // The Boss's phone number
+  adminPin: z.string().optional(), // 4-digit PIN for high-value actions
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
