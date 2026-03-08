@@ -272,6 +272,7 @@ const worker = new Worker<JobData>(
                   name: { type: SchemaType.STRING, description: "Display name" },
                   adminPhone: { type: SchemaType.STRING, description: "The client boss phone (234...)" },
                   phoneId: { type: SchemaType.STRING, description: "Their WhatsApp Phone ID" },
+                  wabaId: { type: SchemaType.STRING, description: "Optional: Their WhatsApp Business Account ID (for auto-subscription)" },
                   prompt: { type: SchemaType.STRING, description: "Their AI personality" }
                 },
                 required: ["id", "name", "adminPhone", "phoneId", "prompt"]
@@ -427,7 +428,14 @@ const worker = new Worker<JobData>(
                   adminPhone: args.adminPhone,
                   systemPrompt: args.prompt
                 });
-                functionResponses.push({ functionResponse: { name: 'create_tenant', response: { status: 'success', message: `Tenant '${args.name}' created successfully.` } } });
+                
+                let subMsg = "";
+                if (args.wabaId) {
+                   const subscribed = await whatsappService.subscribeWaba(args.wabaId);
+                   subMsg = subscribed ? " (WABA Subscribed ✅)" : " (WABA Subscription Failed ❌)";
+                }
+
+                functionResponses.push({ functionResponse: { name: 'create_tenant', response: { status: 'success', message: `Tenant '${args.name}' created successfully.${subMsg}` } } });
               } else if (call.name === 'get_network_stats' && org.config?.isMaster) {
                 const stats = await getNetworkStats();
                 functionResponses.push({ functionResponse: { name: 'get_network_stats', response: { status: 'success', data: stats } } });

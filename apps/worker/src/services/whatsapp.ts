@@ -111,4 +111,25 @@ export class WhatsAppService {
       throw error;
     }
   }
+
+  /**
+   * Automates the Webhook Subscription for a WABA.
+   * This is the "Glue" that makes Meta send messages to us.
+   */
+  async subscribeWaba(wabaId: string): Promise<boolean> {
+    try {
+      await axios.post(
+        `https://graph.facebook.com/v21.0/${wabaId}/subscribed_apps`,
+        {},
+        {
+          headers: { Authorization: `Bearer ${this.apiToken}` },
+        }
+      );
+      console.log(`✅ WABA ${wabaId} subscribed successfully!`);
+      return true;
+    } catch (error: any) {
+      console.error('❌ WABA Subscription Failed:', error.response?.data || error.message);
+      return false;
+    }
+  }
 }
