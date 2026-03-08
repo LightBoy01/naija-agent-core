@@ -108,11 +108,12 @@ export const getDb = () => db;
 /**
  * Saves a piece of business knowledge (Price, Policy, Fact)
  */
-export async function saveKnowledge(orgId: string, key: string, content: string): Promise<void> {
+export async function saveKnowledge(orgId: string, key: string, content: string, imageUrl?: string): Promise<void> {
   const slug = key.toLowerCase().replace(/[^a-z0-9]/g, '_');
   await orgsRef.doc(orgId).collection('knowledge').doc(slug).set({
     key,
     content,
+    imageUrl: imageUrl || null,
     updatedAt: FieldValue.serverTimestamp(),
   });
 }

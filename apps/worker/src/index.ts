@@ -137,12 +137,15 @@ const worker = new Worker<JobData>(
         Current Knowledge Base:\n${knowledgeContext || 'Empty'}`;
       } else {
         systemPrompt = org.systemPrompt || "You are a helpful sales assistant.";
-        systemPrompt += `\n\n[BUSINESS KNOWLEDGE]: Use the following verified facts to answer the customer:\n${knowledgeContext || 'No specific facts provided yet.'}`;
+        systemPrompt += `\n\n[BUSINESS KNOWLEDGE]: Use these facts for the customer:\n${knowledgeContext || 'No specific facts yet.'}`;
         
+        systemPrompt += `\n\n[AI JUDGMENT & WISDOM]: 
+        1. PROTECT THE BUSINESS: If a customer asks for a discount you don't have authority for, or wants a 'Bulk Order', do not say 'No'. Instead, use 'escalate_to_boss' to ping the owner.
+        2. BE PROACTIVE: If the situation is complex or the customer is angry, escalate immediately.
+        3. SALES FIRST: Your goal is to close the deal. If you're unsure of a price, escalate rather than giving wrong info.`;
+
         if (tenantPaymentProvider) {
-          systemPrompt += `\n\n[PAYMENT]: You have access to 'verify_transaction'. Use it for receipts.`;
-        } else {
-          systemPrompt += `\n\n[PAYMENT]: Perform VISUAL analysis only. Warn the user you cannot check the bank.`;
+          systemPrompt += `\n\n[PAYMENT]: Use 'verify_transaction' for receipts. If verified, confirm the order.`;
         }
       }
 
@@ -175,14 +178,34 @@ const worker = new Worker<JobData>(
           functionDeclarations: [
             {
               name: "save_knowledge",
-              description: "Saves a business fact, price, or policy to the permanent knowledge base.",
+              description: "Saves a business fact, price, policy, or product (including images).",
               parameters: {
                 type: SchemaType.OBJECT,
                 properties: {
-                  key: { type: SchemaType.STRING, description: "Short descriptive name (e.g., iPhone_15_Price)" },
-                  content: { type: SchemaType.STRING, description: "The full fact or value to store." }
+                  key: { type: SchemaType.STRING, description: "Descriptive name (e.g., iPhone_15_Blue)" },
+                  content: { type: SchemaType.STRING, description: "The details or price." },
+                  imageUrl: { type: SchemaType.STRING, description: "Optional URL of the product image." }
                 },
                 required: ["key", "content"]
+              } as any
+            }
+          ]
+        });
+      }
+
+      // Tool: Escalate to Boss (Available to AI in Sales Mode)
+      if (!isAdmin && org.config?.adminPhone) {
+        tenantTools.push({
+          functionDeclarations: [
+            {
+              name: "escalate_to_boss",
+              description: "Pings the business owner for assistance with a specific customer. Use this for high-value deals, complex issues, or discount requests.",
+              parameters: {
+                type: SchemaType.OBJECT,
+                properties: {
+                  reason: { type: SchemaType.STRING, description: "Why you are calling the Boss." }
+                },
+                required: ["reason"]
               } as any
             }
           ]
@@ -312,9 +335,9 @@ const worker = new Worker<JobData>(
             functionResponses.push({ functionResponse: { name: 'verify_transaction', response: toolResult } });
           } else if (call.name === 'save_knowledge' && isAdmin) {
             const args = call.args as any;
-            console.log(`🧠 Saving Knowledge: ${args.key} = ${args.content}`);
+            console.log(`🧠 Saving Knowledge: ${args.key} = ${args.content} (Image: ${args.imageUrl || 'None'})`);
             try {
-              await saveKnowledge(orgId, args.key, args.content);
+              await saveKnowledge(orgId, args.key, args.content, args.imageUrl);
               functionResponses.push({
                 functionResponse: {
                   name: 'save_knowledge',
@@ -325,6 +348,28 @@ const worker = new Worker<JobData>(
               functionResponses.push({
                 functionResponse: {
                   name: 'save_knowledge',
+                  response: { status: 'error', message: e.message }
+                }
+              });
+            }
+          } else if (call.name === 'escalate_to_boss' && !isAdmin && org.config?.adminPhone) {
+            const args = call.args as any;
+            console.log(`📣 ESCALATION: ${args.reason}`);
+            try {
+              const customerName = job.data.name || 'Unknown';
+              const alertMessage = `📣 [ESCALATION NEEDED]\nOga, I need help with Customer *${customerName}* (${from}).\nReason: ${args.reason}`;
+              await whatsappService.sendText(org.config.adminPhone, alertMessage);
+              
+              functionResponses.push({
+                functionResponse: {
+                  name: 'escalate_to_boss',
+                  response: { status: 'success', message: "I've informed the Boss. They will get back to you soon if necessary. How else can I help while we wait?" }
+                }
+              });
+            } catch (e: any) {
+              functionResponses.push({
+                functionResponse: {
+                  name: 'escalate_to_boss',
                   response: { status: 'error', message: e.message }
                 }
               });
