@@ -46,57 +46,55 @@ Give the owner ultimate control without breaking the automation.
     3.  **Action:** Bot **PAUSES** processing for that specific chat for 15 minutes.
     4.  **Feedback:** Bot whispers to Owner: *"I see you are typing. I am pausing for 15 mins. Type #resume to start me early."*
 
-## 4. Red Team Analysis (Vulnerabilities)
+## 4. The "Sovereign Scale" Friction (Managing 100s of Clients)
+**Pain Point:** Onboarding new clients manually via database scripts is slow and error-prone. 
 
-### A. The "Dual Reply" Race Condition
-*   **Risk:** Owner and Bot reply at the exact same second.
-*   **Fix:**
-    *   **Typing Indicator:** If Bot sees "Typing..." status from the phone app, it waits 10 seconds before generating a reply.
-    *   **Strict Handover:** Owner must type `#human` to officially take over complex chats.
+### Solution: The "Master Bot" Automated Onboarding
+The Sovereign Owner manages the entire factory through a single WhatsApp chat.
 
-### B. The "Fake Photo" Scam
-*   **Risk:** Rider snaps photo of a random door to claim delivery.
-*   **Fix:**
-    *   **Customer Confirmation:** The delivery is ONLY marked "Complete" when the **Customer** replies "YES" to the bot's private DM. Rider doesn't get paid until then.
+*   **Workflow:**
+    1.  **Trigger:** New payment received.
+    2.  **Command:** Sovereign types: *"Create tenant: Chinedu Pharmacy, Admin: 234..."*
+    3.  **Bot Action:** Calls `create_tenant` tool -> Deploys new Organization -> Pings new client.
+    4.  **Result:** Zero-code scaling.
 
-### C. The "Morning Ritual" Fatigue
-*   **Risk:** Owner stops replying to stock checks after 1 week.
-*   **Fix:**
-    *   **Gamification:** *"Update stock 7 days in a row -> Get 500 Free AI Credits."*
-    *   **Default Safe Mode:** If no reply for 3 days, mark all low-stock items as "Ask Owner" instead of "Available".
+## 5. The "Security Friction" (Identity Hijacking)
+**Pain Point:** If someone steals the Boss's phone, they can destroy the business knowledge or drain credits.
 
-## 5. Implementation Roadmap
-1.  **Stock Check Cron:** Add a scheduled job in `Worker` to message the Owner.
-2.  **Group Listener:** Update `API` to handle Group Message webhooks (`waba_group`).
-3.  **Auto-Pause:** Add logic in `Worker` to check Redis `chat_paused:{id}` key before processing.
+### Solution: The Admin PIN Handshake
+*   **Workflow:** Management tools are "LOCKED" by default. The Boss must type their 4-digit PIN to "UNLOCK" tools for a 2-hour window.
+
+## 6. The "Network Friction" (AI Quota 429 Errors)
+**Pain Point:** Gemini Free Tier limits requests. Retries caused duplicate messages.
+
+### Solution: Anti-Spam & Quota Guard
+*   **Rule:** `sendText` is moved to the absolute end of the process. The bot stays silent until the AI has finished thinking and the database has been updated.
 
 ---
 
 # Technical Institutional Memory (The Drama Archive)
 
-This section records the low-level technical hurdles and non-obvious solutions discovered during the core build phase.
-
 ## 1. Infrastructure: The Termux-Supabase Block
-*   **Friction:** Supabase direct connections (Port 5432) use IPv6. Termux and many Nigerian mobile networks are IPv4-only or have inconsistent IPv6 routing, leading to persistent `ETIMEDOUT`.
-*   **Solution:** **The Firebase Pivot.** Switched to Firestore which operates over standard HTTPS (Port 443). This is "Tunnel-Proof" and "Network-Agnostic."
+*   **Friction:** Supabase direct connections (Port 5432) use IPv6. Termux and many Nigerian mobile networks are IPv4-only.
+*   **Solution:** **The Firebase Pivot.** Switched to Firestore which operates over standard HTTPS (Port 443).
 
 ## 2. Meta API: The "Account Not Registered" (133010)
-*   **Friction:** Even after creating a test number in the dashboard, API calls to send messages return error `133010`.
-*   **Solution:** A manual **Registration Call** is required to "wake up" the number in Meta's backend:
-    `POST /{{PHONE_ID}}/register` with a `pin`.
+*   **Solution:** A manual **Registration Call** is required to "wake up" the number in Meta's backend.
 
-## 3. Webhooks: The "Delivered but Silent" Mystery (THE BIG DISCOVERY)
-*   **Friction:** Meta Dashboard shows messages as "Delivered" and the Webhook is "Verified," but no data hits the server.
-*   **The Drama:** We tested 4 different tunnels (Ngrok, Serveo, Localhost.run, Pinggy) and moved to the Cloud (Railway), but the silence continued.
+## 3. Webhooks: The "Delivered but Silent" Mystery
 *   **Discovery:** Verification (`GET`) only proves the URL is reachable. For Meta to actually forward **Real Messages** (`POST`), the WhatsApp Business Account (WABA) must be explicitly subscribed to the App.
-*   **Solution:** The **`subscribed_apps` Handshake**:
-    `POST /{{WABA_ID}}/subscribed_apps`
-    This "glues" the WABA events to the API endpoint. Without this, Meta intercepts the data and never sends it to your server.
+*   **Solution:** The **`subscribed_apps` Handshake**.
 
 ## 4. Environment: The JSON Parsing Crash
-*   **Friction:** Pasting the Firebase Service Account JSON into `.env` files often introduces invisible characters (like LTR marks `\u200e`) that crash `JSON.parse()`.
-*   **Solution:** **Hybrid Auth Logic.** The `@naija-agent/firebase` package first looks for a physical `serviceAccountKey.json`. If missing (in Cloud), it reads from the ENV but applies a regex `replace(/[^\x20-\x7E]/g, '')` to strip any terminal-induced garbage characters before parsing.
+*   **Solution:** **Hybrid Auth Logic.** The `@naija-agent/firebase` package first looks for a physical `serviceAccountKey.json`.
 
 ## 5. Deployment: The "Tunnel Phishing" Filter
-*   **Friction:** Meta security bots often block `serveo.net` and `localhost.run` domains because they are frequently used for phishing, causing webhooks to fail silently.
-*   **Solution:** **Cloud-First Testing.** Moving to a real subdomain (e.g., `.up.railway.app`) provides a stable SSL certificate and bypasses the "temporary tunnel" reputation filters.
+*   **Solution:** **Cloud-First Testing.** Moving to a real subdomain (e.g., `.up.railway.app`) provides a stable SSL certificate.
+
+## 6. The Routing Collision Discovery (March 2026)
+*   **Drama:** We realized that if the Master Bot and Demo Org use the same WhatsApp Test Number, the API routes randomly.
+*   **Solution:** **Phone ID Deactivation.** We assigned `DEMO_PAUSED` to the demo org in Firestore to give the Master Bot exclusive control of the dev environment.
+
+## 7. The Balance Deduction Gatekeeper (March 2026)
+*   **Drama:** Deducting balance *after* sending the reply meant that if the deduction failed, the customer still got their answer for free.
+*   **Solution:** **Strict Pre-Deduction.** Deduction is now the absolute gatekeeper.

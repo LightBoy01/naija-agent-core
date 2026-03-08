@@ -1,6 +1,6 @@
 # Task List
 
-## Phase 1: Foundation (The "Fast Lane")
+## Phase 1: Foundation (The "Fast Lane") ✅
 
 - [x] **Project Setup**
     - [x] Initialize Monorepo (NPM Workspaces)
@@ -26,17 +26,15 @@
     - [x] Implement Native Audio Handling (Buffer -> Gemini)
     - [x] Fix ESM Module Imports (.js extensions)
 
-## Phase 2: Intelligence (The "Brain")
+## Phase 2: Intelligence (The "Brain") ✅
 
-- [x] **WABA Ignition**
-    - [x] Register WhatsApp Test Number (Success)
-    - [x] Add Recipient Allowlist
 - [x] **AI Integration**
     - [x] Update ConfigSchema for `gemini-2.5-flash`
     - [x] Perform First Production AI Reply (Success)
     - [x] Verify Native Audio Multimodal Support in Cloud (Verified)
+    - [x] **Anti-Spam & Quota Guard:** Implement stable messaging for Gemini 429 errors.
 
-## Phase 3: Finance & Ops (The "Bank")
+## Phase 3: Finance & Ops (The "Bank") ✅
 
 - [x] **Credit System Design**
     - [x] AI Credits Model (Prepaid)
@@ -44,24 +42,33 @@
     - [x] **Low Balance Alerts** (Implementation + Redis Cooldown)
     - [x] **Balance Context Injection** (Gemini is balance-aware)
 
-## Phase 4: Features (The Moat)
+## Phase 4: The Sovereign Empire (In Progress) 🟡
 
-- [ ] **Fake Alert Buster**
-    - [x] Implement Gemini Vision for receipt extraction
-    - [ ] Integrate Monnify/Paystack for transaction verification
-- [ ] **Safety & Compliance (Essential)**
-    - [ ] Implement `#STOP` and `#START` commands (User Opt-out)
-    - [ ] Rate limit strictness for Image/Audio spam
-- [ ] **Outbound Engine**
-    - [x] Implement `POST /send` endpoint (Success)
-    - [ ] Automated follow-ups for abandoned carts
-- [ ] **Rider Tracking**
-    - [ ] Implement "Group Chat Spy" for GPS coordinates
+- [x] **Multi-Tenancy (Phase 4d)**
+    - [x] Multi-Tenant Key Isolation (Firestore Vaults)
+    - [x] Dynamic AI/Payment Provider instantiation per request.
+- [x] **Media Persistence (Phase 4f)**
+    - [x] **Persistent Media Pipeline:** Upload all WhatsApp media to Firebase Storage.
+    - [x] Link permanent URLs to Chat History metadata.
+- [x] **Boss Mode (Phase 4g/i)**
+    - [x] **Iron-Clad Security:** Admin PIN Handshake (2-hour sessions).
+    - [x] **Zero-Dashboard Training:** Boss trains AI via WhatsApp conversation.
+    - [x] **Sector Flexibility:** Implement `manage_activity` for Logistics/Appointments.
+- [x] **The Grand Commander (Phase 4j)**
+    - [x] **Master Bot Identity:** COO bot for Sovereign management.
+    - [x] **Automated Onboarding:** `create_tenant` tool for instant client setup.
+    - [x] **Network Stats:** Real-time reporting for the Sovereign.
+- [ ] **The "Fake Alert" Finale**
+    - [x] Implement Gemini Vision for receipt extraction.
+    - [ ] Integrate Monnify/Paystack for real-time bank verification.
+- [ ] **SMS Relay Prototype**
+    - [ ] Build Android "Bridge" app to listen for Bank SMS notifications.
 
+## Phase 5: Scale 🟡
 
-## Phase 5: Scale
-
+- [ ] **The "Boss" Dashboard (Web)**
+    - [ ] Next.js Portal for viewing archived receipts and live chats.
+    - [ ] Real-time "Takeover" mode for high-stakes conversations.
 - [ ] **Infrastructure Optimization**
-    - [ ] Setup sidecar process for Worker in Railway
     - [ ] Setup Structured Logging (Pino)
     - [ ] Monitoring (Sentry/Logtail)

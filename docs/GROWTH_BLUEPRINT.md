@@ -1,83 +1,50 @@
 # NaijaAgent Core - Growth & Operations Blueprint
 
-This document outlines the operational roadmap, from "Hello World" on Termux to a scaled National Brand, specifically tailored for the Nigerian business environment.
+This document details the operational mechanics of the Sovereign Hierarchy and the viral network effect.
 
-## 1. The Infrastructure Strategy (Phone Numbers)
+## 1. The "Grand Commander" Launch Protocol
 
-**The "Kpalasa" Protocol**
-To use WhatsApp Business API, you need a dedicated phone number that is **NOT** active on the mobile app.
+**Phase 1: The Master Office**
+*   **Action:** Seed the **Master Bot** (`naija-agent-master`) on your test number.
+*   **Boss:** Your personal number (`2347042310893`).
+*   **Result:** You now have a COO that manages your whole business.
 
-*   **Step 1:** Buy a fresh SIM (MTN/Airtel). Register it with NIN.
-*   **Step 2:** Insert into a "Kpalasa" (Feature phone) or spare Android. You only need it for **SMS OTP**.
-*   **Step 3:** Register on Meta Developer Portal. Input number -> Receive OTP -> Verify.
-*   **Step 4:** Keep the SIM active (load ₦100 airtime monthly) to prevent recycling by the telco.
-
-**Development Phase:**
-*   Use the **Meta Test Number** (Sandbox) for free testing.
-*   Only graduate to a Real SIM when you have a paying client or are ready for public demo.
+**Phase 2: The "Powered By" Viral Loop**
+*   **Mechanic:** Every bot reply to a customer appends: *"Want your own AI Agent? Chat with our Master at [Master_Bot_Link]"*.
+*   **Stats:** 2-5% of shoppers are business owners. Every interaction is a sales pitch.
 
 ---
 
-## 2. The "SpeedyLogistics" Scenario (Lifecycle)
+## 2. Onboarding Workflow (Zero-Friction)
 
-A step-by-step guide to onboarding your first client (Zero to Scale).
+How to add a new client (e.g., "DentalPlus Clinic"):
 
-### Phase 1: The Lab (Product Completion)
-*   **Action:** Seed Database. Configure System Prompt for "NaijaAgent Demo".
-*   **Test:** Send Voice Note in deep Pidgin ("Abeg, how much delivery?").
-*   **Success Criteria:** Bot replies intelligently in < 5 seconds.
-
-### Phase 2: The Reachout (The Hustle)
-*   **Target:** IG Vendors/Logistics companies (2k-10k followers).
-*   **Pitch:** "Stop losing customers because you didn't reply fast enough. I built a system that answers inquiries, confirms payments, and tracks riders 24/7."
-*   **The Hook:** Send them a link to your **Test Number**. Let them talk to the bot.
-
-### Phase 3: Onboarding (The Setup)
-*   **Fee:** ₦50,000 Setup + ₦10,000 Credit Deposit.
-*   **Action:**
-    1.  Client buys/provides a dedicated SIM.
-    2.  You verify it on Meta.
-    3.  You create their Org in DB (`organizations` table) with a custom System Prompt.
-    4.  Top up their `balance`.
-
-### Phase 4: Live Operations
-*   **User:** *"Where is my package?"*
-*   **Bot:** Checks "SpeedyLogistics" Google Sheet/DB -> Replies *"Rider Musa is at Yaba. ETA 15 mins."*
-*   **Result:** Business owner saves time. Customer is happy.
-
-### Phase 5: The Viral Loop (Network Effect)
-*   **Strategy:** Append a footer to the final message of every successful chat:
-    > *"Was this helpful? Powered by NaijaAgent. Get yours at naijaagent.ng"*
-*   **Mechanism:** SpeedyLogistics' customers are often business owners themselves. They see the tech works -> They sign up.
+1.  **The Sale:** Master Bot gives a demo -> Client pays via Paystack.
+2.  **The Decree:** You tell Master Bot: *"Onboard DentalPlus. Phone ID is ... Admin is 234..."*
+3.  **The Birth:** Master Bot calls `create_tenant`.
+4.  **The Handover:** Master Bot pings the client: *"Oga! I am your new clinic assistant. Type your PIN to start."*
 
 ---
 
-## 3. Red Team Analysis (Operational Risks)
+## 3. Managed Scenarios (Diverse Growth)
 
-### A. The "SIM Limit" Trap
-*   **Risk:** NIN regulations limit the number of SIMs one person can register.
-*   **Mitigation:**
-    *   **Client Ownership:** Always register the SIM in the **Client's Name** (RC Number). Do not hoard SIMs yourself.
-    *   **Embedded Signup:** Eventually implement "WhatsApp Embedded Signup" (Tech Flow) where clients scan a QR code to link their own number without you touching the SIM.
+### Scenario A: Logistics (The Waybill Agent)
+*   **Value:** Automates "Where is my rider?" calls.
+*   **Power:** Uses `manage_activity` to log waybill statuses.
 
-### B. The "Trust" Deficit
-*   **Risk:** Client refuses to pay Setup Fee because "It might not work."
-*   **Mitigation:**
-    *   **Freemium:** Offer 3 days free trial on *your* test number.
-    *   **Hardware Bundle:** Sell a cheap tablet pre-loaded with the dashboard. Nigerians trust physical goods more than software.
+### Scenario B: Appointments (The Booking Agent)
+*   **Value:** 24/7 lead qualification and booking.
+*   **Power:** Uses `manage_activity` to schedule dental or salon appointments.
 
-### C. The "Emergency" Fail
-*   **Risk:** AI hallucinates or gets stuck. Business owner panics.
-*   **Mitigation:**
-    *   **#STOP Command:** Allow owner to type `#stop` in the chat to pause the AI instantly and take over manually.
-    *   **#START Command:** Resume AI after manual intervention.
+### Scenario C: Retail (The Fake Alert Buster)
+*   **Value:** Instant trust between buyer and seller.
+*   **Power:** Uses Gemini Vision to read receipts and verify with bank APIs.
 
 ---
 
-## 4. Working Tips for Success
+## 4. Operational Tips for the Sovereign
 
-1.  **Pidgin Is King:** Your moat is the ability to understand *"I wan run kiti kiti"*. Constantly update your System Prompts with street slang.
-2.  **Pre-Paid Only:** Never offer post-paid billing. In Nigeria, "Post-Paid" means "Bad Debt".
-3.  **No Ads Needed:** Use the "Powered by" footer. It is free marketing to high-intent users.
-4.  **Focus on Pain:** Don't sell "AI". Sell "Payment Verification" (Fake Alert Buster) and "Rider Tracking".
-
+1.  **Stay in WhatsApp:** Don't build apps until you hit 100 clients. Manage everything via the Master Bot.
+2.  **Security First:** Always set a unique `adminPin` for every client.
+3.  **Template-Only Broadcasts:** When announcing new features to all Bosses, use Meta Templates to avoid spam bans.
+4.  **Audit Regularly:** Use the `get_network_stats` tool every morning to see your empire's growth.

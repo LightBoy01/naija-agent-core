@@ -462,14 +462,15 @@ const worker = new Worker<JobData>(
         return { success: false, reason: 'Balance deduction failed' };
       }
 
-      // 7. Finalize Persistence
-      const permanentUrl = mediaTask ? await mediaTask : undefined;
+      // 8. Finalize Persistence
+      const permanentUrl = mediaTask ? await mediaTask : null;
       await saveMessage(chatId, { 
         role: 'user', 
         content: userMessageContent, 
         type: type as any, 
         metadata: { messageId, permanentUrl } 
       });
+
       await saveMessage(chatId, { role: 'assistant', content: responseText, type: 'text' });
 
       // 8. Send Reply to WhatsApp (ONLY at the very end of a successful process)
