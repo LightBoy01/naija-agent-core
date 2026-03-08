@@ -131,6 +131,53 @@ export async function getAllKnowledge(orgId: string): Promise<Record<string, str
   return knowledge;
 }
 
+/**
+ * Deletes a specific piece of knowledge
+ */
+export async function deleteKnowledge(orgId: string, key: string): Promise<void> {
+  const slug = key.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  await orgsRef.doc(orgId).collection('knowledge').doc(slug).delete();
+}
+
+/**
+ * Creates or updates a business activity (Booking, Delivery, Order)
+ */
+export async function updateActivity(
+  orgId: string, 
+  activityId: string, 
+  type: 'booking' | 'delivery' | 'order', 
+  data: any
+): Promise<void> {
+  await orgsRef.doc(orgId).collection('activities').doc(activityId).set({
+    type,
+    ...data,
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+}
+
+/**
+ * Simple Redis-style session check for Admin PIN (stored in Firestore for MVP)
+ */
+export async function verifyAdminSession(orgId: string, adminPhone: string): Promise<boolean> {
+  const chatId = `${orgId}_${adminPhone}`;
+  const chatDoc = await chatsRef.doc(chatId).get();
+  if (!chatDoc.exists) return false;
+  
+  const lastAuth = chatDoc.data()?.lastAdminAuthAt;
+  if (!lastAuth) return false;
+
+  // Session expires in 2 hours (7200000 ms)
+  const isExpired = (Date.now() - lastAuth.toDate().getTime()) > 7200000;
+  return !isExpired;
+}
+
+export async function setAdminAuth(orgId: string, adminPhone: string): Promise<void> {
+  const chatId = `${orgId}_${adminPhone}`;
+  await chatsRef.doc(chatId).set({
+    lastAdminAuthAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+}
+
 export async function setOptOut(orgId: string, userPhone: string, status: boolean): Promise<void> {
   const chatId = `${orgId}_${userPhone}`;
   const chatRef = chatsRef.doc(chatId);

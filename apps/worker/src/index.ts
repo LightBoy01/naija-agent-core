@@ -18,6 +18,10 @@ import {
   logTransaction,
   saveKnowledge,
   getAllKnowledge,
+  deleteKnowledge,
+  updateActivity,
+  verifyAdminSession,
+  setAdminAuth,
   Message
 } from '@naija-agent/firebase';
 
@@ -130,29 +134,40 @@ const worker = new Worker<JobData>(
       // --- Identity-Based System Prompt ---
       let systemPrompt = "";
       if (isAdmin) {
-        systemPrompt = `You are the Business Manager for ${org.name}. You are talking to your BOSS. 
-        Be professional, helpful, and efficient. 
-        Your primary job is to help the Boss manage the business.
-        Use 'save_knowledge' to store new facts, prices, or policies the Boss tells you.
-        Current Knowledge Base:\n${knowledgeContext || 'Empty'}`;
+        const isAuth = await verifyAdminSession(orgId, from);
+        
+        systemPrompt = `You are the Business Manager for ${org.name}. You are talking to your BOSS.
+        Your primary job is to help the Boss manage business facts, prices, and activities (Bookings/Deliveries).
+        
+        [SECURITY]:
+        Status: ${isAuth ? 'AUTHENTICATED' : 'LOCKED'}.
+        If Status is LOCKED, you MUST ask the Boss for their 4-digit PIN before you can use 'save_knowledge', 'delete_knowledge', or 'manage_activity'.
+        If the Boss provides the PIN, use 'verify_admin_pin' to unlock.
+
+        [ADMIN TOOLS]:
+        - Use 'save_knowledge' to update prices/policies.
+        - Use 'delete_knowledge' to remove old info.
+        - Use 'manage_activity' to create Waybills (Logistics) or Bookings (Appointments).
+        
+        Current Knowledge:\n${knowledgeContext || 'Empty'}`;
       } else {
         systemPrompt = org.systemPrompt || "You are a helpful sales assistant.";
         systemPrompt += `\n\n[BUSINESS KNOWLEDGE]: Use these facts for the customer:\n${knowledgeContext || 'No specific facts yet.'}`;
         
         systemPrompt += `\n\n[AI JUDGMENT & WISDOM]: 
-        1. PROTECT THE BUSINESS: If a customer asks for a discount you don't have authority for, or wants a 'Bulk Order', do not say 'No'. Instead, use 'escalate_to_boss' to ping the owner.
-        2. BE PROACTIVE: If the situation is complex or the customer is angry, escalate immediately.
-        3. SALES FIRST: Your goal is to close the deal. If you're unsure of a price, escalate rather than giving wrong info.`;
+        1. SECTOR FLEXIBILITY: If the business is Logistics, handle Waybill requests. If it's Service-based, handle Appointment Bookings.
+        2. ESCALATION: Use 'escalate_to_boss' for high-value deals or complex issues.
+        3. ACCURACY: Use the provided Knowledge Base strictly. If unsure, escalate.`;
 
         if (tenantPaymentProvider) {
-          systemPrompt += `\n\n[PAYMENT]: Use 'verify_transaction' for receipts. If verified, confirm the order.`;
+          systemPrompt += `\n\n[PAYMENT]: Use 'verify_transaction' for receipts.`;
         }
       }
 
       // --- Identity-Based Tools ---
       const tenantTools: Tool[] = [];
 
-      // Tool: Verify Transaction (Available to everyone if provider exists)
+      // 1. Transaction Verification (All users)
       if (tenantPaymentProvider) {
         tenantTools.push({
           functionDeclarations: [
@@ -172,39 +187,68 @@ const worker = new Worker<JobData>(
         });
       }
 
-      // Tool: Save Knowledge (BOSS ONLY)
+      // 2. Admin Tools (BOSS ONLY)
       if (isAdmin) {
         tenantTools.push({
           functionDeclarations: [
             {
+              name: "verify_admin_pin",
+              description: "Verifies the 4-digit PIN provided by the Boss to unlock management tools.",
+              parameters: {
+                type: SchemaType.OBJECT,
+                properties: { pin: { type: SchemaType.STRING, description: "The 4-digit PIN." } },
+                required: ["pin"]
+              } as any
+            },
+            {
               name: "save_knowledge",
-              description: "Saves a business fact, price, policy, or product (including images).",
+              description: "Updates business facts, prices, or product images. (Requires Authentication)",
               parameters: {
                 type: SchemaType.OBJECT,
                 properties: {
-                  key: { type: SchemaType.STRING, description: "Descriptive name (e.g., iPhone_15_Blue)" },
-                  content: { type: SchemaType.STRING, description: "The details or price." },
-                  imageUrl: { type: SchemaType.STRING, description: "Optional URL of the product image." }
+                  key: { type: SchemaType.STRING, description: "Key name" },
+                  content: { type: SchemaType.STRING, description: "Details/Price" },
+                  imageUrl: { type: SchemaType.STRING, description: "Product Image URL" }
                 },
                 required: ["key", "content"]
+              } as any
+            },
+            {
+              name: "delete_knowledge",
+              description: "Deletes obsolete business knowledge. (Requires Authentication)",
+              parameters: {
+                type: SchemaType.OBJECT,
+                properties: { key: { type: SchemaType.STRING, description: "Key to delete" } },
+                required: ["key"]
+              } as any
+            },
+            {
+              name: "manage_activity",
+              description: "Creates or updates a business activity like a Waybill (Logistics), Booking (Appointments), or Order. (Requires Authentication)",
+              parameters: {
+                type: SchemaType.OBJECT,
+                properties: {
+                  id: { type: SchemaType.STRING, description: "Unique ID (e.g., Waybill number or Date_Time)" },
+                  type: { type: SchemaType.STRING, enum: ["booking", "delivery", "order"] },
+                  summary: { type: SchemaType.STRING, description: "Full details of the activity" }
+                },
+                required: ["id", "type", "summary"]
               } as any
             }
           ]
         });
       }
 
-      // Tool: Escalate to Boss (Available to AI in Sales Mode)
+      // 3. Escalation Tool (Customers only)
       if (!isAdmin && org.config?.adminPhone) {
         tenantTools.push({
           functionDeclarations: [
             {
               name: "escalate_to_boss",
-              description: "Pings the business owner for assistance with a specific customer. Use this for high-value deals, complex issues, or discount requests.",
+              description: "Pings the business owner for assistance with a specific customer.",
               parameters: {
                 type: SchemaType.OBJECT,
-                properties: {
-                  reason: { type: SchemaType.STRING, description: "Why you are calling the Boss." }
-                },
+                properties: { reason: { type: SchemaType.STRING, description: "Reason for escalation" } },
                 required: ["reason"]
               } as any
             }
@@ -294,11 +338,13 @@ const worker = new Worker<JobData>(
       }
 
       // 5. Call Gemini
+      const isAuth = isAdmin ? await verifyAdminSession(orgId, from) : false;
+
       const chatSession = model.startChat({
         history: [
           {
             role: "user",
-            parts: [{ text: `System Instruction: ${systemPrompt}\n\n[CONTEXT] Current Business Credit Balance: ${balance} kobo (Note: 100 kobo = 1 Naira).` }],
+            parts: [{ text: `System Instruction: ${systemPrompt}\n\n[CONTEXT] Current Business Credit Balance: ${balance} kobo (Note: 100 kobo = 1 Naira).\nAdmin Auth Status: ${isAuth ? 'AUTHENTICATED' : 'LOCKED'}` }],
           },
           {
             role: "model",
@@ -315,8 +361,9 @@ const worker = new Worker<JobData>(
       if (functionCalls && functionCalls.length > 0) {
         const functionResponses = [];
         for (const call of functionCalls) {
+          const args = call.args as any;
+
           if (call.name === 'verify_transaction') {
-            const args = call.args as any;
             let toolResult;
             const existingTx = await checkTransaction(orgId, args.reference);
             if (existingTx) {
@@ -333,46 +380,46 @@ const worker = new Worker<JobData>(
                 toolResult = { status: 'error', reason: 'NO_PROVIDER' };
             }
             functionResponses.push({ functionResponse: { name: 'verify_transaction', response: toolResult } });
-          } else if (call.name === 'save_knowledge' && isAdmin) {
-            const args = call.args as any;
-            console.log(`🧠 Saving Knowledge: ${args.key} = ${args.content} (Image: ${args.imageUrl || 'None'})`);
-            try {
-              await saveKnowledge(orgId, args.key, args.content, args.imageUrl);
-              functionResponses.push({
-                functionResponse: {
-                  name: 'save_knowledge',
-                  response: { status: 'success', message: `Knowledge '${args.key}' has been updated.` }
-                }
-              });
-            } catch (e: any) {
-              functionResponses.push({
-                functionResponse: {
-                  name: 'save_knowledge',
-                  response: { status: 'error', message: e.message }
-                }
-              });
+
+          } else if (call.name === 'verify_admin_pin' && isAdmin) {
+            console.log(`🔐 Admin PIN verification attempt for ${orgId}`);
+            if (args.pin === org.config?.adminPin) {
+              await setAdminAuth(orgId, from);
+              functionResponses.push({ functionResponse: { name: 'verify_admin_pin', response: { status: 'success', message: 'PIN Verified. Management tools are now UNLOCKED for 2 hours.' } } });
+            } else {
+              functionResponses.push({ functionResponse: { name: 'verify_admin_pin', response: { status: 'error', message: 'Incorrect PIN. Access denied.' } } });
             }
+
+          } else if (['save_knowledge', 'delete_knowledge', 'manage_activity'].includes(call.name) && isAdmin) {
+            if (!isAuth) {
+              functionResponses.push({ functionResponse: { name: call.name, response: { status: 'error', message: 'SECURITY_LOCKED: You must verify your PIN before doing this.' } } });
+              continue;
+            }
+
+            try {
+              if (call.name === 'save_knowledge') {
+                await saveKnowledge(orgId, args.key, args.content, args.imageUrl);
+                functionResponses.push({ functionResponse: { name: 'save_knowledge', response: { status: 'success', message: `Knowledge '${args.key}' updated.` } } });
+              } else if (call.name === 'delete_knowledge') {
+                await deleteKnowledge(orgId, args.key);
+                functionResponses.push({ functionResponse: { name: 'delete_knowledge', response: { status: 'success', message: `Knowledge '${args.key}' removed.` } } });
+              } else if (call.name === 'manage_activity') {
+                await updateActivity(orgId, args.id, args.type, { summary: args.summary });
+                functionResponses.push({ functionResponse: { name: 'manage_activity', response: { status: 'success', message: `${args.type} '${args.id}' has been recorded.` } } });
+              }
+            } catch (e: any) {
+              functionResponses.push({ functionResponse: { name: call.name, response: { status: 'error', message: e.message } } });
+            }
+
           } else if (call.name === 'escalate_to_boss' && !isAdmin && org.config?.adminPhone) {
-            const args = call.args as any;
             console.log(`📣 ESCALATION: ${args.reason}`);
             try {
               const customerName = job.data.name || 'Unknown';
               const alertMessage = `📣 [ESCALATION NEEDED]\nOga, I need help with Customer *${customerName}* (${from}).\nReason: ${args.reason}`;
               await whatsappService.sendText(org.config.adminPhone, alertMessage);
-              
-              functionResponses.push({
-                functionResponse: {
-                  name: 'escalate_to_boss',
-                  response: { status: 'success', message: "I've informed the Boss. They will get back to you soon if necessary. How else can I help while we wait?" }
-                }
-              });
+              functionResponses.push({ functionResponse: { name: 'escalate_to_boss', response: { status: 'success', message: "I've informed the Boss. They will get back to you soon. How else can I help?" } } });
             } catch (e: any) {
-              functionResponses.push({
-                functionResponse: {
-                  name: 'escalate_to_boss',
-                  response: { status: 'error', message: e.message }
-                }
-              });
+              functionResponses.push({ functionResponse: { name: 'escalate_to_boss', response: { status: 'error', message: e.message } } });
             }
           }
         }
