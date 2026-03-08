@@ -4,6 +4,7 @@ import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { Config, PaymentConfig } from '@naija-agent/types';
 
 // Fix for ESM/CJS interop for firebase-admin
 const firebaseAdmin = (admin as any).default || admin;
@@ -78,11 +79,16 @@ export interface Organization {
   name: string;
   whatsappPhoneId: string;
   systemPrompt: string;
-  config: { tools: string[] };
+  config: { 
+    tools: string[];
+    payment?: PaymentConfig;
+    model?: string;
+  };
   isActive: boolean;
   balance: number; // In Kobo
   currency: string;
   costPerReply: number;
+  costPerImage?: number;
 }
 
 export interface Message {

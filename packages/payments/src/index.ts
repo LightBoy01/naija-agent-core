@@ -39,10 +39,15 @@ export class MockProvider implements PaymentProvider {
 
 export { PaystackProvider };
 
-export function getProvider(type: 'paystack' | 'mock', secretKey?: string): PaymentProvider {
+export function getProvider(type: 'paystack' | 'monnify' | 'mock', secretKey?: string): PaymentProvider {
   if (type === 'paystack') {
     if (!secretKey) throw new Error('Paystack Secret Key required');
     return new PaystackProvider(secretKey);
+  }
+  if (type === 'monnify') {
+    // TODO: Implement MonnifyProvider
+    console.warn('MonnifyProvider not implemented yet, using MockProvider');
+    return new MockProvider();
   }
   return new MockProvider();
 }

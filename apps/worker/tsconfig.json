@@ -6,7 +6,8 @@
   },
   "references": [
     { "path": "../../packages/types" },
-    { "path": "../../packages/firebase" }
+    { "path": "../../packages/firebase" },
+    { "path": "../../packages/payments" }
   ],
   "include": ["src/**/*"]
 }

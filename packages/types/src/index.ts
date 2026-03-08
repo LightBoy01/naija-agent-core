@@ -71,10 +71,18 @@ export type JobData = z.infer<typeof JobDataSchema>;
 
 // --- Configuration Schemas (Tenant) ---
 
+export const PaymentConfigSchema = z.object({
+  provider: z.enum(['paystack', 'monnify']).default('paystack'),
+  secretKey: z.string(),
+});
+
+export type PaymentConfig = z.infer<typeof PaymentConfigSchema>;
+
 export const ConfigSchema = z.object({
   systemPrompt: z.string(),
   model: z.enum(['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash']).default('gemini-1.5-flash'),
   tools: z.array(z.string()).default([]), // List of enabled tool names
+  payment: PaymentConfigSchema.optional(), // Per-tenant payment config
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

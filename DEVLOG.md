@@ -190,11 +190,38 @@
 ### **Self-Assessment:**
 *   **Strong:** The modular architecture allowed adding a payments layer without touching the core API logic. The hybrid fallback is a great user experience feature for the Nigerian market.
 *   **Weak:** Currently relies on a single `PAYSTACK_SECRET_KEY` in `.env`, which breaks multi-tenancy.
-*   **Critical Gap:** No protection against **Replay Attacks** (using the same valid receipt twice).
+*   **Secure:** Replay Protection is now active. Duplicate receipts are instantly flagged.
 
 ### **Next Steps:**
-*   [ ] **Security Patch:** Implement **Replay Protection** by logging verified transaction references in Firestore.
+*   [x] **Security Patch:** Implement **Replay Protection** by logging verified transaction references in Firestore.
 *   [ ] **Multi-Tenancy:** Move API keys from `.env` to the `Organization` document in Firestore.
+
+## Session 16: The Master-Tenant Strategy (2026-03-08)
+
+**Status:** 🟢 **Planning Complete**
+
+### **Actions Taken:**
+*   **Strategic Pivot:** Defined the "Master-Tenant" architecture where the NaijaAgent Bot acts as the "Master" (Sales/Admin) and manages multiple "Tenant Bots" (BimsGadget, Chinedu, etc.) on a single infrastructure.
+*   **Documentation:** Updated `docs/ARCHITECTURE.md` to reflect the multi-tenant data model, logic routing, and security isolation (RLS/Key Management).
+*   **Security Analysis:** Performed a Red Team analysis of the shared-brain risks (Context Leakage, Prompt Injection) and defined mitigation strategies (Strict Context Isolation).
+
+### **Self-Assessment:**
+*   **Strong:** The plan solves the scalability problem. We don't need to spin up new servers for new clients.
+*   **Critical Task:** We must now implement the "Key Isolation" (Phase 4d) to make this reality. The current `.env` based Paystack key is a blocker.
+
+## Session 17: Multi-Tenancy Key Isolation (2026-03-08)
+
+**Status:** 🟡 **In Progress**
+
+### **Actions Taken:**
+*   **Schema Evolution:** Updating `Organization` and `Config` schemas to support per-tenant `paymentConfig` (Secret Keys in Firestore).
+*   **Worker Refactoring:** Preparing the Worker to instantiate `PaymentProvider` and `Gemini Model` (with tools) dynamically per-request.
+
+### **Next Steps:**
+*   [ ] Implement dynamic `paymentProvider` instantiation in Worker.
+*   [ ] Update `ConfigSchema` and `Organization` types.
+*   [ ] Seed a test organization with its own Paystack key.
+
 
 
 

@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 console.log('🚀 [VERSION 1.0.2] Worker Service Starting...');
 import { JobData } from '@naija-agent/types';
 import { WhatsAppService } from './services/whatsapp.js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType, Tool } from '@google/generative-ai';
 import { getProvider, PaymentProvider } from '@naija-agent/payments';
 import { 
   getOrgById, 
@@ -58,31 +58,6 @@ const whatsappService = new WhatsAppService(
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-// Define Tools
-const tools = paymentProvider ? [
-  {
-    functionDeclarations: [
-      {
-        name: "verify_transaction",
-        description: "Verifies a bank transaction using its reference code and amount. Use this when a user sends a receipt.",
-        parameters: {
-          type: "OBJECT",
-          properties: {
-            reference: { type: "STRING", description: "The transaction reference code from the receipt." },
-            amount: { type: "NUMBER", description: "The expected amount in Naira." }
-          },
-          required: ["reference", "amount"]
-        }
-      }
-    ]
-  }
-] : [];
-
-const model = genAI.getGenerativeModel({ 
-  model: "gemini-2.5-flash",
-  tools: tools
-});
-
 console.log('🚀 Worker Starting...');
 
 const worker = new Worker<JobData>(
@@ -101,18 +76,22 @@ const worker = new Worker<JobData>(
       return { success: true };
     }
 
+    // --- Validation: Ensure OrgId exists for message jobs ---
+    if (!orgId) {
+      console.error(`Job ${job.id} missing orgId.`);
+      return { success: false, reason: 'Missing orgId' };
+    }
+
     // --- 0. Rate Limiting (DoS Protection) ---
-    // Key: rate_limit:{orgId}:{userPhone}
     const rateLimitKey = `rate_limit:${orgId}:${from}`;
-    const requestCount = await redisClient.incr(rateLimitKey); // Use dedicated redis client
+    const requestCount = await redisClient.incr(rateLimitKey);
     
     if (requestCount === 1) {
-      await redisClient.expire(rateLimitKey, 60); // 1 minute window
+      await redisClient.expire(rateLimitKey, 60);
     }
 
     if (requestCount > 10) {
       console.warn(`Rate limit exceeded for user ${from} in org ${orgId}`);
-      // Optional: Send a "Cool down" message only once
       if (requestCount === 11) {
         await whatsappService.sendText(from, "You're sending messages too fast. Please wait a minute.");
       }
@@ -128,34 +107,67 @@ const worker = new Worker<JobData>(
         return { success: false, reason: 'Org inactive' };
       }
 
+      // --- Per-Tenant Payment Provider Setup ---
+      let tenantPaymentProvider: PaymentProvider | null = null;
+      if (org.config?.payment) {
+        console.log(`💳 Tenant Payment: ${org.config.payment.provider} Enabled for ${org.name}`);
+        tenantPaymentProvider = getProvider(org.config.payment.provider, org.config.payment.secretKey);
+      } else if (process.env.PAYSTACK_SECRET_KEY) {
+        console.log(`💳 Global Payment: Paystack Enabled (Fallback) for ${org.name}`);
+        tenantPaymentProvider = getProvider('paystack', process.env.PAYSTACK_SECRET_KEY);
+      }
+
       let systemPrompt = org.systemPrompt || "You are a helpful assistant.";
       
       // Update System Prompt for Hybrid Verification
-      if (paymentProvider) {
+      if (tenantPaymentProvider) {
         systemPrompt += `\n\n[PAYMENT VERIFICATION]: You have access to a 'verify_transaction' tool. If the user sends a receipt image, extract the Reference Code and Amount, and call this tool to verify it. Do not verify visually if you can use the tool.`;
       } else {
         systemPrompt += `\n\n[PAYMENT VERIFICATION]: You DO NOT have access to bank APIs. If the user sends a receipt, perform a VISUAL ANALYSIS (Check Date, Time, Amount, Font Consistency). Warn the user: "I can only check the image visually, not the bank account. Please confirm the alert manually."`;
       }
 
-      // 1.5 Balance Check (The "No Pay, No Chat" Rule)
+      // --- Per-Tenant Model & Tools Setup ---
+      const tenantTools: Tool[] = tenantPaymentProvider ? [
+        {
+          functionDeclarations: [
+            {
+              name: "verify_transaction",
+              description: "Verifies a bank transaction using its reference code and amount. Use this when a user sends a receipt.",
+              parameters: {
+                type: SchemaType.OBJECT,
+                properties: {
+                  reference: { type: SchemaType.STRING, description: "The transaction reference code from the receipt." },
+                  amount: { type: SchemaType.NUMBER, description: "The expected amount in Naira." }
+                },
+                required: ["reference", "amount"]
+              } as any
+            }
+          ]
+        }
+      ] : [];
+
+      const tenantModelName = org.config?.model || "gemini-2.5-flash";
+      const model = genAI.getGenerativeModel({ 
+        model: tenantModelName,
+        tools: tenantTools
+      });
+
+      // 1.5 Balance Check
       const balance = org.balance || 0;
-      let costPerReply = org.costPerReply || 2000; // Default 2000 kobo (20.00 NGN)
+      let costPerReply = org.costPerReply || 2000;
       
       if (type === 'image') {
-          // Images are more expensive. Fallback to 2x text cost if not explicitly set.
-          costPerReply = org.costPerImage || (costPerReply * 2.5); 
+          costPerReply = org.costPerImage || Math.floor(costPerReply * 2.5); 
       }
 
       if (balance < costPerReply) {
         console.warn(`Org ${org.name} (${orgId}) has insufficient balance: ${balance} < ${costPerReply}`);
-        // Send concise "Service Suspended" message
         await whatsappService.sendText(from, "Service suspended: Insufficient balance. Please contact the business owner.");
         return { success: true, reason: 'Insufficient balance' };
       }
 
       // 2. Manage Chat Session (Find or Create)
       const chatId = await findOrCreateChat(orgId, from, job.data.name || 'User');
-      console.log(`Chat Session: ${chatId}`);
 
       // 3. Fetch Conversation History (Last 10 messages)
       const history = await getChatHistory(chatId, 10);
@@ -173,9 +185,7 @@ const worker = new Worker<JobData>(
         userMessageContent = content.text;
         promptParts.push(content.text);
       } else if (type === 'audio' && content.audioId) {
-        console.log(`Downloading audio ${content.audioId}...`);
         const { buffer, mimeType } = await whatsappService.downloadMedia(content.audioId);
-        
         userMessageContent = "[AUDIO MESSAGE]";
         promptParts.push({
           inlineData: {
@@ -185,30 +195,20 @@ const worker = new Worker<JobData>(
         });
         promptParts.push("The user sent a voice note. Please reply in text.");
       } else if (type === 'image' && content.imageId) {
-        console.log(`Downloading image ${content.imageId}...`);
         const { buffer, mimeType } = await whatsappService.downloadMedia(content.imageId);
-        
         userMessageContent = content.caption ? `[IMAGE] ${content.caption}` : "[IMAGE]";
-        
         promptParts.push({
           inlineData: {
             data: buffer.toString('base64'),
             mimeType: mimeType,
           },
         });
-        
-        if (content.caption) {
-           promptParts.push(`The user sent an image with the caption: "${content.caption}".`);
-        } else {
-           promptParts.push("The user sent an image.");
-        }
-        
-        promptParts.push("Analyze this image. If it is a payment receipt, extract the Reference and Amount to verify it.");
+        promptParts.push(content.caption 
+          ? `The user sent an image with the caption: "${content.caption}". Analyze it. If it's a receipt, verify it.`
+          : "The user sent an image. Analyze it. If it's a receipt, verify it.");
       }
 
-      // 5. Call Gemini with Context
-      console.log(`Calling Gemini for Org: ${org.name}...`);
-      
+      // 5. Call Gemini
       const chatSession = model.startChat({
         history: [
           {
@@ -224,111 +224,53 @@ const worker = new Worker<JobData>(
       });
 
       let result = await chatSession.sendMessage(promptParts);
-      let responseText = result.response.text(); // Initial response (might be tool call)
+      let responseText = result.response.text();
       
-      // Handle Tool Calls (if any)
       const functionCalls = result.response.functionCalls();
       if (functionCalls && functionCalls.length > 0) {
-        console.log('🛠️ Gemini requested Tool Calls:', functionCalls.length);
-        
         const functionResponses = [];
-        
         for (const call of functionCalls) {
           if (call.name === 'verify_transaction') {
             const args = call.args as any;
-            console.log(`🔎 Verifying Transaction: ${args.reference}, Amount: ${args.amount}`);
-            
             let toolResult;
-            
-            // 1. Replay Protection: Check if already used
             const existingTx = await checkTransaction(orgId, args.reference);
             if (existingTx) {
-               console.warn(`⚠️ Replay Attack Detected: ${args.reference} already used.`);
-               toolResult = { status: 'failed', reason: 'DUPLICATE_RECEIPT: This transaction reference has already been verified and used.' };
-            } else if (paymentProvider) {
-                // 2. Call Provider
-                const tx = await paymentProvider.verify(args.reference, args.amount);
-                
+               toolResult = { status: 'failed', reason: 'DUPLICATE_RECEIPT' };
+            } else if (tenantPaymentProvider) {
+                const tx = await tenantPaymentProvider.verify(args.reference, args.amount);
                 if (tx && tx.status === 'success') {
-                    // 3. Log Successful Transaction (Replay Protection)
                     await logTransaction(orgId, args.reference, tx);
                     toolResult = { status: 'verified', data: tx };
                 } else {
-                    toolResult = { status: 'failed', reason: 'Transaction not found or invalid' };
+                    toolResult = { status: 'failed', reason: 'INVALID_TRANSACTION' };
                 }
             } else {
-                toolResult = { status: 'error', reason: 'Payment provider not configured' };
+                toolResult = { status: 'error', reason: 'NO_PROVIDER' };
             }
-            
-            functionResponses.push({
-              functionResponse: {
-                name: 'verify_transaction',
-                response: toolResult
-              }
-            });
+            functionResponses.push({ functionResponse: { name: 'verify_transaction', response: toolResult } });
           }
         }
-        
-        // Feed tool results back to Gemini
         if (functionResponses.length > 0) {
-           console.log('Sending tool results back to Gemini...');
            result = await chatSession.sendMessage(functionResponses);
            responseText = result.response.text();
         }
       }
       
-      console.log(`Gemini Reply: ${responseText}`);
-
-      // 6. Send Reply to WhatsApp
+      // 6. Send Reply
       await whatsappService.sendText(from, responseText);
 
-      // 7. Persist Interaction & Deduct Balance
-      // Save User Message
-      await saveMessage(chatId, {
-        role: 'user',
-        content: userMessageContent,
-        type: type as any,
-        metadata: { messageId },
-      });
+      // 7. Persist & Deduct
+      await saveMessage(chatId, { role: 'user', content: userMessageContent, type: type as any, metadata: { messageId } });
+      await saveMessage(chatId, { role: 'assistant', content: responseText, type: 'text' });
 
-      // Save Assistant Message
-      await saveMessage(chatId, {
-        role: 'assistant',
-        content: responseText,
-        type: 'text',
-      });
-
-
-      // Deduct Balance (Atomic Transaction)
       const newBalance = await deductBalance(orgId, costPerReply);
-      if (newBalance === null) {
-        console.error(`Failed to deduct balance for org ${orgId}`);
-      } else {
-        console.log(`Remaining Balance for ${orgId}: ${newBalance}`);
-
-        // --- Low Balance Alert ---
-        const LOW_BALANCE_THRESHOLD = 1000; // 10.00 NGN (in kobo)
-        if (newBalance <= LOW_BALANCE_THRESHOLD) {
-           const alertKey = `alert:low_balance:${orgId}`;
-           const hasAlerted = await redisClient.get(alertKey);
-
-           if (!hasAlerted) {
-             console.warn(`⚠️ Low Balance Alert for ${orgId} (${newBalance})`);
-             // TODO: In a real multi-tenant system, we would look up the admin's phone number.
-             // For now, we assume the 'from' user is the owner if they are testing, 
-             // OR we just log it. 
-             // Ideally, we queue a 'send-template' job to the specific admin phone number.
-             
-             // Example: queue job to admin (if we had admin phone stored)
-             // const adminPhone = org.adminPhone;
-             // if (adminPhone) {
-             //   await whatsappService.sendTemplate(adminPhone, 'low_balance_alert');
-             // }
-             
-             // Set cooldown for 24 hours (86400 seconds)
-             await redisClient.setex(alertKey, 86400, '1');
-           }
-        }
+      if (newBalance !== null && newBalance <= 1000) {
+         const alertKey = `alert:low_balance:${orgId}`;
+         const hasAlerted = await redisClient.get(alertKey);
+         if (!hasAlerted) {
+           console.warn(`⚠️ Low Balance Alert for ${orgId}`);
+           await redisClient.setex(alertKey, 86400, '1');
+         }
       }
 
     } catch (error: any) {
