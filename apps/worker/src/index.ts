@@ -28,6 +28,7 @@ import {
   setAdminAuth,
   createTenant,
   getNetworkStats,
+  setMfaCode,
   Message
 } from '@naija-agent/firebase';
 
@@ -196,6 +197,11 @@ const worker = new Worker<JobData>(
       // --- Identity-Based Tools ---
       const tenantTools: Tool[] = [];
 
+      // 0. Global Tools (Internet Access)
+      tenantTools.push({
+        googleSearch: {}
+      } as any);
+
       // 1. Transaction Verification (All users)
       if (tenantPaymentProvider) {
         tenantTools.push({
@@ -310,6 +316,11 @@ const worker = new Worker<JobData>(
             {
               name: "get_network_stats",
               description: "Retrieves network-wide stats like total clients and total revenue. (Requires Authentication)",
+              parameters: { type: SchemaType.OBJECT, properties: {} }
+            },
+            {
+              name: "generate_login_code",
+              description: "Generates a 6-digit MFA code for the Sovereign to log into the web dashboard. (Requires Authentication)",
               parameters: { type: SchemaType.OBJECT, properties: {} }
             }
           ]
@@ -546,6 +557,10 @@ const worker = new Worker<JobData>(
               } else if (call.name === 'get_network_stats' && org.config?.isMaster) {
                 const stats = await getNetworkStats();
                 functionResponses.push({ functionResponse: { name: 'get_network_stats', response: { status: 'success', data: stats } } });
+              } else if (call.name === 'generate_login_code' && org.config?.isMaster) {
+                const code = Math.floor(100000 + Math.random() * 900000).toString();
+                await setMfaCode(orgId, code);
+                functionResponses.push({ functionResponse: { name: 'generate_login_code', response: { status: 'success', code, message: 'Code generated. Share this with the Boss. It expires in 5 minutes.' } } });
               }
             } catch (e: any) {
               functionResponses.push({ functionResponse: { name: call.name, response: { status: 'error', message: e.message } } });
@@ -597,11 +612,14 @@ const worker = new Worker<JobData>(
       console.error(`Job ${job.id} failed attempt ${job.attemptsMade + 1}/${job.opts.attempts}:`, error.message);
       
       // --- Refund Logic ---
-      // If we deducted balance but the job failed (and it's not a retryable error or we're out of retries), we refund.
-      // 429 errors are retried by BullMQ, so we only refund on the FINAL failure or if it's a non-retryable status.
-      if (!isAdmin && deductionDone && (error.status !== 429 || job.attemptsMade >= (job.opts.attempts || 3))) {
+      // We ONLY refund if:
+      // 1. We actually deducted balance (deductionDone)
+      // 2. This is the FINAL attempt (attemptsMade >= attempts) OR it's a non-retryable error
+      const isFinalAttempt = job.attemptsMade >= (job.opts.attempts || 3) - 1; 
+      
+      if (!isAdmin && deductionDone && isFinalAttempt) {
           try {
-            console.log(`💰 Refunding ${costPerReply} kobo to org ${orgId} due to failure.`);
+            console.log(`💰 [FINAL FAILURE] Refunding ${costPerReply} kobo to org ${orgId}.`);
             await addBalance(orgId, costPerReply);
           } catch (refundError) {
             console.error(`❌ Refund failed for ${orgId}:`, refundError);

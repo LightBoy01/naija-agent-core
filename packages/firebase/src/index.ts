@@ -180,6 +180,41 @@ export async function createTenant(data: {
 }
 
 /**
+ * Sets a temporary 6-digit MFA code for an organization
+ */
+export async function setMfaCode(orgId: string, code: string, expiryMinutes = 5): Promise<void> {
+  const expiry = new Date(Date.now() + expiryMinutes * 60 * 1000);
+  await orgsRef.doc(orgId).update({
+    'config.mfaCode': code,
+    'config.mfaExpiresAt': expiry.toISOString(),
+    updatedAt: FieldValue.serverTimestamp()
+  });
+}
+
+/**
+ * Verifies an MFA code and clears it if successful
+ */
+export async function verifyMfaCode(orgId: string, code: string): Promise<boolean> {
+  const org = await getOrgById(orgId);
+  if (!org || !org.config?.mfaCode || !org.config?.mfaExpiresAt) return false;
+
+  const now = new Date();
+  const expiry = new Date(org.config.mfaExpiresAt);
+
+  if (now > expiry) return false;
+  if (org.config.mfaCode !== code) return false;
+
+  // Clear code after success
+  await orgsRef.doc(orgId).update({
+    'config.mfaCode': null,
+    'config.mfaExpiresAt': null,
+    updatedAt: FieldValue.serverTimestamp()
+  });
+
+  return true;
+}
+
+/**
  * Verifies a tenant's Admin PIN (Salted Hashing)
  */
 export async function verifyAdminPin(orgId: string, pin: string): Promise<boolean> {

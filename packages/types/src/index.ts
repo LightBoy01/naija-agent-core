@@ -88,6 +88,8 @@ export const ConfigSchema = z.object({
   useSmsBridge: z.boolean().default(false), // Toggle for auto-matching engine
   adminPhone: z.string().optional(), // The Boss's phone number
   adminPin: z.string().optional(), // 4-digit PIN for high-value actions
+  mfaCode: z.string().optional(), // Temporary 6-digit MFA code
+  mfaExpiresAt: z.string().optional(), // ISO timestamp for MFA expiry
   isMaster: z.boolean().optional(), // Sovereign powers flag
 });
 
