@@ -152,6 +152,18 @@ export async function updateActivity(
 }
 
 /**
+ * Atomically increments or decrements network-wide stats
+ */
+export async function incrementNetworkStats(data: { koboDelta?: number; clientDelta?: number }): Promise<void> {
+  const metaRef = db.collection('network_metadata').doc('global');
+  await metaRef.set({
+    totalVaultKobo: FieldValue.increment(data.koboDelta || 0),
+    activeClients: FieldValue.increment(data.clientDelta || 0),
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+}
+
+/**
  * Spawns a new tenant organization (Onboarding)
  */
 export async function createTenant(data: {
@@ -177,6 +189,9 @@ export async function createTenant(data: {
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
+
+  // Increment network stats
+  await incrementNetworkStats({ clientDelta: 1, koboDelta: 100000 });
 }
 
 /**
@@ -273,24 +288,28 @@ export async function getNetworkChats(limit = 20): Promise<any[]> {
   }));
 }
 
+/**
+ * Aggregates network-wide statistics for the Sovereign (O(1) Optimized)
+ */
 export async function getNetworkStats(): Promise<any> {
-  const snapshot = await orgsRef.get();
-  let totalBalance = 0;
-  let activeClients = 0;
-  const clients: any[] = [];
+  // 1. Fetch Aggregated Totals (Single Read)
+  const metaDoc = await db.collection('network_metadata').doc('global').get();
+  const meta = metaDoc.data() || { totalVaultKobo: 0, activeClients: 0 };
 
+  // 2. Fetch Organizations for the list (Still needed for the portfolio table)
+  const snapshot = await orgsRef.get();
+  const clients: any[] = [];
+  
   snapshot.forEach(doc => {
     const data = doc.data();
     if (doc.id !== 'naija-agent-master') {
-      totalBalance += data.balance || 0;
-      activeClients++;
       clients.push({ id: doc.id, name: data.name, balance: data.balance, isActive: data.isActive });
     }
   });
 
   return {
-    activeClients,
-    totalVaultKobo: totalBalance,
+    activeClients: meta.activeClients,
+    totalVaultKobo: meta.totalVaultKobo,
     clients
   };
 }
@@ -428,6 +447,10 @@ export async function addBalance(orgId: string, amount: number): Promise<number 
       newBalance = currentBalance + amount;
       t.update(orgRef, { balance: newBalance });
     });
+
+    // Update global vault total
+    await incrementNetworkStats({ koboDelta: amount });
+    
     return newBalance;
   } catch (e) {
     console.warn(`Balance addition failed for ${orgId}:`, e);
@@ -454,6 +477,10 @@ export async function deductBalance(orgId: string, amount: number): Promise<numb
       newBalance = currentBalance - amount;
       t.update(orgRef, { balance: newBalance });
     });
+
+    // Update global vault total (Decrement)
+    await incrementNetworkStats({ koboDelta: -amount });
+
     return newBalance;
   } catch (e) {
     console.warn(`Balance deduction failed for ${orgId}:`, e);
