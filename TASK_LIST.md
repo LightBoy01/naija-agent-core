@@ -50,6 +50,10 @@
 - [x] **Media Persistence (Phase 4f)**
     - [x] **Persistent Media Pipeline:** Upload all WhatsApp media to Firebase Storage.
     - [x] Link permanent URLs to Chat History metadata.
+    - [ ] **Free Tier Pivot:** Implement "WhatsApp-Only" temporary link retrieval to bypass Firebase Storage Blaze requirement.
+        - [ ] **Secure Media Proxy:** Build backend API to fetch Meta URLs without token exposure.
+        - [ ] **Redis Caching:** Cache temporary URLs to prevent rate-limiting and UI lag.
+        - [ ] **Audit Cliff Guard:** Add "Save Forever" manual archive for high-value receipts.
 - [x] **Boss Mode (Phase 4g/i)**
     - [x] **Iron-Clad Security:** Admin PIN Handshake (2-hour sessions).
     - [x] **Zero-Dashboard Training:** Boss trains AI via WhatsApp conversation.
@@ -61,6 +65,11 @@
 - [ ] **Sovereign Auth Hardening (Phase 4m)**
     - [ ] Implement WhatsApp-based MFA (Bot sends 6-digit code to Boss).
     - [ ] Secure Session Rotation (Short-lived tokens).
+- [ ] **Sovereign Empire Hardening (Phase 4n)**
+    - [ ] **Security:** Implement Salted PIN Hashing (Bcrypt) in Firestore.
+    - [ ] **Multi-App Support:** Implement Dynamic Signature Verification (lookup secret by phoneId).
+    - [ ] **Financial Integrity:** Implement "Credit Reservation" logic to prevent race conditions.
+    - [ ] **Audit Shadow Alerts:** AI pings Boss on high-value transaction detection.
 - [ ] **The "Fake Alert" Finale**
     - [x] Implement Gemini Vision for receipt extraction.
     - [ ] Integrate Monnify/Paystack for real-time bank verification.

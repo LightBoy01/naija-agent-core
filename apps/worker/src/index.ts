@@ -2,12 +2,12 @@ import { Worker } from 'bullmq';
 import { Redis } from 'ioredis';
 import dotenv from 'dotenv';
 
-console.log('🚀 [VERSION 1.0.2] Worker Service Starting...');
+console.log('🚀 [VERSION 1.0.3] Worker Service Starting... (Free Tier Pivot)');
 import { JobData } from '@naija-agent/types';
 import { WhatsAppService } from './services/whatsapp.js';
 import { GoogleGenerativeAI, SchemaType, Tool } from '@google/generative-ai';
 import { getProvider, PaymentProvider } from '@naija-agent/payments';
-import { uploadMedia } from '@naija-agent/storage';
+// import { uploadMedia } from '@naija-agent/storage'; // FREE TIER PIVOT: Disabled to save cost
 import { 
   getOrgById, 
   findOrCreateChat, 
@@ -321,7 +321,7 @@ const worker = new Worker<JobData>(
       // 4. Prepare New Message Input
       const promptParts: any[] = [];
       let userMessageContent = "";
-      let mediaTask: Promise<string> | null = null;
+      let mediaId: string | undefined = undefined; // FREE TIER PIVOT: Store ID instead of URL
 
       if (type === 'text' && content.text) {
         userMessageContent = content.text;
@@ -329,9 +329,9 @@ const worker = new Worker<JobData>(
       } else if (type === 'audio' && content.audioId) {
         const { buffer, mimeType } = await whatsappService.downloadMedia(content.audioId);
         
-        // --- Persistence: Background Task (Don't await yet) ---
-        mediaTask = uploadMedia(orgId, `audio_${messageId || Date.now()}.mp3`, buffer, mimeType, { from, type: 'audio' })
-          .catch(e => { console.warn('❌ Media upload failed (Audio):', e); return ''; });
+        // --- Persistence: FREE TIER PIVOT (No Upload) ---
+        // mediaTask = uploadMedia(...) // DISABLED
+        mediaId = content.audioId;
 
         userMessageContent = "[AUDIO MESSAGE]";
         promptParts.push({ inlineData: { data: buffer.toString('base64'), mimeType } });
@@ -340,9 +340,9 @@ const worker = new Worker<JobData>(
       } else if (type === 'image' && content.imageId) {
         const { buffer, mimeType } = await whatsappService.downloadMedia(content.imageId);
         
-        // --- Persistence: Background Task (Don't await yet) ---
-        mediaTask = uploadMedia(orgId, `img_${messageId || Date.now()}.jpg`, buffer, mimeType, { from, type: 'image' })
-          .catch(e => { console.warn('❌ Media upload failed (Image):', e); return ''; });
+        // --- Persistence: FREE TIER PIVOT (No Upload) ---
+        // mediaTask = uploadMedia(...) // DISABLED
+        mediaId = content.imageId;
 
         userMessageContent = content.caption ? `[IMAGE] ${content.caption}` : "[IMAGE]";
         promptParts.push({ inlineData: { data: buffer.toString('base64'), mimeType } });
@@ -471,12 +471,12 @@ const worker = new Worker<JobData>(
       }
 
       // 8. Finalize Persistence
-      const storageUrl = mediaTask ? await mediaTask : null;
+      // const storageUrl = mediaTask ? await mediaTask : null; // DISABLED
       await saveMessage(chatId, { 
         role: 'user', 
         content: userMessageContent, 
         type: type as any, 
-        metadata: { messageId, storageUrl } 
+        metadata: { messageId, mediaId } // FREE TIER PIVOT: Save mediaId
       });
 
       await saveMessage(chatId, { role: 'assistant', content: responseText, type: 'text' });

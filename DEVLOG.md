@@ -279,3 +279,44 @@
 *   [ ] **Phase 4l: Real-time Bank Verification:** Complete Monnify/Paystack API integration for automated fraud prevention.
 *   [ ] **SMS Relay Prototype:** Build the Android "Bridge" app to listen for Bank SMS notifications.
 *   [ ] **Dashboard Polish:** Implement real-time Firestore listeners for "Live Chat" updates.
+
+## Session 22: The Free Tier Pivot (2026-03-08)
+
+**Status:** 🟡 **Planning**
+
+### **Context:**
+*   **The Blocker:** Firebase Storage (beyond the initial free tier) requires a Blaze Plan (Pay-as-you-go) to activate.
+*   **The Goal:** Maintain a 100% Free Tier infrastructure for as long as possible (The "Naija Bootstrap" model).
+
+### **Strategic Pivot:**
+*   **Action:** We are abandoning the permanent "Firebase Storage" archive for now.
+*   **New Strategy:** "WhatsApp-Only Persistence."
+    *   **Mechanism:** Instead of downloading and re-uploading media, we will simply store the `mediaId` provided by WhatsApp.
+    *   **Retrieval:** When the Sovereign views the Media Vault, the web app will use the WhatsApp API to fetch a *temporary* (signed) download URL on demand.
+    *   **Pros:** Zero storage cost. Zero bandwidth cost (handled by Meta).
+    *   **Cons:** Media expires after ~30 days. (Acceptable for an MVP).
+
+### **Next Steps:**
+1.  **Worker Update:** Stop the `uploadMedia` calls that are causing 404 errors.
+2.  **Schema Update:** Ensure `mediaId` is saved in the message metadata.
+3.  **Vault Update:** Refactor `/vault` to fetch live links instead of stored URLs.
+
+## Session 23: The Hardening Audit (2026-03-08)
+
+**Status:** 🟡 **Planning**
+
+### **Context:**
+*   **The Audit:** Performed a comprehensive review of the current "Multi-Tenant" architecture and identified critical flaws in security and operational resilience.
+*   **Objective:** Harden the platform for high-value client onboarding and multi-WABA support.
+
+### **Vulnerabilities Identified:**
+1.  **Plain-Text PINs:** Both Sovereign and Boss PINs are currently stored as plain text, posing a major security risk.
+2.  **Static Signatures:** Meta HMAC verification uses a single hardcoded secret, which blocks clients who bring their own Meta Apps.
+3.  **Credit Race Conditions:** High AI "Thinking Time" creates a window for users to over-spend their balance before the first deduction occurs.
+4.  **The "30-Day Cliff":** The Free Tier Pivot makes media temporary, risking the loss of high-value audit trails (receipts).
+
+### **Strategic Response:**
+*   **Security:** Switch to Salted Bcrypt hashing for all PIN storage.
+*   **Multi-Tenancy:** Implement dynamic secret lookup by `phoneId` in the API ingestion layer.
+*   **Financials:** Implement a "Reserve and Finalize" pattern for credit deduction in the Worker.
+*   **Persistence:** Add a "Save Forever" manual archive button for Sovereign-flagged media.

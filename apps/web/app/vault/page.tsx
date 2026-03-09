@@ -23,51 +23,58 @@ export default async function MediaVault() {
           </div>
         ) : (
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {media.map((item: any) => (
-              <div key={item.id} className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden group hover:ring-2 hover:ring-blue-500/20 transition-all">
-                {/* Media Content */}
-                <div className="aspect-[4/5] bg-zinc-100 flex items-center justify-center relative">
-                  {item.type === 'image' ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img 
-                      src={item.metadata?.storageUrl || item.content} 
-                      alt="Receipt" 
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="p-4 w-full">
-                      <div className="text-4xl mb-4 text-center">🎙️</div>
-                      <audio controls className="w-full h-8">
-                        <source src={item.metadata?.storageUrl || item.content} type="audio/ogg" />
-                      </audio>
-                    </div>
-                  )}
-                  
-                  {/* Confidence Overlay (Placeholder for Phase 4l) */}
-                  {item.type === 'image' && item.metadata?.verificationStatus === 'verified' && (
-                    <span className="absolute top-2 right-2 px-2 py-1 bg-green-500 text-white text-[10px] font-bold rounded shadow-sm">
-                      VERIFIED
-                    </span>
-                  )}
-                </div>
+            {media.map((item: any) => {
+              // Free Tier Pivot: Use Proxy URL if mediaId exists, otherwise fallback to legacy storageUrl
+              const mediaSrc = item.metadata?.mediaId 
+                ? `/api/media/${item.metadata.mediaId}` 
+                : (item.metadata?.storageUrl || item.content);
 
-                {/* Info Footer */}
-                <div className="p-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{item.type}</span>
-                    <span className="text-[10px] text-zinc-400 font-mono">
-                      {item.timestamp ? new Date(item.timestamp.toDate()).toLocaleDateString() : '--'}
-                    </span>
+              return (
+                <div key={item.id} className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden group hover:ring-2 hover:ring-blue-500/20 transition-all">
+                  {/* Media Content */}
+                  <div className="aspect-[4/5] bg-zinc-100 flex items-center justify-center relative">
+                    {item.type === 'image' ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img 
+                        src={mediaSrc} 
+                        alt="Receipt" 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="p-4 w-full">
+                        <div className="text-4xl mb-4 text-center">🎙️</div>
+                        <audio controls className="w-full h-8">
+                          <source src={mediaSrc} type="audio/ogg" />
+                        </audio>
+                      </div>
+                    )}
+                    
+                    {/* Confidence Overlay (Placeholder for Phase 4l) */}
+                    {item.type === 'image' && item.metadata?.verificationStatus === 'verified' && (
+                      <span className="absolute top-2 right-2 px-2 py-1 bg-green-500 text-white text-[10px] font-bold rounded shadow-sm">
+                        VERIFIED
+                      </span>
+                    )}
                   </div>
-                  <div className="text-sm font-bold text-zinc-900 truncate mb-1">
-                    Chat: {item.chatId?.substring(0, 12)}...
+
+                  {/* Info Footer */}
+                  <div className="p-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{item.type}</span>
+                      <span className="text-[10px] text-zinc-400 font-mono">
+                        {item.timestamp ? new Date(item.timestamp.toDate()).toLocaleDateString() : '--'}
+                      </span>
+                    </div>
+                    <div className="text-sm font-bold text-zinc-900 truncate mb-1">
+                      Chat: {item.chatId?.substring(0, 12)}...
+                    </div>
+                    <p className="text-xs text-zinc-500 line-clamp-2">
+                      {item.metadata?.caption || 'No caption provided.'}
+                    </p>
                   </div>
-                  <p className="text-xs text-zinc-500 line-clamp-2">
-                    {item.metadata?.caption || 'No caption provided.'}
-                  </p>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </section>
         )}
       </div>
