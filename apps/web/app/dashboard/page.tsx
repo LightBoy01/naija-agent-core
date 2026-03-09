@@ -60,24 +60,37 @@ export default async function Dashboard() {
                     <th className="px-6 py-4 text-left text-xs font-semibold text-zinc-500 uppercase">Organization</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-zinc-500 uppercase">Status</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-zinc-500 uppercase text-right">Balance</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-zinc-500 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-200">
-                  {stats.clients.map((client: { id: string; name: string; balance: number }) => (
+                  {stats.clients.map((client: { id: string; name: string; balance: number; isActive: boolean }) => (
                     <tr key={client.id} className="hover:bg-zinc-50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="text-sm font-bold text-zinc-900">{client.name}</div>
                         <div className="text-xs text-zinc-500">{client.id}</div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Active
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          client.isActive 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {client.isActive ? 'Active' : 'Paused'}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="text-sm font-mono font-semibold text-zinc-900">
                           ₦{(client.balance / 100).toLocaleString()}
                         </div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <Link 
+                          href={`/dashboard/organizations/${client.id}`}
+                          className="text-xs font-bold text-zinc-400 hover:text-zinc-900 uppercase tracking-tighter transition-colors"
+                        >
+                          Manage →
+                        </Link>
                       </td>
                     </tr>
                   ))}
@@ -95,7 +108,11 @@ export default async function Dashboard() {
                   <p className="text-center text-zinc-500 mt-12">No active conversations yet.</p>
                 ) : (
                   chats.map((chat: any) => (
-                    <div key={chat.id} className="p-3 bg-zinc-50 rounded-lg border border-zinc-100 hover:border-zinc-300 transition-colors cursor-pointer group">
+                    <Link 
+                      key={chat.id} 
+                      href={`/chats/${chat.id}`}
+                      className="block p-3 bg-zinc-50 rounded-lg border border-zinc-100 hover:border-zinc-300 transition-colors group"
+                    >
                       <div className="flex justify-between items-start mb-1">
                         <span className="text-sm font-bold text-zinc-900 group-hover:text-blue-600">{chat.userName || 'Unknown'}</span>
                         <span className="text-[10px] text-zinc-400 font-mono">
@@ -105,7 +122,7 @@ export default async function Dashboard() {
                       <p className="text-xs text-zinc-600 line-clamp-2 italic">
                         "{chat.summary || 'No messages yet...'}"
                       </p>
-                    </div>
+                    </Link>
                   ))
                 )}
               </div>

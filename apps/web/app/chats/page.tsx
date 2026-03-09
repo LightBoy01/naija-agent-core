@@ -28,15 +28,21 @@ export default async function ChatLogs() {
             </thead>
             <tbody className="divide-y divide-zinc-200">
               {chats.map((chat: any) => (
-                <tr key={chat.id} className="hover:bg-zinc-50 transition-colors cursor-pointer group">
+                <tr key={chat.id} className="hover:bg-zinc-50 transition-colors group relative">
                   <td className="px-6 py-4">
-                    <div className="text-sm font-bold text-zinc-900">{chat.userName || 'Unknown'}</div>
+                    <div className="text-sm font-bold text-zinc-900">
+                      <Link href={`/chats/${chat.id}`} className="hover:text-blue-600">
+                        {chat.userName || 'Unknown'}
+                      </Link>
+                    </div>
                     <div className="text-xs text-zinc-400 font-mono">{chat.whatsappUserId}</div>
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm text-zinc-600 truncate max-w-lg">
-                      {chat.summary || 'No activity recorded...'}
-                    </p>
+                    <Link href={`/chats/${chat.id}`} className="block">
+                      <p className="text-sm text-zinc-600 truncate max-w-lg">
+                        {chat.summary || 'No activity recorded...'}
+                      </p>
+                    </Link>
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="text-xs text-zinc-400 font-medium">

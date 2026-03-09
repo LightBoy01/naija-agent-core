@@ -80,7 +80,21 @@
 
 - [x] **The "Boss" Dashboard (Web)**
     - [x] Next.js Portal for viewing archived receipts and live chats.
+    - [x] **Chat Details View:** Real-time conversation auditing.
+    - [x] **Tenant Management:** Manual top-ups and status toggling.
     - [ ] Real-time "Takeover" mode for high-stakes conversations.
 - [ ] **Infrastructure Optimization**
     - [ ] Setup Structured Logging (Pino)
     - [ ] Monitoring (Sentry/Logtail)
+
+## Phase 6: Network Intelligence (Future Suggestions) 🔵
+
+- [ ] **Global Policy Synchronization & Hardening:**
+    - [ ] **Multi-Factor Approval (MFA):** Require a WhatsApp-based 6-digit code for any network-wide policy change.
+    - [ ] **Logical Hierarchy:** Program the AI to prioritize "Local Business Facts" over "Global Policies" to prevent context conflicts.
+    - [ ] **Token Guard:** Implement strict character limits for global instructions to prevent network-wide cost explosions.
+- [ ] **Policy Auditing & Versioning:**
+    - [ ] **Immutable History:** Store all global policy changes in a `policy_history` collection for legal/audit trails.
+    - [ ] **Message Snapshots:** Link every message to a `policyVersion` ID to reconstruct past bot behavior during disputes.
+- [ ] **Shared Context Caching:** Utilize Gemini context caching for a "Base Brain" shared by all bots to reduce token latency and cost.
+- [ ] **Sovereign Broadcast Tool:** Enable the Master Bot to "push" specific business instructions to all tenants via a single WhatsApp command.

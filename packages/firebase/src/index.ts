@@ -4,7 +4,7 @@ import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { Config, PaymentConfig } from '@naija-agent/types';
+import type { Config, PaymentConfig } from '@naija-agent/types';
 import bcrypt from 'bcrypt';
 
 // Fix for ESM/CJS interop for firebase-admin
@@ -249,7 +249,7 @@ export async function getNetworkStats(): Promise<any> {
     if (doc.id !== 'naija-agent-master') {
       totalBalance += data.balance || 0;
       activeClients++;
-      clients.push({ id: doc.id, name: data.name, balance: data.balance });
+      clients.push({ id: doc.id, name: data.name, balance: data.balance, isActive: data.isActive });
     }
   });
 
