@@ -50,10 +50,10 @@
 - [x] **Media Persistence (Phase 4f)**
     - [x] **Persistent Media Pipeline:** Upload all WhatsApp media to Firebase Storage.
     - [x] Link permanent URLs to Chat History metadata.
-    - [ ] **Free Tier Pivot:** Implement "WhatsApp-Only" temporary link retrieval to bypass Firebase Storage Blaze requirement.
-        - [ ] **Secure Media Proxy:** Build backend API to fetch Meta URLs without token exposure.
+    - [x] **Free Tier Pivot:** Implement "WhatsApp-Only" temporary link retrieval to bypass Firebase Storage Blaze requirement.
+        - [x] **Secure Media Proxy:** Build backend API to fetch Meta URLs without token exposure.
+        - [x] **Audit Cliff Guard:** Add "Save Forever" manual archive for high-value receipts.
         - [ ] **Redis Caching:** Cache temporary URLs to prevent rate-limiting and UI lag.
-        - [ ] **Audit Cliff Guard:** Add "Save Forever" manual archive for high-value receipts.
 - [x] **Boss Mode (Phase 4g/i)**
     - [x] **Iron-Clad Security:** Admin PIN Handshake (2-hour sessions).
     - [x] **Zero-Dashboard Training:** Boss trains AI via WhatsApp conversation.
@@ -65,16 +65,19 @@
 - [ ] **Sovereign Auth Hardening (Phase 4m)**
     - [ ] Implement WhatsApp-based MFA (Bot sends 6-digit code to Boss).
     - [ ] Secure Session Rotation (Short-lived tokens).
-- [ ] **Sovereign Empire Hardening (Phase 4n)**
-    - [ ] **Security:** Implement Salted PIN Hashing (Bcrypt) in Firestore.
-    - [ ] **Multi-App Support:** Implement Dynamic Signature Verification (lookup secret by phoneId).
-    - [ ] **Financial Integrity:** Implement "Credit Reservation" logic to prevent race conditions.
+- [x] **Sovereign Empire Hardening (Phase 4n)**
+    - [x] **Security:** Implement Salted PIN Hashing (Bcrypt) in Firestore.
+    - [x] **Multi-App Support:** Implement Dynamic Signature Verification (lookup secret by phoneId).
+    - [x] **Financial Integrity:** Implement "Credit Reservation" logic to prevent race conditions.
     - [ ] **Audit Shadow Alerts:** AI pings Boss on high-value transaction detection.
 - [ ] **The "Fake Alert" Finale**
     - [x] Implement Gemini Vision for receipt extraction.
+    - [x] **Anti-Fraud Protocol:** Enhanced vision prompt for Photoshop detection.
     - [ ] Integrate Monnify/Paystack for real-time bank verification.
 - [ ] **SMS Relay Prototype**
-    - [ ] Build Android "Bridge" app to listen for Bank SMS notifications.
+    - [x] **Bridge API:** /bridge/sms endpoint for external bank alert syncing.
+    - [x] **Android Bridge:** Python script blueprint for Termux SMS relay.
+    - [ ] Build native Android "Bridge" app.
 
 ## Phase 5: Scale 🟡
 

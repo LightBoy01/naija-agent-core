@@ -2,8 +2,10 @@
 
 import { getDb, addBalance } from '@naija-agent/firebase';
 import { revalidatePath } from 'next/cache';
+import { verifySovereignSession } from '../../../../lib/auth';
 
 export async function updateOrgStatus(formData: FormData): Promise<void> {
+  await verifySovereignSession();
   const orgId = formData.get('orgId') as string;
   const status = formData.get('status') === 'true';
 
@@ -22,6 +24,7 @@ export async function updateOrgStatus(formData: FormData): Promise<void> {
 }
 
 export async function topUpBalance(formData: FormData): Promise<void> {
+  await verifySovereignSession();
   const orgId = formData.get('orgId') as string;
   const amountNaira = parseFloat(formData.get('amount') as string);
 

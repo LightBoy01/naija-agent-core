@@ -1,15 +1,24 @@
 'use server';
-
-import { getDb } from '@naija-agent/firebase';
+import { getDb, getOrgById } from '@naija-agent/firebase';
 import { uploadMedia } from '@naija-agent/storage';
 import { revalidatePath } from 'next/cache';
+import { verifySovereignSession } from '../../lib/auth';
 
 export async function archiveMedia(orgId: string, chatId: string, messageId: string, mediaId: string, type: string) {
   try {
-    const apiToken = process.env.WHATSAPP_API_TOKEN;
+    await verifySovereignSession();
+
+    // 1. Fetch Tenant Token (Multi-Tenancy Fix)
+    let apiToken = process.env.WHATSAPP_API_TOKEN;
+    const org = await getOrgById(orgId);
+    if (org?.config?.whatsappToken) {
+      console.log(`🛡️ [ARCHIVE] Using custom token for org: ${orgId}`);
+      apiToken = org.config.whatsappToken;
+    }
+
     if (!apiToken) throw new Error('WHATSAPP_API_TOKEN missing');
 
-    // 1. Fetch from Meta
+    // 2. Fetch from Meta
     const urlResponse = await fetch(`https://graph.facebook.com/v18.0/${mediaId}`, {
       headers: { Authorization: `Bearer ${apiToken}` },
     });
@@ -22,7 +31,7 @@ export async function archiveMedia(orgId: string, chatId: string, messageId: str
     });
     const buffer = Buffer.from(await binaryResponse.arrayBuffer());
 
-    // 2. Upload to Firebase Storage
+    // 3. Upload to Firebase Storage
     const fileName = `${type}_${messageId}_permanent`;
     const storageUrl = await uploadMedia(orgId, fileName, buffer, mimeType, { 
        archivedBy: 'sovereign', 

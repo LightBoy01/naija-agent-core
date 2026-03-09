@@ -15,10 +15,33 @@ import {
 import { 
   getOrgByPhoneId, 
   setOptOut, 
-  checkOptOut 
+  checkOptOut,
+  getDb,
+  findPendingTransaction,
+  confirmTransaction
 } from '@naija-agent/firebase';
 
 dotenv.config();
+
+/**
+ * Extracts amount from typical Nigerian bank SMS formats
+ * e.g. "Amt: NGN 5,000.00", "Cr: 10,000", "Credit: 2,500.50"
+ */
+function extractAmountFromSMS(body: string): number | null {
+  const cleanBody = body.replace(/,/g, ''); // Remove commas
+  const patterns = [
+    /(?:Amt|Amount|Cr|Credit|Received|Value)[:\s]+(?:NGN|N|#)?\s*([\d.]+)/i,
+    /([\d.]+)\s*has\s*been\s*credited/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleanBody.match(pattern);
+    if (match && match[1]) {
+      return parseFloat(match[1]);
+    }
+  }
+  return null;
+}
 
 // Ensure required environment variables are present
 if (!process.env.WHATSAPP_APP_SECRET) {
@@ -292,6 +315,72 @@ fastify.post('/send', async (request, reply) => {
   });
 
   return { success: true, jobId: jobData.timestamp };
+});
+
+// 5. SMS Bridge (POST) - AUTO-MATCHING ENGINE
+fastify.post('/bridge/sms', async (request, reply) => {
+  const apiKey = request.headers['x-api-key'];
+  if (apiKey !== process.env.ADMIN_API_KEY) {
+    return reply.status(401).send('Unauthorized');
+  }
+
+  const schema = z.object({
+    from: z.string(),
+    body: z.string(),
+    timestamp: z.number(),
+    phoneId: z.string(),
+  });
+
+  const result = schema.safeParse(request.body);
+  if (!result.success) {
+    return reply.status(400).send(result.error);
+  }
+
+  const { from, body, timestamp, phoneId } = result.data;
+  
+  const org = await getOrgByPhoneId(phoneId);
+  if (!org) {
+    return reply.status(404).send('Organization not found for this phoneId');
+  }
+
+  // Log the SMS as a confirmed alert signal
+  const alertId = `sms_${timestamp}_${from.substring(0, 5)}`;
+  const db = getDb();
+  await db.collection('organizations').doc(org.id).collection('sms_alerts').doc(alertId).set({
+    from,
+    body,
+    timestamp: new Date(timestamp),
+    receivedAt: new Date(),
+  });
+
+  // --- Matching Logic ---
+  const amount = extractAmountFromSMS(body);
+  if (amount !== null) {
+    console.log(`🎯 [MATCHING] Extracted amount ₦${amount} from alert.`);
+    const pendingTx = await findPendingTransaction(org.id, amount);
+    
+    if (pendingTx) {
+      console.log(`✅ [MATCH FOUND] Linking SMS ${alertId} to Tx ${pendingTx.id}`);
+      await confirmTransaction(pendingTx.id, alertId);
+
+      // Notify User via WhatsApp (Queuing an internal job)
+      const notificationJob: JobData = {
+        type: 'text',
+        orgId: org.id,
+        phoneId: phoneId,
+        from: pendingTx.from,
+        timestamp: Date.now(),
+        content: {
+          text: `✅ *Payment Confirmed!*\n\nWe have received your payment of *₦${amount.toLocaleString()}*. Your order is now being processed. Thank you!`
+        }
+      };
+
+      await whatsappQueue.add('process-message', notificationJob, { removeOnComplete: true });
+    }
+  }
+
+  console.log(`📡 [SMS BRIDGE] Logged alert from ${from} for org ${org.id}`);
+  return { success: true, alertId };
 });
 
 // Start Server

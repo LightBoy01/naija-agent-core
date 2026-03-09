@@ -313,8 +313,25 @@ export async function logTransaction(orgId: string, reference: string, data: any
   await db.collection('transactions').doc(txId).set({
     orgId,
     reference,
+    status: 'success', // Default for legacy/direct verification
     ...data,
     verifiedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+/**
+ * Logs a transaction as pending, awaiting SMS confirmation.
+ * Used when AI sees a manual receipt/transfer but can't verify via API.
+ */
+export async function logPendingTransaction(orgId: string, from: string, amount: number, reference: string): Promise<void> {
+  const txId = `${orgId}_${reference}`;
+  await db.collection('transactions').doc(txId).set({
+    orgId,
+    from,
+    amount,
+    reference,
+    status: 'pending',
+    verifiedAt: FieldValue.serverTimestamp(), // This is the "Created At" for pending
   });
 }
 
@@ -323,6 +340,44 @@ export async function getOrgById(orgId: string): Promise<Organization | null> {
   if (!doc.exists) return null;
   return { id: doc.id, ...doc.data() } as Organization;
 }
+
+/**
+ * Finds a pending transaction by amount and approximate time
+ * Used by the SMS Bridge to match bank alerts to receipts
+ */
+export async function findPendingTransaction(orgId: string, amount: number, windowMinutes = 60): Promise<any | null> {
+  const startTime = new Date(Date.now() - windowMinutes * 60 * 1000);
+
+  const snapshot = await db.collection('transactions')
+    .where('orgId', '==', orgId)
+    .where('amount', '==', amount)
+    .where('status', '==', 'pending')
+    .orderBy('verifiedAt', 'desc')
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) return null;
+
+  const tx = snapshot.docs[0];
+  const txData = tx.data();
+
+  // Basic time window check
+  if (txData.verifiedAt.toDate() < startTime) return null;
+
+  return { id: tx.id, ...txData };
+}
+
+/**
+ * Confirms a pending transaction and links it to an SMS alert
+ */
+export async function confirmTransaction(txId: string, smsId: string): Promise<void> {
+  await db.collection('transactions').doc(txId).update({
+    status: 'success',
+    smsId,
+    confirmedAt: FieldValue.serverTimestamp(),
+  });
+}
+
 export async function addBalance(orgId: string, amount: number): Promise<number | null> {
   const orgRef = orgsRef.doc(orgId);
   let newBalance: number | null = null;

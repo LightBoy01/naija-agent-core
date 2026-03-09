@@ -1,11 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getOrgById } from '@naija-agent/firebase';
+import { cookies } from 'next/headers';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: mediaId } = await params;
-  const apiToken = process.env.WHATSAPP_API_TOKEN;
+  const searchParams = request.nextUrl.searchParams;
+  const orgId = searchParams.get('orgId');
+
+  // Security: Basic Sovereign check for proxy access
+  const session = (await cookies()).get('sovereign_session');
+  if (!session || session.value !== 'active') {
+    return new NextResponse('Unauthorized', { status: 401 });
+  }
+
+  // Multi-Tenancy Token Lookup
+  let apiToken = process.env.WHATSAPP_API_TOKEN;
+  if (orgId) {
+    const org = await getOrgById(orgId);
+    if (org?.config?.whatsappToken) {
+      apiToken = org.config.whatsappToken;
+    }
+  }
 
   if (!apiToken) {
     console.error('CRITICAL: WHATSAPP_API_TOKEN is missing in web environment.');
@@ -13,7 +31,6 @@ export async function GET(
   }
 
   try {
-    // 1. Get the media URL from Meta
     // implementation note: using v18.0 to match existing worker service logic
     const urlResponse = await fetch(`https://graph.facebook.com/v18.0/${mediaId}`, {
       headers: {

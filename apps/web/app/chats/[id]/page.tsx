@@ -65,7 +65,7 @@ export default async function ChatDetailPage({ params }: PageProps) {
                 {msg.type === 'image' && (
                   <div className="mb-2 rounded-lg overflow-hidden border border-zinc-700/10">
                     <img 
-                      src={msg.metadata?.mediaId ? `/api/media/${msg.metadata.mediaId}` : (msg.metadata?.storageUrl || msg.content)} 
+                      src={msg.metadata?.mediaId ? `/api/media/${msg.metadata.mediaId}?orgId=${chatInfo?.organizationId || 'default'}` : (msg.metadata?.storageUrl || msg.content)} 
                       alt="WhatsApp Image" 
                       className="w-full h-auto max-h-[400px] object-contain"
                     />
@@ -75,7 +75,7 @@ export default async function ChatDetailPage({ params }: PageProps) {
                 {msg.type === 'audio' && (
                   <div className="mb-2 p-2 bg-zinc-100 rounded-lg">
                     <audio controls className="w-full h-8">
-                      <source src={msg.metadata?.mediaId ? `/api/media/${msg.metadata.mediaId}` : (msg.metadata?.storageUrl || msg.content)} type="audio/ogg" />
+                      <source src={msg.metadata?.mediaId ? `/api/media/${msg.metadata.mediaId}?orgId=${chatInfo?.organizationId || 'default'}` : (msg.metadata?.storageUrl || msg.content)} type="audio/ogg" />
                     </audio>
                   </div>
                 )}

@@ -26,8 +26,9 @@ export default async function MediaVault() {
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {media.map((item: any) => {
               // Free Tier Pivot: Use Proxy URL if mediaId exists, otherwise fallback to legacy storageUrl
+              const currentOrgId = item.orgId || item.chatId?.split('_')[0] || 'default';
               const mediaSrc = item.metadata?.mediaId 
-                ? `/api/media/${item.metadata.mediaId}` 
+                ? `/api/media/${item.metadata.mediaId}?orgId=${currentOrgId}` 
                 : (item.metadata?.storageUrl || item.content);
 
               return (
@@ -76,7 +77,7 @@ export default async function MediaVault() {
                     {/* Operational Risk Mitigation: Manual Archive */}
                     {item.metadata?.mediaId && (
                       <ArchiveButton 
-                        orgId={item.orgId || item.chatId?.split('_')[0] || 'default'} 
+                        orgId={currentOrgId} 
                         chatId={item.chatId} 
                         messageId={item.id} 
                         mediaId={item.metadata.mediaId} 

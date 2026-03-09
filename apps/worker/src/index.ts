@@ -18,6 +18,7 @@ import {
   addBalance,
   checkTransaction,
   logTransaction,
+  logPendingTransaction,
   saveKnowledge,
   getAllKnowledge,
   deleteKnowledge,
@@ -201,12 +202,14 @@ const worker = new Worker<JobData>(
           functionDeclarations: [
             {
               name: "verify_transaction",
-              description: "Verifies a bank transaction reference and amount.",
+              description: "Verifies a bank transaction with the payment provider.",
               parameters: {
                 type: SchemaType.OBJECT,
                 properties: {
-                  reference: { type: SchemaType.STRING, description: "Reference code" },
-                  amount: { type: SchemaType.NUMBER, description: "Amount in Naira" }
+                  reference: { type: SchemaType.STRING, description: "Transaction Reference or Session ID" },
+                  amount: { type: SchemaType.NUMBER, description: "Amount in Naira" },
+                  bankName: { type: SchemaType.STRING, description: "Name of the sending bank" },
+                  date: { type: SchemaType.STRING, description: "Transaction date/time" }
                 },
                 required: ["reference", "amount"]
               } as any
@@ -385,9 +388,23 @@ const worker = new Worker<JobData>(
 
         userMessageContent = content.caption ? `[IMAGE] ${content.caption}` : "[IMAGE]";
         promptParts.push({ inlineData: { data: buffer.toString('base64'), mimeType } });
-        promptParts.push(content.caption 
-          ? `The user sent an image with the caption: "${content.caption}". Analyze it. If it's a receipt, verify it.`
-          : "The user sent an image. Analyze it. If it's a receipt, verify it.");
+        
+        // --- Enhanced Vision Prompt (Anti-Fraud) ---
+        const visionInstruction = `
+        The user sent an image. ANALYZE it as a financial receipt or bank alert.
+        
+        [ANTI-FRAUD PROTOCOL]:
+        1. CHECK FOR EDITS: Look for font mismatches (different sizes/styles), text misalignment, or "boxy" artifacts around numbers.
+        2. DATA EXTRACTION: Extract the Reference/Session ID, Amount, Bank Name, and Date.
+        3. FAKE DETECTION: If the reference looks suspicious (e.g. "1234567890" or "TEST_PAYMENT"), flag it.
+        
+        If it's a receipt:
+        - Use 'verify_transaction' to check the reference against the bank system.
+        - If you detect any sign of editing or Photoshop, report it as 'SUSPICIOUS' in your reply.
+        
+        Caption: "${content.caption || 'None'}"
+        `;
+        promptParts.push(visionInstruction);
       }
 
       // 5. Call Gemini
@@ -419,18 +436,35 @@ const worker = new Worker<JobData>(
           if (call.name === 'verify_transaction') {
             let toolResult;
             const existingTx = await checkTransaction(orgId, args.reference);
+            
             if (existingTx) {
-               toolResult = { status: 'failed', reason: 'DUPLICATE_RECEIPT' };
+               if (existingTx.status === 'success') {
+                  toolResult = { status: 'verified', reason: 'ALREADY_VERIFIED', data: existingTx };
+               } else if (existingTx.status === 'pending') {
+                  toolResult = { status: 'pending', reason: 'AWAITING_BANK_SIGNAL', message: "I've already recorded this transfer. We are just waiting for the bank to send us a confirmation signal. I will notify you once it arrives!" };
+               } else {
+                  toolResult = { status: 'failed', reason: 'DUPLICATE_RECEIPT' };
+               }
             } else if (tenantPaymentProvider) {
                 const tx = await tenantPaymentProvider.verify(args.reference, args.amount);
                 if (tx && tx.status === 'success') {
-                    await logTransaction(orgId, args.reference, tx);
+                    await logTransaction(orgId, args.reference, { 
+                      ...tx, 
+                      extractedBank: args.bankName, 
+                      extractedDate: args.date 
+                    });
                     toolResult = { status: 'verified', data: tx };
                 } else {
-                    toolResult = { status: 'failed', reason: 'INVALID_TRANSACTION' };
+                    // --- Auto-Matching Engine: Phase 1 (The Log) ---
+                    // If API verification fails, we log it as PENDING and tell the user we are waiting for bank signal.
+                    console.log(`⏳ [PENDING] API verification failed for ${args.reference}. Logging as PENDING.`);
+                    await logPendingTransaction(orgId, from, args.amount, args.reference);
+                    toolResult = { status: 'pending', reason: 'MANUAL_RECEIPT_LOGGED', message: "I've recorded your transfer. We are just waiting for the bank to send us a confirmation signal. I will notify you once it arrives!" };
                 }
             } else {
-                toolResult = { status: 'error', reason: 'NO_PROVIDER' };
+                // No provider? Still log as pending for the SMS bridge to pick up
+                await logPendingTransaction(orgId, from, args.amount, args.reference);
+                toolResult = { status: 'pending', reason: 'NO_PROVIDER_LOGGED_FOR_SMS', message: "Transfer logged. I am now waiting for the bank confirmation to arrive. I will message you instantly when I see it!" };
             }
             functionResponses.push({ functionResponse: { name: 'verify_transaction', response: toolResult } });
 
