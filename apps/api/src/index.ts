@@ -343,9 +343,17 @@ fastify.post('/bridge/sms', async (request, reply) => {
     return reply.status(404).send('Organization not found for this phoneId');
   }
 
-  // Log the SMS as a confirmed alert signal
+  // Idempotency: Check if this SMS was already processed
   const alertId = `sms_${timestamp}_${from.substring(0, 5)}`;
   const db = getDb();
+  const alertDoc = await db.collection('organizations').doc(org.id).collection('sms_alerts').doc(alertId).get();
+  
+  if (alertDoc.exists) {
+    console.log(`⏭️ [SMS BRIDGE] Already processed alert ${alertId}. Skipping.`);
+    return { success: true, alertId, note: 'already_processed' };
+  }
+
+  // Log the SMS as a confirmed alert signal
   await db.collection('organizations').doc(org.id).collection('sms_alerts').doc(alertId).set({
     from,
     body,

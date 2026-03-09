@@ -352,7 +352,7 @@ export async function findPendingTransaction(orgId: string, amount: number, wind
     .where('orgId', '==', orgId)
     .where('amount', '==', amount)
     .where('status', '==', 'pending')
-    .orderBy('verifiedAt', 'desc')
+    .orderBy('verifiedAt', 'asc')
     .limit(1)
     .get();
 
