@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { Config, PaymentConfig } from '@naija-agent/types';
+import bcrypt from 'bcrypt';
 
 // Fix for ESM/CJS interop for firebase-admin
 const firebaseAdmin = (admin as any).default || admin;
@@ -80,14 +81,7 @@ export interface Organization {
   name: string;
   whatsappPhoneId: string;
   systemPrompt: string;
-  config: { 
-    tools: string[];
-    payment?: PaymentConfig;
-    model?: string;
-    adminPhone?: string;
-    adminPin?: string;
-    isMaster?: boolean;
-  };
+  config: Config;
   isActive: boolean;
   balance: number; // In Kobo
   currency: string;
@@ -167,6 +161,8 @@ export async function createTenant(data: {
   adminPhone: string;
   systemPrompt: string;
 }): Promise<void> {
+  const hashedPin = await bcrypt.hash('1234', 10);
+
   await orgsRef.doc(data.id).set({
     ...data,
     isActive: true,
@@ -176,11 +172,21 @@ export async function createTenant(data: {
     config: {
       tools: ['web_search'],
       model: 'gemini-2.5-flash',
-      adminPin: '1234'
+      adminPin: hashedPin
     },
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
+}
+
+/**
+ * Verifies a tenant's Admin PIN (Salted Hashing)
+ */
+export async function verifyAdminPin(orgId: string, pin: string): Promise<boolean> {
+  const org = await getOrgById(orgId);
+  if (!org || !org.config?.adminPin) return false;
+  
+  return bcrypt.compare(pin, org.config.adminPin);
 }
 
 /**
@@ -193,8 +199,8 @@ export async function verifySovereignPin(phone: string, pin: string): Promise<bo
   // Ensure the phone matches the configured adminPhone for the Master Bot
   if (masterOrg.config.adminPhone !== phone) return false;
   
-  // Direct PIN comparison (Simple for now, can be hashed later)
-  return masterOrg.config.adminPin === pin;
+  // Direct PIN comparison (Upgraded to Bcrypt)
+  return bcrypt.compare(pin, masterOrg.config.adminPin || '');
 }
 
 /**
@@ -316,6 +322,27 @@ export async function getOrgById(orgId: string): Promise<Organization | null> {
   const doc = await orgsRef.doc(orgId).get();
   if (!doc.exists) return null;
   return { id: doc.id, ...doc.data() } as Organization;
+}
+export async function addBalance(orgId: string, amount: number): Promise<number | null> {
+  const orgRef = orgsRef.doc(orgId);
+  let newBalance: number | null = null;
+
+  try {
+    await db.runTransaction(async (t: any) => {
+      const doc = await t.get(orgRef);
+      if (!doc.exists) throw new Error('Org not found');
+
+      const data = doc.data() as Organization;
+      const currentBalance = data.balance || 0;
+
+      newBalance = currentBalance + amount;
+      t.update(orgRef, { balance: newBalance });
+    });
+    return newBalance;
+  } catch (e) {
+    console.warn(`Balance addition failed for ${orgId}:`, e);
+    return null;
+  }
 }
 
 export async function deductBalance(orgId: string, amount: number): Promise<number | null> {

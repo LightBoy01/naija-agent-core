@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@naija-agent/firebase": "^1.0.0",
+    "@naija-agent/storage": "^1.0.0",
     "@naija-agent/types": "^1.0.0",
     "clsx": "^2.1.1",
     "firebase": "^12.10.0",

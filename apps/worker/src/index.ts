@@ -10,10 +10,12 @@ import { getProvider, PaymentProvider } from '@naija-agent/payments';
 // import { uploadMedia } from '@naija-agent/storage'; // FREE TIER PIVOT: Disabled to save cost
 import { 
   getOrgById, 
+  getOrgByPhoneId,
   findOrCreateChat, 
   getChatHistory, 
   saveMessage, 
   deductBalance,
+  addBalance,
   checkTransaction,
   logTransaction,
   saveKnowledge,
@@ -21,6 +23,7 @@ import {
   deleteKnowledge,
   updateActivity,
   verifyAdminSession,
+  verifyAdminPin,
   setAdminAuth,
   createTenant,
   getNetworkStats,
@@ -72,16 +75,31 @@ console.log('🚀 Worker Starting...');
 const worker = new Worker<JobData>(
   'whatsapp-queue',
   async (job) => {
-    const { from, content, type, orgId, messageId } = job.data;
+    const { from, content, type, orgId, messageId, phoneId } = job.data;
     console.log(`Processing job ${job.id} for ${from} (${type})`);
+
+    // Variables needed in catch block for refund logic
+    let isAdmin = false;
+    let costPerReply = 0;
+    let deductionDone = false;
+    let tenantWhatsAppService = whatsappService;
 
     // --- Special Job: Outbound Template ---
     if (job.name === 'send-template') {
       if (!content.templateName) {
         throw new Error('Missing templateName for send-template job');
       }
-      console.log(`Sending template '${content.templateName}' to ${from}`);
-      await whatsappService.sendTemplate(from, content.templateName, content.languageCode || 'en_US');
+
+      // Dynamic token lookup for multi-tenant outbound
+      if (phoneId) {
+        const org = await getOrgByPhoneId(phoneId);
+        if (org?.config?.whatsappToken) {
+          tenantWhatsAppService = new WhatsAppService(org.config.whatsappToken, phoneId);
+        }
+      }
+
+      console.log(`Sending template '${content.templateName}' to ${from} using phoneId ${phoneId}`);
+      await tenantWhatsAppService.sendTemplate(from, content.templateName, content.languageCode || 'en_US');
       return { success: true };
     }
 
@@ -99,14 +117,6 @@ const worker = new Worker<JobData>(
       await redisClient.expire(rateLimitKey, 60);
     }
 
-    if (requestCount > 10) {
-      console.warn(`Rate limit exceeded for user ${from} in org ${orgId}`);
-      if (requestCount === 11) {
-        await whatsappService.sendText(from, "You're sending messages too fast. Please wait a minute.");
-      }
-      return { success: false, reason: 'Rate limited' };
-    }
-
     try {
       // 1. Fetch Organization Config & System Prompt
       const org = await getOrgById(orgId);
@@ -116,8 +126,24 @@ const worker = new Worker<JobData>(
         return { success: false, reason: 'Org inactive' };
       }
 
-      const isAdmin = org.config?.adminPhone === from;
+      isAdmin = org.config?.adminPhone === from;
       console.log(`👤 Identity: ${isAdmin ? 'BOSS' : 'CUSTOMER'} (${from})`);
+
+      // --- Per-Tenant WhatsApp Service (Multi-Tenancy) ---
+      if (org.config?.whatsappToken) {
+        tenantWhatsAppService = new WhatsAppService(
+          org.config.whatsappToken,
+          org.whatsappPhoneId || process.env.WHATSAPP_PHONE_ID || ''
+        );
+      }
+
+      if (requestCount > 10) {
+        console.warn(`Rate limit exceeded for user ${from} in org ${orgId}`);
+        if (requestCount === 11) {
+          await tenantWhatsAppService.sendText(from, "You're sending messages too fast. Please wait a minute.");
+        }
+        return { success: false, reason: 'Rate limited' };
+      }
 
       // --- Per-Tenant Payment Provider Setup ---
       let tenantPaymentProvider: PaymentProvider | null = null;
@@ -293,9 +319,9 @@ const worker = new Worker<JobData>(
         tools: tenantTools.length > 0 ? tenantTools : undefined
       });
 
-      // 1.5 Balance Check (Boss is free)
+      // 1.5 Balance Check & Deduction (PRE-DEBIT to prevent race conditions)
       const balance = org.balance || 0;
-      let costPerReply = isAdmin ? 0 : (org.costPerReply || 2000);
+      costPerReply = isAdmin ? 0 : (org.costPerReply || 2000);
       
       if (!isAdmin && type === 'image') {
           costPerReply = org.costPerImage || Math.floor(costPerReply * 2.5); 
@@ -303,8 +329,21 @@ const worker = new Worker<JobData>(
 
       if (!isAdmin && balance < costPerReply) {
         console.warn(`Org ${org.name} (${orgId}) has insufficient balance: ${balance} < ${costPerReply}`);
-        await whatsappService.sendText(from, "Service suspended: Insufficient balance.");
+        await tenantWhatsAppService.sendText(from, "Service suspended: Insufficient balance.");
         return { success: true, reason: 'Insufficient balance' };
+      }
+
+      // Deduct balance early
+      let newBalance = balance;
+      if (!isAdmin) {
+        const resultBalance = await deductBalance(orgId, costPerReply);
+        if (resultBalance === null) {
+          console.error(`❌ Balance deduction failed for ${orgId}. Aborting.`);
+          await tenantWhatsAppService.sendText(from, "Service temporarily unavailable. Please try again later.");
+          return { success: false, reason: 'Balance deduction failed' };
+        }
+        newBalance = resultBalance;
+        deductionDone = true;
       }
 
       // 2. Manage Chat Session (Find or Create)
@@ -327,7 +366,7 @@ const worker = new Worker<JobData>(
         userMessageContent = content.text;
         promptParts.push(content.text);
       } else if (type === 'audio' && content.audioId) {
-        const { buffer, mimeType } = await whatsappService.downloadMedia(content.audioId);
+        const { buffer, mimeType } = await tenantWhatsAppService.downloadMedia(content.audioId);
         
         // --- Persistence: FREE TIER PIVOT (No Upload) ---
         // mediaTask = uploadMedia(...) // DISABLED
@@ -338,7 +377,7 @@ const worker = new Worker<JobData>(
         promptParts.push("The user sent a voice note. Please reply in text.");
 
       } else if (type === 'image' && content.imageId) {
-        const { buffer, mimeType } = await whatsappService.downloadMedia(content.imageId);
+        const { buffer, mimeType } = await tenantWhatsAppService.downloadMedia(content.imageId);
         
         // --- Persistence: FREE TIER PIVOT (No Upload) ---
         // mediaTask = uploadMedia(...) // DISABLED
@@ -397,11 +436,27 @@ const worker = new Worker<JobData>(
 
           } else if (call.name === 'verify_admin_pin' && isAdmin) {
             console.log(`🔐 Admin PIN verification attempt for ${orgId}`);
-            if (args.pin === org.config?.adminPin) {
+            
+            // --- Lockout Logic (Brute Force Protection) ---
+            const lockoutKey = `lockout:admin_pin:${orgId}:${from}`;
+            const attempts = await redisClient.get(lockoutKey);
+            
+            if (attempts && parseInt(attempts) >= 3) {
+              functionResponses.push({ functionResponse: { name: 'verify_admin_pin', response: { status: 'error', message: 'Too many incorrect attempts. You are locked out for 15 minutes.' } } });
+              continue;
+            }
+
+            const isCorrect = await verifyAdminPin(orgId, args.pin);
+            if (isCorrect) {
+              await redisClient.del(lockoutKey); // Reset on success
               await setAdminAuth(orgId, from);
               functionResponses.push({ functionResponse: { name: 'verify_admin_pin', response: { status: 'success', message: 'PIN Verified. Management tools are now UNLOCKED for 2 hours.' } } });
             } else {
-              functionResponses.push({ functionResponse: { name: 'verify_admin_pin', response: { status: 'error', message: 'Incorrect PIN. Access denied.' } } });
+              const newAttempts = await redisClient.incr(lockoutKey);
+              if (newAttempts === 1) await redisClient.expire(lockoutKey, 900); // 15 min
+              
+              const remaining = 3 - newAttempts;
+              functionResponses.push({ functionResponse: { name: 'verify_admin_pin', response: { status: 'error', message: `Incorrect PIN. Access denied. ${remaining > 0 ? `${remaining} attempts remaining.` : 'Locked out.'}` } } });
             }
 
           } else if (['save_knowledge', 'delete_knowledge', 'manage_activity', 'create_tenant', 'get_network_stats'].includes(call.name) && isAdmin) {
@@ -449,7 +504,7 @@ const worker = new Worker<JobData>(
             try {
               const customerName = job.data.name || 'Unknown';
               const alertMessage = `📣 [ESCALATION NEEDED]\nOga, I need help with Customer *${customerName}* (${from}).\nReason: ${args.reason}`;
-              await whatsappService.sendText(org.config.adminPhone, alertMessage);
+              await tenantWhatsAppService.sendText(org.config.adminPhone, alertMessage);
               functionResponses.push({ functionResponse: { name: 'escalate_to_boss', response: { status: 'success', message: "I've informed the Boss. They will get back to you soon. How else can I help?" } } });
             } catch (e: any) {
               functionResponses.push({ functionResponse: { name: 'escalate_to_boss', response: { status: 'error', message: e.message } } });
@@ -462,14 +517,6 @@ const worker = new Worker<JobData>(
         }
       }
       
-      // 6. Security & Finance Check: Deduct balance BEFORE sending reply
-      const newBalance = await deductBalance(orgId, costPerReply);
-      if (newBalance === null && !isAdmin) {
-        console.error(`❌ Balance deduction failed for ${orgId}. Aborting reply.`);
-        await whatsappService.sendText(from, "Service temporarily unavailable. Please try again later.");
-        return { success: false, reason: 'Balance deduction failed' };
-      }
-
       // 8. Finalize Persistence
       // const storageUrl = mediaTask ? await mediaTask : null; // DISABLED
       await saveMessage(chatId, { 
@@ -482,7 +529,7 @@ const worker = new Worker<JobData>(
       await saveMessage(chatId, { role: 'assistant', content: responseText, type: 'text' });
 
       // 8. Send Reply to WhatsApp (ONLY at the very end of a successful process)
-      await whatsappService.sendText(from, responseText);
+      await tenantWhatsAppService.sendText(from, responseText);
 
       // 9. Low Balance Warning
       if (newBalance !== null && newBalance <= 1000) {
@@ -497,6 +544,18 @@ const worker = new Worker<JobData>(
     } catch (error: any) {
       console.error(`Job ${job.id} failed attempt ${job.attemptsMade + 1}/${job.opts.attempts}:`, error.message);
       
+      // --- Refund Logic ---
+      // If we deducted balance but the job failed (and it's not a retryable error or we're out of retries), we refund.
+      // 429 errors are retried by BullMQ, so we only refund on the FINAL failure or if it's a non-retryable status.
+      if (!isAdmin && deductionDone && (error.status !== 429 || job.attemptsMade >= (job.opts.attempts || 3))) {
+          try {
+            console.log(`💰 Refunding ${costPerReply} kobo to org ${orgId} due to failure.`);
+            await addBalance(orgId, costPerReply);
+          } catch (refundError) {
+            console.error(`❌ Refund failed for ${orgId}:`, refundError);
+          }
+      }
+
       // If we still have retries left, rethrow to let BullMQ handle backoff
       if (job.attemptsMade < (job.opts.attempts || 3)) {
         throw error;
@@ -504,7 +563,7 @@ const worker = new Worker<JobData>(
 
       // Final Failure: Send Fallback Message
       console.error(`Job ${job.id} permanently failed. Sending fallback.`);
-      await whatsappService.sendText(from, "I'm having trouble connecting right now. Please try again later.");
+      await tenantWhatsAppService.sendText(from, "I'm having trouble connecting right now. Please try again later.");
       
       // We don't rethrow here so the job is marked as 'failed' but handled gracefully
     }

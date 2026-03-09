@@ -1,5 +1,6 @@
 import { getNetworkMedia } from '@naija-agent/firebase';
 import Link from 'next/link';
+import ArchiveButton from './ArchiveButton';
 
 export default async function MediaVault() {
   const media = await getNetworkMedia(24);
@@ -71,6 +72,18 @@ export default async function MediaVault() {
                     <p className="text-xs text-zinc-500 line-clamp-2">
                       {item.metadata?.caption || 'No caption provided.'}
                     </p>
+
+                    {/* Operational Risk Mitigation: Manual Archive */}
+                    {item.metadata?.mediaId && (
+                      <ArchiveButton 
+                        orgId={item.orgId || item.chatId?.split('_')[0] || 'default'} 
+                        chatId={item.chatId} 
+                        messageId={item.id} 
+                        mediaId={item.metadata.mediaId} 
+                        type={item.type} 
+                        isArchived={!!item.metadata.storageUrl}
+                      />
+                    )}
                   </div>
                 </div>
               );

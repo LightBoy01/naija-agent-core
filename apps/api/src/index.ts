@@ -118,21 +118,39 @@ fastify.get('/webhook', async (request, reply) => {
     reply.status(403).send('Forbidden');
   }
 });
-
 // 3. Webhook Ingestion (POST)
 fastify.post('/webhook', async (request, reply) => {
-  console.log('📝 [DEBUG] Webhook Hit!', JSON.stringify(request.body, null, 2));
+  console.log('📝 [DEBUG] Webhook Hit!');
   const signature = request.headers['x-hub-signature-256'] as string;
   const rawBody = request.rawBody as string;
 
-  // Security: Verify Signature
-  if (!verifySignature(rawBody, signature, process.env.WHATSAPP_APP_SECRET || '')) {
-    const expected = crypto.createHmac('sha256', process.env.WHATSAPP_APP_SECRET || '').update(rawBody).digest('hex');
+  // Multi-Tenancy: Extract phoneId BEFORE verification to lookup secret
+  let appSecret = process.env.WHATSAPP_APP_SECRET || '';
+  let phoneId: string | undefined = undefined;
+
+  try {
+     const body = JSON.parse(rawBody);
+     phoneId = body.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
+
+     if (phoneId) {
+        const org = await getOrgByPhoneId(phoneId);
+        if (org?.config?.appSecret) {
+           console.log(`🛡️ [DEBUG] Using Custom App Secret for Phone ID: ${phoneId}`);
+           appSecret = org.config.appSecret;
+        }
+     }
+  } catch (e) {
+     fastify.log.warn('Could not parse raw body for dynamic secret lookup');
+  }
+
+  // Security: Verify Signature using the dynamic secret
+  if (!verifySignature(rawBody, signature, appSecret)) {
+    const expected = crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex');
     fastify.log.warn(`❌ Invalid Webhook Signature! Received: ${signature}, Expected: sha256=${expected}`);
     return reply.status(403).send('Invalid Signature');
   }
 
-  // Parse Body
+  // Parse Body (Already parsed by fastify if successful above, using request.body)
   const result = WhatsAppWebhookSchema.safeParse(request.body);
   if (!result.success) {
     fastify.log.error(result.error, 'Invalid Webhook Payload');
