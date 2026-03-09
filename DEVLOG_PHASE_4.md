@@ -38,5 +38,28 @@
     *   Added a **Tenant Management UI** for manual balance top-ups and service status toggling.
 *   **Red Team Audit:** Performed a surgical isolation test verifying that Client Bots cannot access Master Bot secrets.
 
-### **Strategic Milestone:**
+### Strategic Milestone:
 **Naija Agent is now a professional-grade, multi-tenant SaaS foundation with real-time financial verification and specialized Nigerian market intelligence.**
+
+## Session 26: Stability & Performance Optimization (2026-03-09)
+
+**Status:** 🟢 **Completed**
+
+### **Actions Taken:**
+*   **Multi-Tenant Idempotency:** Fixed a critical bug where message deduplication was global. It is now scoped by `orgId`, preventing cross-tenant message drops.
+*   **API Versioning:** Standardized the system to use a configurable `WHATSAPP_API_VERSION` (defaulting to `v21.0`), removing all hardcoded Meta version references.
+*   **Media Proxy Caching:** Implemented Redis caching for temporary signed URLs in the web dashboard. This reduces API latency and prevents Meta rate-limiting.
+*   **Build Stabilization:** Resolved all Type errors and linting warnings across the monorepo, achieving a clean production build for all services.
+
+## Session 27: Sector Unlock & The Universal Brain (2026-03-09)
+
+**Status:** 🟢 **Completed**
+
+### **Actions Taken:**
+*   **Generic Activities:** Refactored the `updateActivity` helper and `manage_activity` tool to be sector-agnostic. 
+*   **Unlimited Niche Support:** Removed the hardcoded restrictions (Retail/Logistics/Appointments). The system now supports any business type (Law, Church, School, etc.) without code changes.
+*   **Zero-Friction Scalability:** Verified that new sector agents can be spawned purely via Master Bot prompts and knowledge injection.
+
+### **Final Verdict:**
+**The technical runway is officially clear. Naija Agent Core is now a universal "Brain for Hire" capable of managing any industry in Nigeria with institutional security and precision.**
+

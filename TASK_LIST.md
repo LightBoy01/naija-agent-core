@@ -69,10 +69,12 @@
     - [x] **Security:** Implement Salted PIN Hashing (Bcrypt) in Firestore.
     - [x] **Multi-App Support:** Implement Dynamic Signature Verification (lookup secret by phoneId).
     - [x] **Financial Integrity:** Implement "Credit Reservation" logic to prevent race conditions.
+    - [x] **Idempotency:** Multi-tenant scoped message deduplication.
     - [ ] **Audit Shadow Alerts:** AI pings Boss on high-value transaction detection.
 - [ ] **The "Fake Alert" Finale**
     - [x] Implement Gemini Vision for receipt extraction.
     - [x] **Anti-Fraud Protocol:** Enhanced vision prompt for Photoshop detection.
+    - [x] **Sector Unlock:** Generic activities to support all business types.
     - [ ] Integrate Monnify/Paystack for real-time bank verification.
 - [ ] **SMS Relay Prototype**
     - [x] **Bridge API:** /bridge/sms endpoint for external bank alert syncing.

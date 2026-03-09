@@ -8,14 +8,15 @@
 - **Credit Awareness:** Gemini is now balance-aware (Context Injection) and responds to balance queries.
 
 ## Recent Changes
-- **Phase 4n: Sovereign Empire Hardening:** Implemented Bcrypt PIN hashing, 15-minute brute-force lockouts, and a "Credit Reservation" model to eliminate race conditions.
-- **Phase 4l: The Auto-Matching Engine:** Built a full-stack verification system. Screenshot receipts are logged as 'Pending' and automatically confirmed when a matching bank SMS arrives via the new `/bridge/sms` API.
-- **Phase 4k: Command Center Upgrades:** Built dynamic chat details auditing and tenant management UI (manual top-ups and status toggles) with session-protected server actions.
-- **Multi-Tenancy Key Isolation:** Enabled dynamic app secrets and tokens per tenant.
+- **Sector Unlock:** The platform is now fully sector-agnostic. Generic activity logging allows the AI to manage any business niche (Law, Medical, Education, etc.) without code changes.
+- **Infrastructure Hardening:** Fixed multi-tenant idempotency issues, standardized API versioning (WHATSAPP_API_VERSION), and implemented Redis caching for the media proxy.
+- **Sovereign MFA:** Implemented WhatsApp-based 2FA for dashboard logins (Bot generates 6-digit code).
+- **Auto-Matching Engine:** Full-stack bank alert verification (Screenshot -> Pending -> SMS Match -> Confirm) is live and verified.
+- **Financial Guard:** Switched to "Credit Reservation" model with "Success-Only" refund logic to prevent revenue leakage.
 
 ## Next Steps
-- [ ] **Sovereign Auth Hardening (Phase 4m):** Implement WhatsApp-based MFA (Bot sends 6-digit code to Boss).
-- [ ] **Real-time Bank Verification:** Complete official Monnify/Paystack API integration for automated fraud prevention (Enterprise clients).
-- [ ] **Network Portfolio Stats:** Refactor `getNetworkStats` to use a global aggregator document for O(1) performance.
+- [ ] **Real-time Bank Verification:** Complete official Monnify/Paystack API integration for enterprise-level fraud prevention.
+- [ ] **Native Android Bridge:** Build a native app to replace the Python/Termux SMS relay script.
+- [ ] **Structured Logging & Monitoring:** Integrate Pino and Sentry/Logtail for enterprise-grade observability.
 
 
