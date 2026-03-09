@@ -136,12 +136,12 @@ export async function deleteKnowledge(orgId: string, key: string): Promise<void>
 }
 
 /**
- * Creates or updates a business activity (Booking, Delivery, Order)
+ * Creates or updates a business activity (Any Sector: Booking, Legal Case, Donation, etc.)
  */
 export async function updateActivity(
   orgId: string, 
   activityId: string, 
-  type: 'booking' | 'delivery' | 'order', 
+  type: string, 
   data: any
 ): Promise<void> {
   await orgsRef.doc(orgId).collection('activities').doc(activityId).set({

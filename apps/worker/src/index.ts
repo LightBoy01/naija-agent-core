@@ -256,12 +256,12 @@ const worker = new Worker<JobData>(
             },
             {
               name: "manage_activity",
-              description: "Creates or updates a business activity like a Waybill (Logistics), Booking (Appointments), or Order. (Requires Authentication)",
+              description: "Creates or updates a business activity. (Requires Authentication)",
               parameters: {
                 type: SchemaType.OBJECT,
                 properties: {
-                  id: { type: SchemaType.STRING, description: "Unique ID (e.g., Waybill number or Date_Time)" },
-                  type: { type: SchemaType.STRING, enum: ["booking", "delivery", "order"] },
+                  id: { type: SchemaType.STRING, description: "Unique ID (e.g., Waybill number, Reference, or Date_Time)" },
+                  type: { type: SchemaType.STRING, description: "Category of activity (e.g. 'order', 'booking', 'lawsuit', 'donation', etc.)" },
                   summary: { type: SchemaType.STRING, description: "Full details of the activity" }
                 },
                 required: ["id", "type", "summary"]

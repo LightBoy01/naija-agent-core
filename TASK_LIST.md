@@ -53,7 +53,7 @@
     - [x] **Free Tier Pivot:** Implement "WhatsApp-Only" temporary link retrieval to bypass Firebase Storage Blaze requirement.
         - [x] **Secure Media Proxy:** Build backend API to fetch Meta URLs without token exposure.
         - [x] **Audit Cliff Guard:** Add "Save Forever" manual archive for high-value receipts.
-        - [ ] **Redis Caching:** Cache temporary URLs to prevent rate-limiting and UI lag.
+        - [x] **Redis Caching:** Cache temporary URLs to prevent rate-limiting and UI lag.
 - [x] **Boss Mode (Phase 4g/i)**
     - [x] **Iron-Clad Security:** Admin PIN Handshake (2-hour sessions).
     - [x] **Zero-Dashboard Training:** Boss trains AI via WhatsApp conversation.
@@ -62,8 +62,8 @@
     - [x] **Master Bot Identity:** COO bot for Sovereign management.
     - [x] **Automated Onboarding:** `create_tenant` tool for instant client setup.
     - [x] **Network Stats:** Real-time reporting for the Sovereign.
-- [ ] **Sovereign Auth Hardening (Phase 4m)**
-    - [ ] Implement WhatsApp-based MFA (Bot sends 6-digit code to Boss).
+- [x] **Sovereign Auth Hardening (Phase 4m)**
+    - [x] Implement WhatsApp-based MFA (Bot sends 6-digit code to Boss).
     - [ ] Secure Session Rotation (Short-lived tokens).
 - [x] **Sovereign Empire Hardening (Phase 4n)**
     - [x] **Security:** Implement Salted PIN Hashing (Bcrypt) in Firestore.
