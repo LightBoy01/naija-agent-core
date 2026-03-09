@@ -18,8 +18,10 @@ export async function archiveMedia(orgId: string, chatId: string, messageId: str
 
     if (!apiToken) throw new Error('WHATSAPP_API_TOKEN missing');
 
-    // 2. Fetch from Meta
-    const urlResponse = await fetch(`https://graph.facebook.com/v18.0/${mediaId}`, {
+    const version = process.env.WHATSAPP_API_VERSION || 'v21.0';
+
+    // 1. Fetch from Meta
+    const urlResponse = await fetch(`https://graph.facebook.com/${version}/${mediaId}`, {
       headers: { Authorization: `Bearer ${apiToken}` },
     });
     const mediaData = await urlResponse.json();

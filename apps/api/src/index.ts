@@ -192,17 +192,6 @@ fastify.post('/webhook', async (request, reply) => {
   const businessPhoneId = value.metadata.phone_number_id;
   const from = message.from;
 
-  // Idempotency: Check if we processed this message_id
-  const processedKey = `processed:${message.id}`;
-  const isProcessed = await redisConnection.exists(processedKey);
-  if (isProcessed) {
-    fastify.log.info(`Duplicate message ${message.id}, skipping.`);
-    return reply.status(200).send('OK');
-  }
-
-  // Mark as processed (Expire in 1 hour)
-  await redisConnection.setex(processedKey, 3600, '1');
-
   // Tenant Lookup: Find Org by Phone ID
   const org = await getOrgByPhoneId(businessPhoneId);
   
@@ -210,6 +199,17 @@ fastify.post('/webhook', async (request, reply) => {
     fastify.log.warn(`Unknown Business Phone ID: ${businessPhoneId}`);
     return reply.status(200).send('OK');
   }
+
+  // Idempotency: Check if we processed this message_id for this tenant
+  const processedKey = `processed:${org.id}:${message.id}`;
+  const isProcessed = await redisConnection.exists(processedKey);
+  if (isProcessed) {
+    fastify.log.info(`Duplicate message ${message.id} for org ${org.id}, skipping.`);
+    return reply.status(200).send('OK');
+  }
+
+  // Mark as processed (Expire in 1 hour)
+  await redisConnection.setex(processedKey, 3600, '1');
 
   // --- Phase 4b: Compliance (Opt-In/Opt-Out) ---
   const textBody = message.type === 'text' ? message.text?.body?.trim().toUpperCase() : '';

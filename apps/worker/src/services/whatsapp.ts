@@ -10,7 +10,8 @@ const WhatsAppSendResponseSchema = z.object({
 export class WhatsAppService {
   private apiToken: string;
   private phoneId: string;
-  private baseUrl = 'https://graph.facebook.com/v18.0';
+  private version = process.env.WHATSAPP_API_VERSION || 'v21.0';
+  private baseUrl = `https://graph.facebook.com/${this.version}`;
 
   constructor(apiToken: string, phoneId: string) {
     this.apiToken = apiToken;
@@ -85,7 +86,7 @@ export class WhatsAppService {
   async sendTemplate(to: string, templateName: string, languageCode: string = 'en_US'): Promise<string> {
     try {
       const response = await axios.post(
-        `https://graph.facebook.com/v21.0/${this.phoneId}/messages`, // Updated to v21.0
+        `${this.baseUrl}/${this.phoneId}/messages`, 
         {
           messaging_product: 'whatsapp',
           to: to,
@@ -119,7 +120,7 @@ export class WhatsAppService {
   async subscribeWaba(wabaId: string): Promise<boolean> {
     try {
       await axios.post(
-        `https://graph.facebook.com/v21.0/${wabaId}/subscribed_apps`,
+        `${this.baseUrl}/${wabaId}/subscribed_apps`,
         {},
         {
           headers: { Authorization: `Bearer ${this.apiToken}` },

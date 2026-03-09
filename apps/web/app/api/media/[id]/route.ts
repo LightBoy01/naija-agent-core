@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getOrgById } from '@naija-agent/firebase';
 import { cookies } from 'next/headers';
+import { Redis } from 'ioredis';
+
+// --- Redis Setup for Media Caching ---
+const redisConfig = {
+  host: process.env.REDIS_HOST || 'localhost',
+  port: parseInt(process.env.REDIS_PORT || '6379'),
+  password: process.env.REDIS_PASSWORD,
+};
+const redis = new Redis(redisConfig);
 
 export async function GET(
   request: NextRequest,
@@ -31,25 +40,45 @@ export async function GET(
   }
 
   try {
-    // implementation note: using v18.0 to match existing worker service logic
-    const urlResponse = await fetch(`https://graph.facebook.com/v18.0/${mediaId}`, {
-      headers: {
-        Authorization: `Bearer ${apiToken}`,
-      },
-    });
+    const version = process.env.WHATSAPP_API_VERSION || 'v21.0';
 
-    if (!urlResponse.ok) {
-      const errorText = await urlResponse.text();
-      console.error(`Meta API Error (Get URL) [${urlResponse.status}]:`, errorText);
-      return new NextResponse(`Failed to fetch media metadata: ${urlResponse.statusText}`, { status: urlResponse.status });
-    }
+    // --- Performance Optimization: Redis Caching ---
+    const cacheKey = `media_proxy:${mediaId}`;
+    const cachedData = await redis.get(cacheKey);
+    
+    let mediaUrl: string;
+    let mimeType: string;
 
-    const mediaData = await urlResponse.json();
-    const mediaUrl = mediaData.url;
-    const mimeType = mediaData.mime_type;
+    if (cachedData) {
+      const parsed = JSON.parse(cachedData);
+      mediaUrl = parsed.url;
+      mimeType = parsed.mimeType;
+      console.log(`⚡ [PROXY] Serving cached URL for ${mediaId}`);
+    } else {
+      // 1. Get the media URL from Meta
+      // implementation note: using dynamic version to match system logic
+      const urlResponse = await fetch(`https://graph.facebook.com/${version}/${mediaId}`, {
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+        },
+      });
 
-    if (!mediaUrl) {
-      return new NextResponse('Media URL not found in Meta response', { status: 404 });
+      if (!urlResponse.ok) {
+        const errorText = await urlResponse.text();
+        console.error(`Meta API Error (Get URL) [${urlResponse.status}]:`, errorText);
+        return new NextResponse(`Failed to fetch media metadata: ${urlResponse.statusText}`, { status: urlResponse.status });
+      }
+
+      const mediaData = await urlResponse.json();
+      mediaUrl = mediaData.url;
+      mimeType = mediaData.mime_type;
+
+      if (!mediaUrl) {
+        return new NextResponse('Media URL not found in Meta response', { status: 404 });
+      }
+
+      // Cache the result for 1 hour (Meta links usually last longer, but let's be safe)
+      await redis.setex(cacheKey, 3600, JSON.stringify({ url: mediaUrl, mimeType }));
     }
 
     // 2. Fetch the binary data using the temporary URL

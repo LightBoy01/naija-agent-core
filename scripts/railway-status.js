@@ -111,7 +111,7 @@ async function fetchAndPrintLogs(deploymentId) {
     console.log(`📜 Logs for ${deploymentId}:`);
     const logsData = await queryGraphQL(LOGS_QUERY(deploymentId));
     if (logsData.deploymentLogs?.length > 0) {
-       logsData.deploymentLogs.slice(-5).forEach(log => {
+       logsData.deploymentLogs.slice(-50).forEach(log => {
          console.log(`[${new Date(log.timestamp).toLocaleTimeString()}] ${log.message}`);
        });
     } else {

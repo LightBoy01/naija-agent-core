@@ -197,11 +197,6 @@ const worker = new Worker<JobData>(
       // --- Identity-Based Tools ---
       const tenantTools: Tool[] = [];
 
-      // 0. Global Tools (Internet Access)
-      tenantTools.push({
-        googleSearch: {}
-      } as any);
-
       // 1. Transaction Verification (All users)
       if (tenantPaymentProvider) {
         tenantTools.push({
