@@ -8,13 +8,23 @@ export async function updateOrgStatus(formData: FormData): Promise<void> {
   await verifySovereignSession();
   const orgId = formData.get('orgId') as string;
   const status = formData.get('status') === 'true';
+  const type = formData.get('type') as string;
 
   try {
     const db = getDb();
-    await db.collection('organizations').doc(orgId).update({
-      isActive: status,
-      updatedAt: new Date()
-    });
+    const orgRef = db.collection('organizations').doc(orgId);
+
+    if (type === 'bridge') {
+      await orgRef.update({
+        'config.useSmsBridge': status,
+        updatedAt: new Date()
+      });
+    } else {
+      await orgRef.update({
+        isActive: status,
+        updatedAt: new Date()
+      });
+    }
 
     revalidatePath(`/dashboard/organizations/${orgId}`);
     revalidatePath('/dashboard');

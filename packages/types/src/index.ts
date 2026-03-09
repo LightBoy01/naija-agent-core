@@ -85,6 +85,7 @@ export const ConfigSchema = z.object({
   payment: PaymentConfigSchema.optional(), // Per-tenant payment config
   whatsappToken: z.string().optional(), // Per-tenant WhatsApp token
   appSecret: z.string().optional(), // Per-tenant Meta App secret
+  useSmsBridge: z.boolean().default(false), // Toggle for auto-matching engine
   adminPhone: z.string().optional(), // The Boss's phone number
   adminPin: z.string().optional(), // 4-digit PIN for high-value actions
   isMaster: z.boolean().optional(), // Sovereign powers flag

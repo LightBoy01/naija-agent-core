@@ -8,13 +8,14 @@
 - **Credit Awareness:** Gemini is now balance-aware (Context Injection) and responds to balance queries.
 
 ## Recent Changes
-- **Phase 4j: The Grand Commander:** Set up the Master Bot (`naija-agent-master`) with Sovereign powers. Implemented `create_tenant` for automated onboarding and `get_network_stats` for real-time portfolio management.
-- **Phase 4i: Iron-Clad Manager:** Implemented 4-digit PIN authentication for all management tasks. Added `manage_activity` tool, enabling the Agent to handle Waybills (Logistics), Bookings (Appointments), and Orders (Retail).
-- **Phase 4f: Persistent Media Pipeline:** Integrated Firebase Storage. Every image and voice note is now archived and saved in message metadata.
-- **Phase 4d: Multi-Tenancy Key Isolation:** Implemented per-tenant `paymentConfig` and `model` selection.
+- **Phase 4n: Sovereign Empire Hardening:** Implemented Bcrypt PIN hashing, 15-minute brute-force lockouts, and a "Credit Reservation" model to eliminate race conditions.
+- **Phase 4l: The Auto-Matching Engine:** Built a full-stack verification system. Screenshot receipts are logged as 'Pending' and automatically confirmed when a matching bank SMS arrives via the new `/bridge/sms` API.
+- **Phase 4k: Command Center Upgrades:** Built dynamic chat details auditing and tenant management UI (manual top-ups and status toggles) with session-protected server actions.
+- **Multi-Tenancy Key Isolation:** Enabled dynamic app secrets and tokens per tenant.
 
 ## Next Steps
-- [ ] **Phase 4k: The "Boss" Dashboard:** Build a Next.js web portal for business owners to view archived media and live chats.
-- [ ] **Real-time Bank Verification:** Complete Monnify/Paystack API integration for automated fraud prevention.
-- [ ] **SMS Relay Prototype:** Start building the Android "Bridge" app for OPay/Kuda/PalmPay merchants.
+- [ ] **Sovereign Auth Hardening (Phase 4m):** Implement WhatsApp-based MFA (Bot sends 6-digit code to Boss).
+- [ ] **Real-time Bank Verification:** Complete official Monnify/Paystack API integration for automated fraud prevention (Enterprise clients).
+- [ ] **Network Portfolio Stats:** Refactor `getNetworkStats` to use a global aggregator document for O(1) performance.
+
 

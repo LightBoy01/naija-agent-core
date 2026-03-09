@@ -319,4 +319,27 @@
 *   **Security:** Switch to Salted Bcrypt hashing for all PIN storage.
 *   **Multi-Tenancy:** Implement dynamic secret lookup by `phoneId` in the API ingestion layer.
 *   **Financials:** Implement a "Reserve and Finalize" pattern for credit deduction in the Worker.
-*   **Persistence:** Add a "Save Forever" manual archive button for Sovereign-flagged media.
+## Session 21: Hardening & Auto-Matching Engine (2026-03-09)
+
+**Status:** 🟢 **Completed**
+
+### **Actions Taken:**
+*   **Iron-Clad Security:** Implemented Bcrypt hashing for all PINs. Added a 15-minute lockout for brute-force protection.
+*   **Financial Integrity:** Switched to a "Credit Reservation" model where balance is deducted before processing to prevent race conditions.
+*   **Multi-Tenancy:** Enabled dynamic app secrets and WhatsApp tokens. Each tenant can now use their own Meta App.
+*   **Auto-Matching Engine:** 
+    *   Implemented a "Pending" transaction vault.
+    *   Enhanced the `/bridge/sms` API with amount extraction and FIFO matching logic.
+    *   Added automated WhatsApp confirmation notifications upon bank alert arrival.
+*   **Dashboard Visibility:** Built the Dynamic Chat Details view and Organization Management UI (Top-ups/Status toggles).
+*   **Sovereign Security:** All dashboard actions now require a verified HTTP-only session.
+
+### **Lessons Learned:**
+*   **FIFO is King:** In transaction matching, the oldest pending receipt should always match the first bank alert to prevent "skipping" customers.
+*   **Zero-Trust Dashboard:** Server actions in Next.js must explicitly verify sessions even if the UI is hidden by middleware.
+*   **The Bridge Advantage:** While AI vision is great for speed, the SMS Bridge provides the actual "Source of Truth" required for high-stake business operations.
+
+
+
+--- 
+**Next Volume:** [DEVLOG_PHASE_4.md](./DEVLOG_PHASE_4.md)

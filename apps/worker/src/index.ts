@@ -454,17 +454,35 @@ const worker = new Worker<JobData>(
                       extractedDate: args.date 
                     });
                     toolResult = { status: 'verified', data: tx };
-                } else {
-                    // --- Auto-Matching Engine: Phase 1 (The Log) ---
-                    // If API verification fails, we log it as PENDING and tell the user we are waiting for bank signal.
-                    console.log(`⏳ [PENDING] API verification failed for ${args.reference}. Logging as PENDING.`);
+                } else if (org.config?.useSmsBridge) {
+                    // --- Auto-Matching Engine (High Security) ---
+                    console.log(`⏳ [PENDING] API verification failed for ${args.reference}. Logging as PENDING for SMS Bridge.`);
                     await logPendingTransaction(orgId, from, args.amount, args.reference);
-                    toolResult = { status: 'pending', reason: 'MANUAL_RECEIPT_LOGGED', message: "I've recorded your transfer. We are just waiting for the bank to send us a confirmation signal. I will notify you once it arrives!" };
+                    toolResult = { status: 'pending', reason: 'AWAITING_SMS_BRIDGE', message: "I've recorded your transfer. We are just waiting for the bank to send us a confirmation signal. I will notify you once it arrives!" };
+                } else {
+                    // --- Graceful Fallback (Vision Only) ---
+                    console.log(`👁️ [VISION] No bridge/API. Logging ${args.reference} as Vision Verified.`);
+                    await logTransaction(orgId, args.reference, {
+                      status: 'vision_verified',
+                      amount: args.amount,
+                      extractedBank: args.bankName,
+                      extractedDate: args.date,
+                      note: 'Verified by AI Vision only (No SMS/API verification)'
+                    });
+                    toolResult = { status: 'verified', reason: 'VISION_VERIFIED', message: "I've verified your receipt using my vision system. Please note that final confirmation depends on the bank alert." };
                 }
-            } else {
-                // No provider? Still log as pending for the SMS bridge to pick up
+            } else if (org.config?.useSmsBridge) {
+                // No provider but bridge is ON
                 await logPendingTransaction(orgId, from, args.amount, args.reference);
                 toolResult = { status: 'pending', reason: 'NO_PROVIDER_LOGGED_FOR_SMS', message: "Transfer logged. I am now waiting for the bank confirmation to arrive. I will message you instantly when I see it!" };
+            } else {
+                // No provider and bridge is OFF - Extreme Fallback
+                await logTransaction(orgId, args.reference, {
+                  status: 'vision_verified',
+                  amount: args.amount,
+                  note: 'Manual fallback verification'
+                });
+                toolResult = { status: 'verified', reason: 'MANUAL_VISION_VERIFIED', message: "Transfer recorded. Thank you!" };
             }
             functionResponses.push({ functionResponse: { name: 'verify_transaction', response: toolResult } });
 
