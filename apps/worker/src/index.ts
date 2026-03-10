@@ -693,7 +693,7 @@ const worker = new Worker<JobData>(
         const { buffer, mimeType } = await tenantWhatsAppService.downloadMedia(content.audioId);
         userMessageContent = "[AUDIO MESSAGE]";
         promptParts.push({ inlineData: { data: buffer.toString('base64'), mimeType } });
-        promptParts.push("The user sent a voice note. Please reply in text.");
+        promptParts.push("The user sent a voice note. You can hear and understand this audio perfectly. Please respond to the user's message appropriately in text.");
 
       } else if (type === 'image' && content.imageId) {
         const { buffer, mimeType } = await tenantWhatsAppService.downloadMedia(content.imageId);
