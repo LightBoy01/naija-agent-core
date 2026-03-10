@@ -4,12 +4,15 @@ const path = require('path');
 
 async function build(appName, entryPath, outPath) {
   console.log(`
-🔨 Building ${appName} to ESM (.mjs)...`);
+🔨 Building ${appName} to CommonJS (.js)...`);
 
-  // --- SOVEREIGN BUNDLING STRATEGY ---
-  // We bundle EVERYTHING except native modules (bcrypt)
-  // to ensure the app is self-contained and stable on Railway.
-  const external = ['bcrypt'];
+  // --- SOVEREIGN BUNDLING STRATEGY (CJS REVERT) ---
+  // CommonJS is more stable for bundling legacy dynamic requires 
+  // found in bullmq and firebase-admin.
+  const external = [
+    'bcrypt', 
+    'path', 'fs', 'os', 'crypto', 'child_process', 'http', 'https', 'zlib', 'events', 'util', 'stream', 'url', 'net', 'tls', 'dns', 'perf_hooks'
+  ];
 
   try {
     await esbuild.build({
@@ -18,14 +21,10 @@ async function build(appName, entryPath, outPath) {
       bundle: true,
       platform: 'node',
       target: 'node20',
-      format: 'esm',
+      format: 'cjs', 
       sourcemap: true,
       logLevel: 'info',
       external: external,
-      banner: {
-        js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
-      },
-      // CRITICAL: Point to SOURCE instead of DIST to avoid the "dist/index.js not found" error
       alias: {
         '@naija-agent/types': path.resolve(process.cwd(), 'packages/types/src/index.ts'),
         '@naija-agent/firebase': path.resolve(process.cwd(), 'packages/firebase/src/index.ts'),
@@ -43,11 +42,11 @@ async function build(appName, entryPath, outPath) {
 async function main() {
   console.log("🚀 Starting Monorepo Bundle Build...");
   
-  // Build API to .mjs
-  await build('apps/api', 'apps/api/src/index.ts', 'apps/api/dist/index.mjs');
+  // Build API to .js
+  await build('apps/api', 'apps/api/src/index.ts', 'apps/api/dist/index.js');
   
-  // Build Worker to .mjs
-  await build('apps/worker', 'apps/worker/src/index.ts', 'apps/worker/dist/index.mjs');
+  // Build Worker to .js
+  await build('apps/worker', 'apps/worker/src/index.ts', 'apps/worker/dist/index.js');
   
   console.log("\n🎉 All apps bundled successfully!");
 }

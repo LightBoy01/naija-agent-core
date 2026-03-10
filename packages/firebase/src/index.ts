@@ -10,16 +10,20 @@ import bcrypt from 'bcrypt';
 // Fix for ESM/CJS interop for firebase-admin
 const firebaseAdmin = (admin as any).default || admin;
 
-// Fix for __dirname in ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Fix for __dirname in ESM/CJS transition
+let currentDir: string;
+try {
+  const { fileURLToPath } = await import('url');
+  currentDir = path.dirname(fileURLToPath(import.meta.url));
+} catch (e) {
+  currentDir = __dirname;
+}
+const _dirname = currentDir;
 
 // Load .env relative to the source/dist file to support both apps and scripts
-// src/index.ts -> ../../.env
-// dist/index.js -> ../../../.env (if built)
 const envPaths = [
-  path.join(__dirname, '../../.env'),
-  path.join(__dirname, '../../../.env'),
+  path.join(_dirname, '../../.env'),
+  path.join(_dirname, '../../../.env'),
   path.join(process.cwd(), '.env')
 ];
 
