@@ -7,6 +7,17 @@ import sys
 
 # --- Merchant-Ready Configuration (Phase 5.13) ---
 CONFIG_FILE = "config.json"
+SEEN_FILE = "seen_ids.txt"
+
+def load_seen_ids():
+    if os.path.exists(SEEN_FILE):
+        with open(SEEN_FILE, 'r') as f:
+            return set(line.strip() for line in f)
+    return set()
+
+def save_seen_id(msg_id):
+    with open(SEEN_FILE, 'a') as f:
+        f.write(f"{msg_id}\n")
 
 def load_config():
     if os.path.exists(CONFIG_FILE):
@@ -98,7 +109,8 @@ def main():
         print("✅ Configuration saved to config.json\n")
 
     print(f"Watching for bank alerts for secret: {config['bridge_secret'][:4]}***")
-    processed_ids = set()
+    processed_ids = load_seen_ids()
+    print(f"Loaded {len(processed_ids)} previously processed alerts.")
     last_heartbeat = 0
 
     while True:
@@ -120,6 +132,12 @@ def main():
                 if msg_id not in processed_ids:
                     if forward_sms(config, msg):
                         processed_ids.add(msg_id)
+                        save_seen_id(msg_id)
+        
+        # Periodic cleanup of in-memory set to prevent bloat (keep last 1000)
+        if len(processed_ids) > 1000:
+           # This is a bit naive but fine for MVP
+           processed_ids = set(list(processed_ids)[-1000:])
         
         time.sleep(config['check_interval'])
 

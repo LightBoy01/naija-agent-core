@@ -6,6 +6,7 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import type { Config, PaymentConfig } from '@naija-agent/types';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 // Fix for ESM/CJS interop for firebase-admin
 const firebaseAdmin = (admin as any).default || admin;
@@ -13,10 +14,12 @@ const firebaseAdmin = (admin as any).default || admin;
 // Fix for __dirname in ESM/CJS transition
 let currentDir: string;
 try {
-  const { fileURLToPath } = await import('url');
-  currentDir = path.dirname(fileURLToPath(import.meta.url));
-} catch (e) {
+  // @ts-ignore
   currentDir = __dirname;
+} catch (e) {
+  // If __dirname is not defined, we are in ESM
+  const { fileURLToPath } = require('url');
+  currentDir = path.dirname(fileURLToPath((import.meta as any).url));
 }
 const _dirname = currentDir;
 
@@ -184,20 +187,27 @@ export async function getOrgOnboarding(orgId: string): Promise<{ step: string, d
 
 /**
  * Completes onboarding and promotes temporary data to the final config.
+ * Award a 500 NGN starting bonus to remove friction.
  */
 export async function completeOnboarding(orgId: string, finalConfig: any): Promise<void> {
   const hashedPin = await bcrypt.hash(finalConfig.adminPin || '1234', 10);
+  const bonusKobo = 50000; // 500.00 NGN
   
   await orgsRef.doc(orgId).update({
     name: finalConfig.name,
     onboardingStep: 'COMPLETE',
     onboardingData: null,
+    balance: bonusKobo, // Initial gift to see how it works
     'config.adminPin': hashedPin,
     'config.bankDetails': finalConfig.bankDetails,
     'config.systemPrompt': finalConfig.systemPrompt,
     systemPrompt: finalConfig.systemPrompt,
+    isActive: true, // Ensure it's active now
     updatedAt: FieldValue.serverTimestamp()
   });
+
+  // Increment network stats to reflect the new user and the gifted kobo
+  await incrementNetworkStats({ clientDelta: 1, koboDelta: bonusKobo });
 }
 
 /**
@@ -237,11 +247,23 @@ export async function deleteKnowledge(orgId: string, key: string): Promise<void>
 /**
  * Saves or updates a product in the structured catalog.
  */
-export async function saveProduct(orgId: string, id: string, data: { name: string; price: number; stock?: number; category?: string; imageUrl?: string }): Promise<void> {
-  await orgsRef.doc(orgId).collection('products').doc(id).set({
-    ...data,
-    updatedAt: FieldValue.serverTimestamp(),
-  }, { merge: true });
+export async function saveProduct(orgId: string, id: string, data: { 
+  name?: string; 
+  price?: number; 
+  stock?: number; 
+  category?: string; 
+  imageUrl?: string;
+  lowStockThreshold?: number;
+}): Promise<void> {
+  const updateData: any = { ...data, updatedAt: FieldValue.serverTimestamp() };
+  
+  // 🛡️ [PHASE 7.1]: Auto-flag low stock for O(1) indexed querying
+  if (data.stock !== undefined) {
+    const threshold = data.lowStockThreshold ?? 3;
+    updateData.isLowStock = data.stock <= threshold;
+  }
+
+  await orgsRef.doc(orgId).collection('products').doc(id).set(updateData, { merge: true });
 }
 
 /**
@@ -250,8 +272,6 @@ export async function saveProduct(orgId: string, id: string, data: { name: strin
 export async function searchProducts(orgId: string, query: string, limit = 5): Promise<any[]> {
   const normalizedQuery = query.toLowerCase();
   
-  // Basic search: Find items where name starts with query (normalized)
-  // For a real production system, Algolia or ElasticSearch is recommended for fuzzy search
   const snapshot = await orgsRef.doc(orgId).collection('products')
     .where('name', '>=', query)
     .where('name', '<=', query + '\uf8ff')
@@ -266,6 +286,46 @@ export async function searchProducts(orgId: string, query: string, limit = 5): P
  */
 export async function deleteProduct(orgId: string, productId: string): Promise<void> {
   await orgsRef.doc(orgId).collection('products').doc(productId).delete();
+}
+
+/**
+ * Atomically decrements stock for a product.
+ * Returns the new stock level.
+ */
+export async function decrementStock(orgId: string, productId: string, quantity: number): Promise<number> {
+  const productRef = orgsRef.doc(orgId).collection('products').doc(productId);
+  
+  return await db.runTransaction(async (t) => {
+    const doc = await t.get(productRef);
+    if (!doc.exists) throw new Error('PRODUCT_NOT_FOUND');
+    
+    const data = doc.data();
+    const currentStock = data?.stock ?? 0;
+    const newStock = Math.max(0, currentStock - quantity);
+    
+    // Update low stock flag atomically
+    const threshold = data?.lowStockThreshold ?? 3;
+    
+    t.update(productRef, { 
+      stock: newStock,
+      isLowStock: newStock <= threshold,
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    
+    return newStock;
+  });
+}
+
+/**
+ * Fetches products that are below their low-stock threshold.
+ * Uses O(1) indexed query (isLowStock flag).
+ */
+export async function getLowStockItems(orgId: string): Promise<any[]> {
+  const snapshot = await orgsRef.doc(orgId).collection('products')
+    .where('isLowStock', '==', true)
+    .get();
+  
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
 
 /**
@@ -344,18 +404,19 @@ export async function createTenant(data: {
 }): Promise<void> {
   const hashedPin = await bcrypt.hash('1234', 10);
   const bridgeSecret = crypto.randomBytes(16).toString('hex'); // 32 chars for SMS bridge auth
+  const bonusKobo = 50000; // 500.00 NGN starting bonus
 
   await orgsRef.doc(data.id).set({
     ...data,
     isActive: true,
-    balance: 100000, // Starting bonus: 1000.00 NGN
+    balance: bonusKobo, 
     currency: 'NGN',
     costPerReply: 2000,
     config: {
       tools: ['web_search'],
       model: 'gemini-2.5-flash',
       adminPin: hashedPin,
-      bridgeSecret, // Phase 5.8: Tenant-specific bridge auth
+      bridgeSecret, 
       useSmsBridge: true
     },
     createdAt: FieldValue.serverTimestamp(),
@@ -363,7 +424,7 @@ export async function createTenant(data: {
   });
 
   // Increment network stats
-  await incrementNetworkStats({ clientDelta: 1, koboDelta: 100000 });
+  await incrementNetworkStats({ clientDelta: 1, koboDelta: bonusKobo });
 }
 
 /**
@@ -547,6 +608,31 @@ export async function getNetworkStats(): Promise<any> {
     activeClients: meta.activeClients,
     totalVaultKobo: meta.totalVaultKobo,
     clients
+  };
+}
+
+/**
+ * Calculates anonymized sales benchmarks for the network.
+ */
+export async function getNetworkHealthInsight(dateStr: string): Promise<{ avgSalesKobo: number, totalActiveBots: number }> {
+  const snapshot = await db.collectionGroup('daily_snapshots')
+    .where('updatedAt', '>', Timestamp.fromDate(new Date(Date.now() - 48 * 60 * 60 * 1000))) // Simple heuristic: recent snapshots
+    .get();
+
+  let totalSales = 0;
+  let count = 0;
+
+  // Manual filter for date because collectionGroup where ID is dateStr is tricky without full path
+  snapshot.forEach(doc => {
+    if (doc.id === dateStr) {
+      totalSales += (doc.data().totalSalesKobo || 0);
+      count++;
+    }
+  });
+
+  return {
+    avgSalesKobo: count > 0 ? Math.round(totalSales / count) : 0,
+    totalActiveBots: count
   };
 }
 
@@ -768,7 +854,7 @@ export async function getUpcomingBookingsForReminders(orgId: string, minInFuture
 
   // Filter out those that already got a reminder (Firestore index limitation for nulls)
   return snapshot.docs
-    .map(doc => ({ id: doc.id, ...doc.data() }))
+    .map(doc => ({ id: doc.id, ...doc.data() } as any))
     .filter(b => !b.metadata?.reminderSentAt);
 }
 
@@ -974,6 +1060,49 @@ export async function checkFraud(phone: string): Promise<{ phone: string, reason
 /**
  * Atomically adds an item to a user's cart after checking stock levels.
  */
+/**
+ * Finds carts updated between 30 and 120 minutes ago that haven't been nudged.
+ * Uses O(1) indexed query (isCartActive flag).
+ */
+export async function getAbandonedCarts(maxAgeMinutes: number = 120, minAgeMinutes: number = 30) {
+  const now = Date.now();
+  const minAge = new Date(now - minAgeMinutes * 60 * 1000);
+  const maxAge = new Date(now - maxAgeMinutes * 60 * 1000);
+
+  // 🛡️ [PHASE 7.1]: Optimized indexed query instead of full scan
+  const snapshot = await chatsRef
+    .where('isCartActive', '==', true)
+    .where('lastCartUpdateAt', '<=', Timestamp.fromDate(minAge))
+    .where('lastCartUpdateAt', '>=', Timestamp.fromDate(maxAge))
+    .get();
+
+  const abandoned: any[] = [];
+
+  for (const chatDoc of snapshot.docs) {
+    const chatData = chatDoc.data();
+    
+    // Check if we already nudged this specific session
+    if (chatData.lastNudgeAt) {
+       const lastNudge = (chatData.lastNudgeAt as Timestamp).toDate().getTime();
+       if (now - lastNudge < 12 * 60 * 60 * 1000) continue; // Only nudge once every 12 hours
+    }
+
+    const orgId = chatData.organizationId;
+    const userPhone = chatData.whatsappUserId;
+    abandoned.push({ orgId, userPhone, chatId: chatDoc.id });
+  }
+  return abandoned;
+}
+
+/**
+ * Marks a chat as nudged to prevent spamming the customer.
+ */
+export async function markCartNudged(chatId: string) {
+  await chatsRef.doc(chatId).update({
+    lastNudgeAt: FieldValue.serverTimestamp()
+  });
+}
+
 export async function addToCart(
   orgId: string, 
   userPhone: string, 
@@ -981,7 +1110,8 @@ export async function addToCart(
   quantity: number
 ): Promise<{ success: boolean; message: string }> {
   const productRef = orgsRef.doc(orgId).collection('products').doc(productId);
-  const cartItemRef = chatsRef.doc(`${orgId}_${userPhone}`).collection('cart').doc(productId);
+  const chatId = `${orgId}_${userPhone}`;
+  const cartItemRef = chatsRef.doc(chatId).collection('cart').doc(productId);
 
   try {
     return await db.runTransaction(async (t) => {
@@ -989,7 +1119,7 @@ export async function addToCart(
       if (!productDoc.exists) return { success: false, message: 'PRODUCT_NOT_FOUND' };
       
       const productData = productDoc.data();
-      const currentStock = productData?.stock ?? 9999; // Assume infinite if not set
+      const currentStock = productData?.stock ?? 9999; 
 
       if (currentStock < quantity) {
         return { success: false, message: `INSUFFICIENT_STOCK: Only ${currentStock} left.` };
@@ -1001,10 +1131,16 @@ export async function addToCart(
       t.set(cartItemRef, {
         productId,
         name: productData?.name,
-        price: productData?.price, // Price at time of adding
+        price: productData?.price, 
         quantity: currentCartQty + quantity,
         addedAt: FieldValue.serverTimestamp()
       }, { merge: true });
+
+      // 🛡️ [PHASE 7.1]: Set indexed flag on parent chat for abandonment tracking
+      t.update(chatsRef.doc(chatId), {
+        isCartActive: true,
+        lastCartUpdateAt: FieldValue.serverTimestamp()
+      });
 
       return { success: true, message: 'ADDED' };
     });
@@ -1023,7 +1159,9 @@ export async function removeFromCart(
   productId: string, 
   quantity?: number // If null, remove the whole item
 ): Promise<{ success: boolean; message: string }> {
-  const cartItemRef = chatsRef.doc(`${orgId}_${userPhone}`).collection('cart').doc(productId);
+  const chatId = `${orgId}_${userPhone}`;
+  const chatRef = chatsRef.doc(chatId);
+  const cartItemRef = chatRef.collection('cart').doc(productId);
 
   try {
     return await db.runTransaction(async (t) => {
@@ -1034,12 +1172,20 @@ export async function removeFromCart(
 
       if (!quantity || currentQty <= quantity) {
         t.delete(cartItemRef);
+        
+        // Check if cart is now empty to clear flag
+        const remainingItems = await t.get(chatRef.collection('cart').limit(1));
+        if (remainingItems.empty) {
+          t.update(chatRef, { isCartActive: false });
+        }
+
         return { success: true, message: 'REMOVED_ENTIRELY' };
       } else {
         t.update(cartItemRef, { 
           quantity: currentQty - quantity,
           updatedAt: FieldValue.serverTimestamp()
         });
+        t.update(chatRef, { lastCartUpdateAt: FieldValue.serverTimestamp() });
         return { success: true, message: 'QUANTITY_REDUCED' };
       }
     });
@@ -1072,13 +1218,19 @@ export async function getCart(orgId: string, userPhone: string): Promise<{ items
  * Clears the user's cart session.
  */
 export async function clearCart(orgId: string, userPhone: string): Promise<void> {
-  const cartRef = chatsRef.doc(`${orgId}_${userPhone}`).collection('cart');
+  const chatId = `${orgId}_${userPhone}`;
+  const chatRef = chatsRef.doc(chatId);
+  const cartRef = chatRef.collection('cart');
   const snapshot = await cartRef.get();
   
   const batch = db.batch();
   snapshot.docs.forEach(doc => {
     batch.delete(doc.ref);
   });
+  
+  // Clear indexed flag
+  batch.update(chatRef, { isCartActive: false, lastCartUpdateAt: FieldValue.serverTimestamp() });
+  
   await batch.commit();
 }
 
@@ -1094,6 +1246,7 @@ export async function findOrCreateChat(orgId: string, userPhone: string, userNam
       whatsappUserId: userPhone,
       userName,
       isOptedOut: false, // Default
+      isCartActive: false, // Default
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });

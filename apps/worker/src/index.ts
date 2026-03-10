@@ -145,16 +145,36 @@ const worker = new Worker<JobData>(
       const dateStr = formatInTimeZone(yesterday, lagosTimeZone, 'yyyy-MM-dd');
 
       try {
+        const { getLowStockItems, getNetworkHealthInsight } = await import('@naija-agent/firebase');
         const stats = await getOrgDailyStats(org.id, dateStr);
         const balanceNaira = (org.balance || 0) / 100;
+        const lowStockItems = await getLowStockItems(org.id);
+        const networkInsight = await getNetworkHealthInsight(dateStr);
 
-        const reportMessage = `☀️ *Oga, Good Morning!*\n\n` +
+        let reportMessage = `☀️ *Oga, Good Morning!*\n\n` +
           `Here is your ${org.name} summary for yesterday (*${dateStr}*):\n\n` +
           `💰 *Sales:* ₦${(stats.salesKobo / 100).toLocaleString()}\n` +
           `📝 *Pending Activities:* ${stats.pendingActivities}\n` +
-          `💳 *Bot Balance:* ₦${balanceNaira.toLocaleString()}\n\n` +
-          `I am ready for another productive day! Any instruction for me?`;
+          `💳 *Bot Balance:* ₦${balanceNaira.toLocaleString()}\n\n`;
 
+        if (lowStockItems.length > 0) {
+          const itemList = lowStockItems.map(p => `- ${p.name} (*Only ${p.stock} left*)`).join('\n');
+          reportMessage += `📦 *RESTOCK ALERT:*\n${itemList}\n\n`;
+        }
+
+        // 🏰 [NETWORK EFFECT]: Anonymized Empire Benchmark
+        if (networkInsight.totalActiveBots >= 3) {
+           const avgSalesNaira = networkInsight.avgSalesKobo / 100;
+           const mySalesNaira = stats.salesKobo / 100;
+           
+           if (mySalesNaira > avgSalesNaira) {
+              reportMessage += `🏆 *Network Insight:* Oga, your sales were *above the network average* yesterday! Keep crushing it.\n\n`;
+           } else {
+              reportMessage += `📈 *Network Insight:* Sales are steady across the Empire. Today is a great day to run a promo!\n\n`;
+           }
+        }
+
+        reportMessage += `I am ready for another productive day! Any instruction for me?`;
         // Dynamic token lookup for multi-tenant outbound
         if (org.config?.whatsappToken) {
            tenantWhatsAppService = new WhatsAppService(org.config.whatsappToken, org.whatsappPhoneId);
@@ -166,6 +186,44 @@ const worker = new Worker<JobData>(
       } catch (e: any) {
         console.error(`❌ [DAILY REPORT] Failed for ${org.id}:`, e.message);
         throw e; // Retry
+      }
+      return { success: true };
+    }
+
+    // --- Special Job: Master Network Report (Sovereign Empire Pulse) ---
+    if (job.name === 'master-report') {
+      const { getNetworkStats } = await import('@naija-agent/firebase');
+      const masterPhone = process.env.MASTER_ADMIN_PHONE;
+      const masterToken = process.env.WHATSAPP_API_TOKEN;
+      const masterPhoneId = process.env.WHATSAPP_PHONE_ID;
+
+      if (!masterPhone || !masterToken || !masterPhoneId) {
+        console.warn('⚠️ [MASTER REPORT] Missing Master Admin credentials in env. Skipping.');
+        return { success: true };
+      }
+
+      try {
+        const stats = await getNetworkStats();
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const dateStr = yesterday.toISOString().split('T')[0];
+
+        const activeBots = stats.clients.filter((c: any) => c.isActive).length;
+
+        const empireMessage = `🏰 *SOVEREIGN MORNING REPORT*\n\n` +
+          `Date: *${dateStr}*\n\n` +
+          `🏦 *Vault Balance:* ₦${(stats.totalVaultKobo / 100).toLocaleString()}\n` +
+          `🤖 *Active Bots:* ${activeBots}\n` +
+          `📈 *Clients:* ${stats.clients.length}\n\n` +
+          `The Empire is growing, Oga Boss!`;
+
+        const masterWhatsAppService = new WhatsAppService(masterToken, masterPhoneId);
+        await masterWhatsAppService.sendText(masterPhone, empireMessage);
+        
+        console.log(`✅ [MASTER REPORT] Sent Sovereign pulse to Oga Boss.`);
+      } catch (e: any) {
+        console.error(`❌ [MASTER REPORT] Failed:`, e.message);
+        throw e;
       }
       return { success: true };
     }
@@ -244,6 +302,63 @@ const worker = new Worker<JobData>(
           await new Promise(r => setTimeout(r, 5000)); 
         } catch (e: any) {
           console.error(`❌ [NUDGE] Failed for booking ${booking.id}:`, e.message);
+        }
+      }
+      return { success: true };
+    }
+
+    // --- Special Job: Abandoned Cart Recovery (Phase 7) ---
+    if (job.name === 'hourly-cart-recovery') {
+      console.log(`🛒 [CART RECOVERY] Starting global scan...`);
+      const { getAbandonedCarts, markCartNudged, checkTransaction } = await import('@naija-agent/firebase');
+      
+      const abandoned = await getAbandonedCarts();
+      console.log(`🛒 [CART RECOVERY] Found ${abandoned.length} potential abandoned carts.`);
+
+      for (const cart of abandoned) {
+        try {
+          const org = await getOrgById(cart.orgId);
+          if (!org || !org.isActive) continue;
+
+          // 🛡️ [RED TEAM]: Check if they actually paid in the last 2 hours 
+          // (Avoid nudging someone who already finished the order via a different session)
+          const db = (await import('@naija-agent/firebase')).getDb();
+          const recentPayments = await db.collection('organizations').doc(cart.orgId)
+            .collection('transactions')
+            .where('from', '==', cart.userPhone)
+            .where('status', '==', 'success')
+            .where('timestamp', '>=', new Date(Date.now() - 2 * 60 * 60 * 1000))
+            .get();
+
+          if (!recentPayments.empty) {
+            console.log(`⏭️ [CART RECOVERY] User ${cart.userPhone} already paid. Skipping nudge.`);
+            await markCartNudged(cart.chatId); // Mark so we don't scan again
+            continue;
+          }
+
+          // 💰 [FINANCIAL GUARD]: Check merchant balance (Nudge costs 10.00 NGN)
+          const nudgeCost = 1000; 
+          if ((org.balance || 0) < nudgeCost) {
+            console.warn(`💰 [CART RECOVERY] Merchant ${org.id} has low balance. Skipping nudge.`);
+            continue;
+          }
+
+          // Dynamic token lookup
+          if (org.config?.whatsappToken) {
+            tenantWhatsAppService = new WhatsAppService(org.config.whatsappToken, org.whatsappPhoneId);
+          }
+
+          const nudgeMsg = `👋 *Oga, I see say you leave items for cart!*\n\nYou still wan buy am? Just reply "Checkout" make I process am for you sharp-sharp. 🛍️`;
+          
+          await tenantWhatsAppService.sendText(cart.userPhone, nudgeMsg);
+          await markCartNudged(cart.chatId);
+          await (await import('@naija-agent/firebase')).deductBalance(cart.orgId, nudgeCost);
+          await logSystemEvent(cart.orgId, 'CART_RECOVERY_NUDGE', `Sent nudge to ${cart.userPhone}`);
+          
+          console.log(`✅ [CART RECOVERY] Sent nudge to ${cart.userPhone} for ${org.name}`);
+          await new Promise(r => setTimeout(r, 5000)); // Jitter
+        } catch (e: any) {
+          console.error(`❌ [CART RECOVERY] Failed for chat ${cart.chatId}:`, e.message);
         }
       }
       return { success: true };
@@ -411,7 +526,7 @@ const worker = new Worker<JobData>(
                       systemPrompt: prompt
                   });
                   
-                  reply = `🎉 *SETUP COMPLETE!*\n\nI am now the ${tone} Apprentice for *${nextData.name}*.\n\nBoss, I am ready to work! But right now, *my shop is empty*. 📦\n\nPlease tell me your prices so I can start selling (e.g. type: "Save price of Bread to ₦1000").\n\nHow can I help you today?`;
+                  reply = `🎉 *SETUP COMPLETE!*\n\nI am now the ${tone} Apprentice for *${nextData.name}*.\n\n🎁 *Oga Boss, I have gifted you ₦500.00 in AI credits* so you can see how I work! \n\n*Here is how I will help your business grow:* \n\n1. 💰 *I handle Sales:* I can take orders and manage a cart for your customers.\n2. ✅ *I verify Payments:* If you use the SMS Bridge, I confirm bank alerts instantly. No more fake alerts!\n3. 📊 *I am your Manager:* I will send you a *Morning Report* every 8 AM so you know exactly what happened yesterday.\n4. 🛡️ *I guard your Shop:* I block known scammers and never quote a price you haven't approved.\n5. 🤝 *I handle your Staff:* You can authorize your riders or assistants to work with me.\n\nBoss, I am ready! But right now, *my shop is empty*. 📦\n\n*Start now:* Tell me your prices (e.g. type: "Save price of Bread to ₦1000") or ask me "How do I add a rider?"`;
                   nextStep = 'COMPLETE';
               }
           }
@@ -457,35 +572,50 @@ const worker = new Worker<JobData>(
       let systemPrompt = "";
       if (isManager) {
         const isAuth = isAdmin ? await verifyAdminSession(orgId, from) : true;
-        
-        systemPrompt = `You are the Business Manager for ${org.name}. You are talking to your ${isAdmin ? 'BOSS' : 'COLLEAGUE (' + staffData.role + ')'}.
-        
+
+        systemPrompt = `You are the Smart Digital Apprentice for ${org.name}. You are talking to your ${isAdmin ? 'BOSS' : 'COLLEAGUE (' + staffData.role + ')'}.
+
+        [YOUR MISSION]:
+        Your goal is to make the business run smoothly without the Boss stressing. You manage the shop, verify alerts, and handle staff.
+
+        [KNOWLEDGE MANAGEMENT]:
+        - You handle "Knowledge" (Prices, Rules, Business Facts) like a pro.
+        - If the Boss tells you a new price or rule, use 'save_knowledge' to remember it forever.
+        - Always double-check your current knowledge before answering customers.
+
         [SECURITY]:
         Admin Status: ${isAdmin ? (isAuth ? 'AUTHENTICATED' : 'LOCKED') : 'STAFF_AUTHORIZED'}.
-        ${isAdmin ? "If Status is LOCKED, you MUST ask the Boss for their PIN." : ""}
+        ${isAdmin ? "If Status is LOCKED, you MUST ask the Boss for their PIN before performing Admin tasks." : ""}
 
         [MANAGEMENT TOOLS]:
         - Use 'manage_activity' to update Waybills (Logistics), Bookings, or Orders.
-        - Staff Role: ${isStaff ? staffData.role : 'owner'}.
-        
-        [ADMIN ONLY TOOLS]:
-        - Use 'authorize_staff' to add new riders/assistants.
-        - Use 'deactivate_staff' to remove staff access.
-        - Use 'save_knowledge' to update prices/policies.
-        
-        Current Knowledge:\n${knowledgeContext || 'Empty'}`;
+        - Use 'authorize_staff' to add new riders or assistants.
+        - Use 'save_knowledge' to update prices or business policies.
+
+        [PROACTIVE PULSE]:
+        - Tell the Boss you send a "Morning Pulse" report every 8 AM.
+        - Remind the Boss that you verify Bank alerts if they use the SMS Bridge.
+
+        Current Knowledge:\n${knowledgeContext || 'Empty - Please tell me your prices so I can start selling!'}`;
       } else {
         systemPrompt = org.systemPrompt || "You are a helpful sales assistant.";
-        systemPrompt += `\n\n[BUSINESS KNOWLEDGE]: Use these facts for the customer:\n${knowledgeContext || 'No specific facts yet.'}`;
-        
-        systemPrompt += `\n\n[AI JUDGMENT & WISDOM]: 
-        1. SECTOR FLEXIBILITY: If the business is Logistics, handle Waybill requests. If it's Service-based, handle Appointment Bookings.
-        2. ESCALATION: Use 'escalate_to_boss' for high-value deals or complex issues.
-        3. ACCURACY: Use the provided Knowledge Base strictly. If unsure, escalate.
-        4. PRICE GUARD: You are strictly FORBIDDEN from quoting any price unless you have successfully called 'search_products' in this current turn. If the product is not in the database, do NOT guess the price.`;
+
+        systemPrompt += `\n\n[YOUR PURPOSE & MISSION]:
+        You are the dedicated Digital Apprentice for ${org.name}. Your primary mission is to:
+        1. 📈 *Close Sales:* Help customers find products, explain prices, and manage their carts.
+        2. 🚚 *Provide Support:* Track waybills, manage bookings, and solve problems without stressing the Boss.
+        3. 🤝 *Build Trust:* Be professional, accurate, and respect the customer's time.
+
+        [BUSINESS KNOWLEDGE]: Use these facts for the customer:\n${knowledgeContext || 'No specific facts yet.'}
+
+        [AI JUDGMENT & WISDOM]: 
+        1. SECTOR FLEXIBILITY: You are sector-agnostic. If the context is Logistics, you are a dispatcher. If it is Retail, you are a shop manager. If it is Service, you are a receptionist.
+        2. PRICE GUARD: You are strictly FORBIDDEN from quoting any price unless you have successfully called 'search_products' in this current turn. If the product is not in the database, do NOT guess the price.
+        3. ESCALATION: Use 'escalate_to_boss' only for high-value deals (e.g., > ₦50,000) or if a customer is genuinely angry.
+        4. CART FOCUS: Always encourage customers to "Add to Cart" when they show interest in a product.`;
 
         if (tenantPaymentProvider) {
-          systemPrompt += `\n\n[PAYMENT]: Use 'verify_transaction' for receipts.`;
+          systemPrompt += `\n\n[PAYMENT]: You can verify receipts using 'verify_transaction'. Inform customers they can pay into the provided bank details.`;
         }
       }
 
@@ -633,11 +763,15 @@ const worker = new Worker<JobData>(
       // 5. Call Gemini
       const isAuth = isAdmin ? await verifyAdminSession(orgId, from) : false;
 
+      const balanceContext = isManager 
+        ? `\n\n[CONTEXT] Current Business Credit Balance: ${balance} kobo (Note: 100 kobo = 1 Naira).\nAdmin Auth Status: ${isAdmin ? (isAuth ? 'AUTHENTICATED' : 'LOCKED') : 'STAFF_AUTHORIZED'}`
+        : "";
+
       const chatSession = model.startChat({
         history: [
           {
             role: "user",
-            parts: [{ text: `System Instruction: ${systemPrompt}\n\n[CONTEXT] Current Business Credit Balance: ${balance} kobo (Note: 100 kobo = 1 Naira).\nAdmin Auth Status: ${isAuth ? 'AUTHENTICATED' : 'LOCKED'}` }],
+            parts: [{ text: `System Instruction: ${systemPrompt}${balanceContext}` }],
           },
           {
             role: "model",
@@ -744,9 +878,11 @@ const worker = new Worker<JobData>(
       }
 
       if (!isAdmin) {
-        let imageSent = false;
+        let imagesSentCount = 0;
+        const maxImagesPerTurn = 3;
+
         for (const call of functionCalls || []) {
-          if (imageSent) break; // Limit to ONE image per turn to prevent spam/cost explosions
+          if (imagesSentCount >= maxImagesPerTurn) break; 
 
           const response = functionResponses.find(r => (r as any).functionResponse.name === call.name);
           const data = (response as any)?.functionResponse?.response?.data;
@@ -754,47 +890,64 @@ const worker = new Worker<JobData>(
           try {
             // Case 1: Search Products Result
             if (call.name === 'search_products' && Array.isArray(data)) {
-              const firstProductWithImage = data.find(p => p.imageUrl);
-              if (firstProductWithImage) {
+              // Find all products with images, up to the remaining limit
+              const productsWithImages = data.filter(p => p.imageUrl).slice(0, maxImagesPerTurn - imagesSentCount);
+              
+              for (const product of productsWithImages) {
                  // --- Additional Financial Check: Image Cost ---
-                 const imageCost = org.costPerImage || Math.floor(costPerReply * 1.5); // Default 1.5x of reply cost
+                 const imageCost = org.costPerImage || Math.floor(costPerReply * 1.5); 
                  const deductResult = await deductBalance(orgId, imageCost);
                  
                  if (deductResult !== null) {
                     try {
-                      console.log(`🖼️ [VISUAL] Deducted ${imageCost} kobo for product image.`);
-                      await tenantWhatsAppService.sendImage(from, firstProductWithImage.imageUrl, `*${firstProductWithImage.name}* - ₦${firstProductWithImage.price.toLocaleString()}`);
-                      imageSent = true;
+                      console.log(`🖼️ [VISUAL] Deducted ${imageCost} kobo for product image: ${product.name}`);
+                      await tenantWhatsAppService.sendImage(from, product.imageUrl, `*${product.name}* - ₦${product.price.toLocaleString()}`);
+                      imagesSentCount++;
                     } catch (sendError) {
                       console.error(`❌ Visual send failed for ${orgId}. Refunding image cost.`);
-                      await addBalance(orgId, imageCost); // ATOMIC REFUND
-                      throw sendError; // Pass to outer catch for logging
+                      await addBalance(orgId, imageCost); 
                     }
                  } else {
                     console.warn(`💰 [LOW BALANCE] Skipping visual reply for ${orgId} - Insufficient balance for image.`);
+                    break; // Stop if balance is too low
                  }
               }
             }
             
             // Case 2: Save Knowledge / General Fact with Image
-            if (call.name === 'save_knowledge' && (call.args as any).imageUrl) {
+            if (call.name === 'save_knowledge' && (call.args as any).imageUrl && imagesSentCount < maxImagesPerTurn) {
                const imageCost = org.costPerImage || Math.floor(costPerReply * 1.5);
                const deductResult = await deductBalance(orgId, imageCost);
 
                if (deductResult !== null) {
                   try {
                     await tenantWhatsAppService.sendImage(from, (call.args as any).imageUrl, `Update: ${(call.args as any).key}`);
-                    imageSent = true;
+                    imagesSentCount++;
                   } catch (sendError) {
                     console.error(`❌ Visual knowledge send failed. Refunding.`);
                     await addBalance(orgId, imageCost);
-                    throw sendError;
+                  }
+               }
+            }
+
+            // Case 3: View Cart (Send images of items in cart)
+            if (call.name === 'view_cart' && Array.isArray(data) && imagesSentCount < maxImagesPerTurn) {
+               const itemsWithImages = data.filter(i => i.imageUrl).slice(0, maxImagesPerTurn - imagesSentCount);
+               for (const item of itemsWithImages) {
+                  const imageCost = org.costPerImage || Math.floor(costPerReply * 1.5);
+                  const deductResult = await deductBalance(orgId, imageCost);
+                  if (deductResult !== null) {
+                    try {
+                      await tenantWhatsAppService.sendImage(from, item.imageUrl, `🛒 In Cart: *${item.name}*`);
+                      imagesSentCount++;
+                    } catch (e) {
+                      await addBalance(orgId, imageCost);
+                    }
                   }
                }
             }
           } catch (imgError: any) {
             console.warn(`⚠️ Visual reply failed for ${call.name}, continuing with text:`, imgError.message);
-            // We do NOT throw here. We want the text reply to still go out.
           }
         }
       }
@@ -812,7 +965,17 @@ const worker = new Worker<JobData>(
          const hasAlerted = await redisClient.get(alertKey);
          if (!hasAlerted && org.config?.adminPhone) {
            console.warn(`⚠️ Low Balance Alert for ${orgId}`);
-           const lowBalanceMsg = `⚠️ *Low Balance Alert*\n\nOga, your account balance is low (₦${(newBalance/100).toLocaleString()}). Please top up to ensure uninterrupted service.`;
+           
+           let lowBalanceMsg = `⚠️ *Low Balance Alert*\n\nOga, your account balance is low (₦${(newBalance/100).toLocaleString()}). Please top up to ensure uninterrupted service.`;
+           
+           // Generate automatic refill link for 2k
+           if (tenantPaymentProvider) {
+              const refillLink = await tenantPaymentProvider.createPaymentLink(orgId, `${orgId}@naijaagent.core`, 2000);
+              if (refillLink) {
+                lowBalanceMsg += `\n\n*Quick Refill (₦2,000):*\n🔗 ${refillLink}`;
+              }
+           }
+
            await tenantWhatsAppService.sendText(org.config.adminPhone, lowBalanceMsg);
            await redisClient.setex(alertKey, 86400, '1');
          }

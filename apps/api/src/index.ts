@@ -576,71 +576,60 @@ fastify.get('/cron/daily-reports', async (request, reply) => {
     return reply.status(401).send('Unauthorized');
   }
 
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const dateStr = yesterday.toISOString().split('T')[0];
-
+  // 🛡️ [PHASE 5.20]: Stability Refactor
+  // Instead of doing the work in the API, we just trigger the per-org worker jobs.
   const orgs = await getActiveOrganizations();
-  console.log(`📡 [CRON] Generating reports for ${orgs.length} orgs for ${dateStr}`);
-
-  let totalSalesNGN = 0;
-  let activeBotCount = 0;
+  console.log(`📡 [CRON] Triggering morning pulse for ${orgs.length} orgs.`);
 
   for (const org of orgs) {
     if (!org.config?.adminPhone) continue;
     if (org.id === 'naija-agent-master') continue;
 
-    try {
-      const stats = await getOrgDailyStats(org.id, dateStr);
-      totalSalesNGN += (stats.salesKobo / 100);
-      activeBotCount++;
-
-      const balanceNaira = (org.balance || 0) / 100;
-
-      const reportMessage = `☀️ *Oga, Good Morning!*\n\n` +
-        `Here is your ${org.name} summary for yesterday (*${dateStr}*):\n\n` +
-        `💰 *Sales:* ₦${(stats.salesKobo / 100).toLocaleString()}\n` +
-        `📝 *Pending Activities:* ${stats.pendingActivities}\n` +
-        `💳 *Bot Balance:* ₦${balanceNaira.toLocaleString()}\n\n` +
-        `I am ready for another productive day! Any instruction for me?`;
-
-      const reportJob: JobData = {
-        type: 'text',
-        orgId: 'system', // Free message (System Outbound)
-        phoneId: org.whatsappPhoneId,
+    await whatsappQueue.add('daily-report', 
+      { 
+        orgId: org.id,
         from: org.config.adminPhone,
+        type: 'text',
         timestamp: Date.now(),
-        content: { text: reportMessage }
-      };
-
-      await whatsappQueue.add('process-message', reportJob, { removeOnComplete: true });
-    } catch (e: any) {
-      console.error(`❌ Failed to generate report for ${org.id}:`, e.message);
-    }
+        messageId: `cron_api_${Date.now()}`,
+        content: {}
+      }, 
+      { removeOnComplete: true }
+    );
   }
 
   // --- SOVEREIGN EMPIRE REPORT (PHASE 5.19) ---
   if (process.env.MASTER_ADMIN_PHONE) {
-      const networkStats = await getNetworkStats();
-      const empireMessage = `🏰 *SOVEREIGN MORNING REPORT*\n\n` +
-        `Date: *${dateStr}*\n\n` +
-        `💰 *Network Sales:* ₦${totalSalesNGN.toLocaleString()}\n` +
-        `🏦 *Vault Balance:* ₦${(networkStats.totalVaultKobo / 100).toLocaleString()}\n` +
-        `🤖 *Active Bots:* ${activeBotCount}\n\n` +
-        `The Empire is growing, Oga Boss!`;
-
-      const empireJob: JobData = {
-        type: 'text',
-        orgId: 'system',
-        phoneId: process.env.WHATSAPP_PHONE_ID || '',
-        from: process.env.MASTER_ADMIN_PHONE,
-        timestamp: Date.now(),
-        content: { text: empireMessage }
-      };
-      await whatsappQueue.add('process-message', empireJob, { removeOnComplete: true });
+      // For the Master report, we'll keep it simple in the API or move it to a special worker job.
+      // Since it's global stats, we'll just queue a 'master-report' and let the worker fetch them.
+      await whatsappQueue.add('master-report', {}, { removeOnComplete: true });
   }
 
-  return reply.send({ status: 'success', processed: orgs.length });
+  return reply.send({ status: 'success', triggered: orgs.length });
+});
+
+// 5. Cart Recovery Cron (GET)
+fastify.get('/cron/cart-recovery', async (request, reply) => {
+  const cronSecret = request.headers['x-cron-secret'];
+  
+  if (cronSecret !== process.env.CRON_SECRET) {
+    console.warn('❌ Unauthorized CRON attempt!');
+    return reply.status(401).send('Unauthorized');
+  }
+
+  const recoveryJob: JobData = {
+    type: 'text', // Dummy type
+    orgId: 'system',
+    phoneId: '',
+    from: 'system',
+    timestamp: Date.now(),
+    content: {}
+  };
+
+  await whatsappQueue.add('hourly-cart-recovery', recoveryJob, { removeOnComplete: true });
+  console.log('📡 [CRON] Triggered hourly cart recovery job.');
+  
+  return reply.send({ status: 'success' });
 });
 
 // Start Server

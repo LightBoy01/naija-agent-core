@@ -66,6 +66,8 @@ export const PaymentConfigSchema = z.object({
   publicKey: z.string().optional(),
 });
 
+export type PaymentConfig = z.infer<typeof PaymentConfigSchema>;
+
 export const ActivitySchema = z.object({
   id: z.string(),
   type: z.enum(['order', 'booking', 'waybill', 'donation']),

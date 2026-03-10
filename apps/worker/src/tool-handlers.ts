@@ -282,22 +282,75 @@ export async function handleToolCall(
       return { status: 'success', code: 'DELETED', key: args.key };
 
     case 'save_product':
-      await saveProduct(orgId, args.id, { 
-        name: args.name, 
-        price: args.price, 
-        stock: args.stock, 
-        category: args.category, 
-        imageUrl: args.imageUrl 
+      await saveProduct(orgId, args.id, {
+        name: args.name,
+        price: args.price,
+        stock: args.stock,
+        category: args.category,
+        imageUrl: args.imageUrl
       });
       return { status: 'success', code: 'SAVED', product: args.name };
 
-    case 'delete_product':
-      await deleteProduct(orgId, args.id);
+    case 'manage_stock':
+      const { decrementStock } = await import('@naija-agent/firebase');
+      let finalStock = 0;
+      if (args.action === 'set') {
+          await saveProduct(orgId, args.id, { stock: args.amount, lowStockThreshold: args.threshold } as any);
+          finalStock = args.amount;
+      } else if (args.action === 'add') {
+          await saveProduct(orgId, args.id, { stock: FieldValue.increment(args.amount), lowStockThreshold: args.threshold } as any);
+          // We don't have the current value easily without a read, but we can return success
+          return { status: 'success', message: `Added ${args.amount} to stock for ${args.productId}.` };
+      } else if (args.action === 'reduce') {
+          finalStock = await decrementStock(orgId, args.id, args.amount);
+      }
+      return { status: 'success', message: `Stock for ${args.productId} is now ${finalStock}.`, stock: finalStock };
+
+    case 'delete_product':      await deleteProduct(orgId, args.id);
       return { status: 'success', code: 'DELETED' };
 
     case 'search_products':
       const products = await searchProducts(orgId, args.query);
       return { status: 'success', data: products };
+
+    case 'get_shipping_rates':
+      const { getLogisticsProvider } = await import('@naija-agent/logistics');
+      const logisticsApiKey = orgConfig?.logistics?.apiKey || process.env.TERMINAL_AFRICA_API_KEY;
+      const logisticsType = orgConfig?.logistics?.provider || (logisticsApiKey ? 'terminal' : 'mock');
+      
+      const provider = getLogisticsProvider(logisticsType as any, logisticsApiKey);
+      const rates = await provider.getRates({
+        origin: args.origin,
+        destination: args.destination,
+        weightKg: args.weightKg
+      });
+
+      if (rates.length === 0) {
+        return { status: 'success', message: 'No shipping rates found for this route.' };
+      }
+
+      const rateSummary = rates.map(r => `🚚 *${r.provider}* (${r.service}): *₦${r.amount.toLocaleString()}* (${r.deliveryTime})`).join('\n');
+      return { status: 'success', data: rates, summary: `📦 *SHIPPING QUOTES:*\n\n${rateSummary}\n\nOga, which one you prefer?` };
+
+    case 'track_shipment':
+      const { getLogisticsProvider: getLogProvider } = await import('@naija-agent/logistics');
+      const trackApiKey = orgConfig?.logistics?.apiKey || process.env.TERMINAL_AFRICA_API_KEY;
+      const trackType = orgConfig?.logistics?.provider || (trackApiKey ? 'terminal' : 'mock');
+
+      const trackProvider = getLogProvider(trackType as any, trackApiKey);
+      const status = await trackProvider.track(args.trackingNumber);
+
+      if (!status) {
+        return { status: 'error', message: 'Tracking number not found.' };
+      }
+
+      const statusMsg = `📍 *TRACKING STATUS:* ${args.trackingNumber}\n\n` +
+        `🚩 *Status:* ${status.status.toUpperCase()}\n` +
+        `🏠 *Location:* ${status.location}\n` +
+        `📝 *Update:* ${status.description}\n` +
+        `🕒 *Time:* ${new Date(status.timestamp).toLocaleString()}`;
+
+      return { status: 'success', data: status, summary: statusMsg };
 
     case 'add_to_cart':
       const addResult = await (await import('@naija-agent/firebase')).addToCart(

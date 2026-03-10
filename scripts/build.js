@@ -10,8 +10,9 @@ async function build(appName, entryPath, outPath) {
   // CommonJS is more stable for bundling legacy dynamic requires 
   // found in bullmq and firebase-admin.
   const external = [
-    'bcrypt', 
-    'path', 'fs', 'os', 'crypto', 'child_process', 'http', 'https', 'zlib', 'events', 'util', 'stream', 'url', 'net', 'tls', 'dns', 'perf_hooks'
+    'bcrypt',
+    'path', 'fs', 'os', 'crypto', 'child_process', 'http', 'https',
+    'zlib', 'events', 'util', 'stream', 'url', 'net', 'tls', 'dns', 'perf_hooks'
   ];
 
   try {
@@ -21,15 +22,17 @@ async function build(appName, entryPath, outPath) {
       bundle: true,
       platform: 'node',
       target: 'node20',
-      format: 'cjs', 
+      format: 'cjs',
       sourcemap: true,
       logLevel: 'info',
       external: external,
+      // CRITICAL: Point to SOURCE instead of DIST to avoid the "dist/index.js not found" error
       alias: {
         '@naija-agent/types': path.resolve(process.cwd(), 'packages/types/src/index.ts'),
         '@naija-agent/firebase': path.resolve(process.cwd(), 'packages/firebase/src/index.ts'),
         '@naija-agent/payments': path.resolve(process.cwd(), 'packages/payments/src/index.ts'),
         '@naija-agent/storage': path.resolve(process.cwd(), 'packages/storage/src/index.ts'),
+        '@naija-agent/logistics': path.resolve(process.cwd(), 'packages/logistics/src/index.ts'),
       },
     });
     console.log(`✅ ${appName} built successfully!`);

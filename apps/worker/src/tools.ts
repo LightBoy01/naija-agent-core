@@ -13,6 +13,7 @@ export const BOSS_ONLY_TOOLS = [
   'deactivate_staff', 
   'save_product', 
   'delete_product',
+  'manage_stock',
   'set_bot_status',
   'generate_login_code',
   'topup_tenant',
@@ -129,6 +130,47 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
           instruction: { type: SchemaType.STRING, description: "Special instructions for the staff" }
         },
         required: ["staffPhone", "activityId"]
+      }
+    });
+
+    allFunctionDeclarations.push({
+      name: "get_shipping_rates",
+      description: "Gets real-time shipping quotes from carriers (Logistics/Retail).",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          origin: { type: SchemaType.STRING, description: "Origin City/Area" },
+          destination: { type: SchemaType.STRING, description: "Destination City/Area" },
+          weightKg: { type: SchemaType.NUMBER, description: "Weight in Kilograms" }
+        },
+        required: ["origin", "destination", "weightKg"]
+      }
+    });
+
+    allFunctionDeclarations.push({
+      name: "track_shipment",
+      description: "Gets live tracking status for a shipment using a tracking number.",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          trackingNumber: { type: SchemaType.STRING, description: "The tracking ID or waybill number" }
+        },
+        required: ["trackingNumber"]
+      }
+    });
+
+    allFunctionDeclarations.push({
+      name: "manage_stock",
+      description: "Updates the stock level for a product. (Requires Manager Auth)",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          productId: { type: SchemaType.STRING, description: "Unique ID (sku)" },
+          action: { type: SchemaType.STRING, enum: ['add', 'set', 'reduce'], description: "Action to take" },
+          amount: { type: SchemaType.NUMBER, description: "Quantity" },
+          threshold: { type: SchemaType.NUMBER, description: "Optional: Set new low-stock alert threshold" }
+        },
+        required: ["productId", "action", "amount"]
       }
     });
 
