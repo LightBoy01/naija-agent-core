@@ -967,6 +967,117 @@ export async function checkFraud(phone: string): Promise<{ phone: string, reason
   return doc.exists ? doc.data() as any : null;
 }
 
+/**
+ * Atomically adds an item to a user's cart after checking stock levels.
+ */
+export async function addToCart(
+  orgId: string, 
+  userPhone: string, 
+  productId: string, 
+  quantity: number
+): Promise<{ success: boolean; message: string }> {
+  const productRef = orgsRef.doc(orgId).collection('products').doc(productId);
+  const cartItemRef = chatsRef.doc(`${orgId}_${userPhone}`).collection('cart').doc(productId);
+
+  try {
+    return await db.runTransaction(async (t) => {
+      const productDoc = await t.get(productRef);
+      if (!productDoc.exists) return { success: false, message: 'PRODUCT_NOT_FOUND' };
+      
+      const productData = productDoc.data();
+      const currentStock = productData?.stock ?? 9999; // Assume infinite if not set
+
+      if (currentStock < quantity) {
+        return { success: false, message: `INSUFFICIENT_STOCK: Only ${currentStock} left.` };
+      }
+
+      const cartDoc = await t.get(cartItemRef);
+      const currentCartQty = cartDoc.exists ? cartDoc.data()?.quantity || 0 : 0;
+
+      t.set(cartItemRef, {
+        productId,
+        name: productData?.name,
+        price: productData?.price, // Price at time of adding
+        quantity: currentCartQty + quantity,
+        addedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      return { success: true, message: 'ADDED' };
+    });
+  } catch (e: any) {
+    console.error('Add to Cart Error:', e.message);
+    return { success: false, message: e.message };
+  }
+}
+
+/**
+ * Atomically removes an item (or reduces quantity) from a user's cart.
+ */
+export async function removeFromCart(
+  orgId: string, 
+  userPhone: string, 
+  productId: string, 
+  quantity?: number // If null, remove the whole item
+): Promise<{ success: boolean; message: string }> {
+  const cartItemRef = chatsRef.doc(`${orgId}_${userPhone}`).collection('cart').doc(productId);
+
+  try {
+    return await db.runTransaction(async (t) => {
+      const cartDoc = await t.get(cartItemRef);
+      if (!cartDoc.exists) return { success: false, message: 'ITEM_NOT_IN_CART' };
+
+      const currentQty = cartDoc.data()?.quantity || 0;
+
+      if (!quantity || currentQty <= quantity) {
+        t.delete(cartItemRef);
+        return { success: true, message: 'REMOVED_ENTIRELY' };
+      } else {
+        t.update(cartItemRef, { 
+          quantity: currentQty - quantity,
+          updatedAt: FieldValue.serverTimestamp()
+        });
+        return { success: true, message: 'QUANTITY_REDUCED' };
+      }
+    });
+  } catch (e: any) {
+    console.error('Remove from Cart Error:', e.message);
+    return { success: false, message: e.message };
+  }
+}
+
+/**
+ * Fetches all items in a user's cart and calculates the total.
+ */
+export async function getCart(orgId: string, userPhone: string): Promise<{ items: any[], totalKobo: number }> {
+  const cartSnapshot = await chatsRef.doc(`${orgId}_${userPhone}`).collection('cart').get();
+  
+  let totalKobo = 0;
+  const items: any[] = [];
+
+  cartSnapshot.forEach(doc => {
+    const data = doc.data();
+    const itemTotal = (data.price || 0) * (data.quantity || 0) * 100; // Convert to Kobo
+    totalKobo += itemTotal;
+    items.push({ id: doc.id, ...data });
+  });
+
+  return { items, totalKobo };
+}
+
+/**
+ * Clears the user's cart session.
+ */
+export async function clearCart(orgId: string, userPhone: string): Promise<void> {
+  const cartRef = chatsRef.doc(`${orgId}_${userPhone}`).collection('cart');
+  const snapshot = await cartRef.get();
+  
+  const batch = db.batch();
+  snapshot.docs.forEach(doc => {
+    batch.delete(doc.ref);
+  });
+  await batch.commit();
+}
+
 export async function findOrCreateChat(orgId: string, userPhone: string, userName: string): Promise<string> {
   // Composite Key strategy: orgId_userPhone
   const chatId = `${orgId}_${userPhone}`;

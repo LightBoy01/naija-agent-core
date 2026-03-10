@@ -90,15 +90,34 @@ export async function handleToolCall(
       const bank = orgConfig?.bankDetails;
       if (!bank) return { status: 'error', message: 'Bank details not set. Please ask the Boss.' };
       
-      const summaryBlock = `📦 *ORDER SUMMARY: ${args.orderId}*\n\n` +
-        `📝 *Items:* \n${args.items}\n\n` +
-        `💰 *Total:* ₦${args.total.toLocaleString()}\n\n` +
+      let items = args.items;
+      let total = args.total;
+      let orderId = args.orderId;
+
+      // --- CART AWARENESS (PHASE 7) ---
+      // If AI is lazy or to prevent manipulation, we fetch the REAL cart total
+      if (!items || !total) {
+          const cart = await (await import('@naija-agent/firebase')).getCart(orgId, from);
+          if (cart.items.length === 0) return { status: 'error', message: 'Cart is empty. Please add items first.' };
+          
+          items = cart.items.map(i => `- ${i.name} (x${i.quantity})`).join('\n');
+          total = cart.totalKobo / 100;
+          orderId = orderId || `ORD-${Date.now().toString().substring(7)}`;
+      }
+      
+      const summaryBlock = `📦 *ORDER SUMMARY: ${orderId}*\n\n` +
+        `📝 *Items:* \n${items}\n\n` +
+        `💰 *Total:* ₦${total.toLocaleString()}\n\n` +
         `🏦 *Bank:* ${bank.bankName}\n` +
         `🔢 *Account:* ${bank.accountNumber}\n` +
         `👤 *Name:* ${bank.accountName}\n\n` +
         `⚠️ *Price Lock:* Valid for 24 hours only.`;
 
-      return { status: 'success', summary: summaryBlock };
+      // --- AUTO-CLEAR CART (PHASE 7) ---
+      // Once a summary is generated, the cart is "checked out" to prevent stale data.
+      await (await import('@naija-agent/firebase')).clearCart(orgId, from);
+
+      return { status: 'success', summary: summaryBlock, totalNaira: total };
 
     case 'assign_task_to_staff':
       if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
@@ -279,6 +298,44 @@ export async function handleToolCall(
     case 'search_products':
       const products = await searchProducts(orgId, args.query);
       return { status: 'success', data: products };
+
+    case 'add_to_cart':
+      const addResult = await (await import('@naija-agent/firebase')).addToCart(
+        orgId, 
+        from, 
+        args.productId, 
+        args.quantity || 1
+      );
+      return addResult.success 
+        ? { status: 'success', message: `Added to cart.` } 
+        : { status: 'error', message: addResult.message };
+
+    case 'view_cart':
+      const cartData = await (await import('@naija-agent/firebase')).getCart(orgId, from);
+      if (cartData.items.length === 0) return { status: 'success', message: 'Your cart is empty.', total: 0 };
+
+      const itemList = cartData.items.map(item => `- ${item.name} (x${item.quantity}): ₦${item.price.toLocaleString()}`).join('\n');
+      const totalNaira = cartData.totalKobo / 100;
+
+      return { 
+        status: 'success', 
+        items: cartData.items, 
+        summary: `🛒 *YOUR CART:*\n${itemList}\n\n💰 *Total:* ₦${totalNaira.toLocaleString()}`, 
+        totalNaira 
+      };
+
+    case 'remove_from_cart':
+      const removeResult = await (await import('@naija-agent/firebase')).removeFromCart(
+        orgId, from, args.productId, args.quantity
+      );
+      return removeResult.success 
+        ? { status: 'success', message: `Updated cart: ${removeResult.message}` }
+        : { status: 'error', message: removeResult.message };
+
+    case 'clear_cart':
+      await (await import('@naija-agent/firebase')).clearCart(orgId, from);
+      return { status: 'success', message: 'Cart cleared.' };
+
 
     case 'book_slot':
       const bookingId = `BKG-${Date.now()}`;

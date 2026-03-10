@@ -114,3 +114,38 @@ If a single AI agent is to handle **Retail, Logistics, and Bookings** (The "Powe
 
 ### **Strategic Conclusion**
 By focusing on the **"Universal DNA"** (State Management, Financial Verification, and RBAC), we have already built a platform that can handle any of these 7 sectors individually or as a **Single Enterprise Suite.**
+
+---
+
+## 2026 Industry Standard Update (Strategic Prioritization)
+
+This section represents the refined industry standard for 2026, prioritizing features that drive immediate ROI and trust in the Nigerian market.
+
+### 1. Essential "Must-Have" Features (The Foundation)
+*   **Unified Commercial Engine:**
+    *   **Native Product Catalog & Cart:** Full browsing/selection without leaving WhatsApp.
+    *   **Secure Payment Integration:** Dynamic Paystack/Flutterwave links with webhook verification.
+    *   **In-Chat Invoicing:** Natural language to Professional PDF generation.
+*   **Operational Core:**
+    *   **Milestone Notifications (WISMO):** Proactive pushes ("Order Dispatched," "Delivered").
+    *   **Real-Time Calendar Sync:** Direct connection to Google/Outlook calendars.
+    *   **Triple-Reminder Strategy:** Automated nudges (24h, 2h, and 15m post-no-show).
+*   **AI & Communication:**
+    *   **Intent Detection & RAG:** Understanding phrasing + Document-grounded FAQs.
+    *   **Seamless Human Handoff:** Transfer to live team with full history.
+    *   **Low-Bandwidth Optimization:** Text-first, messages under 250 characters.
+
+### 2. "Nice-to-Have" Features (The Sophistication Layer)
+*   **Advanced Intelligence:** Localized LLM (Pidgin/Yoruba/Hausa/Igbo), AI Vision for bank alerts, and Predictive ETAs.
+*   **Enhanced Commercial Tools:** Abandoned Cart Recovery via Voice, Personal Shopper Recommendations, and WhatsApp Flows (interactive forms).
+*   **Internal & Data Operations:** Driver/Practitioner Live Bridge (direct connect), Intelligent Waitlist Management, and Post-Service NPS Collection.
+
+### Tiered BaaS Model Strategy
+| Tier | Section Focus | Included Features |
+|---|---|---|
+| **Standard** | Retail & Bookings | FAQ Bot, Calendar Sync, Paystack Links, Reminders. |
+| **Growth** | + Logistics | WISMO Notifications, Tracking API, Shared Team Inbox. |
+| **Custom** | All-in-One AI Agent | Local LLMs (Pidgin), AI Vision, RAG Knowledge Base, Voice Recovery. |
+
+---
+*Note: Compliance with the Nigeria Data Protection Act (NDPA) is mandatory for all production operations.*

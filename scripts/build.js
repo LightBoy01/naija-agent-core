@@ -22,6 +22,9 @@ async function build(appName, entryPath, outPath) {
       sourcemap: true,
       logLevel: 'info',
       external: external,
+      banner: {
+        js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
+      },
       // CRITICAL: Point to SOURCE instead of DIST to avoid the "dist/index.js not found" error
       alias: {
         '@naija-agent/types': path.resolve(process.cwd(), 'packages/types/src/index.ts'),

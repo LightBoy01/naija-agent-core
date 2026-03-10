@@ -142,6 +142,50 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
       }
     });
 
+    allFunctionDeclarations.push({
+      name: "add_to_cart",
+      description: "Adds a specific product to the customer's shopping cart. (Customer & Manager)",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          productId: { type: SchemaType.STRING, description: "The unique Product ID" },
+          quantity: { type: SchemaType.NUMBER, description: "Quantity to add (defaults to 1)" }
+        },
+        required: ["productId"]
+      }
+    });
+
+    allFunctionDeclarations.push({
+      name: "view_cart",
+      description: "Shows the current items in the shopping cart and the total amount. (Customer & Manager)",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {}
+      }
+    });
+
+    allFunctionDeclarations.push({
+      name: "clear_cart",
+      description: "Empties all items from the shopping cart. (Customer & Manager)",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {}
+      }
+    });
+
+    allFunctionDeclarations.push({
+      name: "remove_from_cart",
+      description: "Removes a specific product (or reduces quantity) from the customer's shopping cart. (Customer & Manager)",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          productId: { type: SchemaType.STRING, description: "The ID of the product to remove." },
+          quantity: { type: SchemaType.NUMBER, description: "The quantity to remove. If omitted, the entire item is removed." }
+        },
+        required: ["productId"]
+      }
+    });
+
     // Strictly Boss-Only Tools
     if (isAdmin) {
       allFunctionDeclarations.push(

@@ -706,6 +706,43 @@ const worker = new Worker<JobData>(
       await saveMessage(chatId, { role: 'assistant', content: responseText, type: 'text' });
 
       // 8. Visual-First Reply Strategy: Send image if product/knowledge found
+      let finalMessage = responseText;
+
+      // --- DETERMINISTIC PRICE GUARD (PHASE 7) ---
+      if (!isAdmin && !isStaff) {
+          const nairaRegex = /₦([\d,.]+)/g;
+          const quotedPrices = [...finalMessage.matchAll(nairaRegex)];
+          
+          if (quotedPrices.length > 0) {
+              // Collect all valid products found in this turn
+              const validProducts: any[] = [];
+              for (const response of functionResponses) {
+                 if ((response as any).functionResponse?.name === 'search_products') {
+                    const data = (response as any).functionResponse.response?.data;
+                    if (Array.isArray(data)) validProducts.push(...data);
+                 }
+              }
+
+              for (const match of quotedPrices) {
+                  const rawPriceStr = match[1].replace(/,/g, '');
+                  const quotedPrice = parseFloat(rawPriceStr);
+                  
+                  // Verification: Is this price in our valid products?
+                  const isValid = validProducts.some(p => Math.abs(p.price - quotedPrice) < 1); // 1 Naira tolerance
+                  
+                  if (!isValid) {
+                      console.warn(`🛡️ [PRICE GUARD] Hallucination detected! AI quoted ₦${quotedPrice} but no matching product found.`);
+                      // REDACTION: Replace the price with a placeholder to prevent fraud
+                      const replacement = "₦[Verification Pending]";
+                      finalMessage = finalMessage.replace(match[0], replacement);
+                      
+                      // Log this as a system event for the Boss to see
+                      await logSystemEvent(orgId, 'PRICE_GUARD_REDACTION', `Redacted hallucinated price: ₦${quotedPrice}`, { originalMessage: responseText });
+                  }
+              }
+          }
+      }
+
       if (!isAdmin) {
         let imageSent = false;
         for (const call of functionCalls || []) {
@@ -763,7 +800,6 @@ const worker = new Worker<JobData>(
       }
 
       // 9. Send Reply to WhatsApp (ONLY at the very end of a successful process)
-      let finalMessage = responseText;
       if (!isAdmin && !isStaff) {
           const masterBotPhone = process.env.MASTER_BOT_PHONE || '15550000000'; // Default to test number if not set
           finalMessage += `\n\n---\n_⚡ Powered by Naija Agent AI. Want your own Digital Apprentice? Click: wa.me/${masterBotPhone}?text=I_want_AI_for_my_business_`;
