@@ -20,24 +20,30 @@ We have built a system where you are the **Platform Sovereign**, not just a bot 
 *   **Control:** You give decrees to your Master Bot (COO). 
 *   **Revenue:** You collect the "Naija Agent Credit" payments from merchants.
 
-### Level 2: The Master Bot (The General)
-*   **Role:** Chief Operating Officer (COO).
-*   **Powers:** Automated onboarding (`create_tenant`), global broadcasting, and network-wide performance reporting.
-*   **Win:** You only interact with this bot to manage the entire empire.
+### Level 2: The Master Bot (The Sovereign's General)
+*   **Role:** Platform COO & Cashier.
+*   **Target:** You (The Sovereign).
+*   **Powers:** Automated onboarding (`create_tenant`), billing/top-ups (`topup_tenant`), and network-wide performance reporting.
+*   **Win:** You only interact with this bot to manage your entire business empire.
 
-### Level 3: The Tenant Bots (The Staff)
-*   **Role:** Sales and Support reps for thousands of businesses.
-*   **Powers:** Real-time knowledge training via their respective Bosses, receipt verification, and automated activity logging (Logistics/Appointments).
+### Level 3: The Client Bots (The Merchant's Digital COO)
+*   **Role:** Independent Business Manager.
+*   **Target:** The Merchant (Boss), their Staff (Riders/Assistants), and their Customers.
+*   **Powers:** Sales, automated receipt verification (Fake Alert Buster), sector-agnostic lifecycle management (Waybills/Orders), and **Proactive Operations** (Morning Reports/Reminders).
+*   **Win:** The Merchant interacts ONLY with their bot to run their shop; they never need to "log in" to a dashboard for daily work.
 
 ---
 
-## 3. The "Zero-Dashboard" Operating Model
+## 3. The "Zero-Dashboard" Operating Model & Daily Loop
 
-To scale, we removed the biggest barrier: **The Login Screen.**
+To scale, we removed the biggest barrier: **The Login Screen.** The Dashboard is for **Auditing (Looking Back)**, while WhatsApp is for **Action (Doing Now).**
 
-*   **WhatsApp-First Management:** Business owners train their AI, check stock, and audit waybills entirely through WhatsApp.
-*   **The PIN Handshake:** 4-digit security PINs ensure the Boss remains in control of their "Digital Staff."
-*   **Ephemeral-to-Persistent Memory:** Every receipt and voice note is archived in **Firebase Storage**, creating a permanent audit trail for the future Boss Dashboard.
+### The Merchant's "Zero-Dashboard" Daily Loop:
+1.  **8:00 AM (The Morning Report):** The Client Bot pings the Boss: *"Oga, yesterday you sold ₦X, your balance is ₦Y, and you have 3 deliveries pending today."*
+2.  **Afternoon (Sales & Verification):** The bot handles customer inquiries and verifies payments via Vision/Bridge without human intervention.
+3.  **On-Demand Management:** The Boss trains the AI ("Change price of Bread to ₦1k"), checks stock, or authorizes staff entirely through the chat using their 4-digit PIN.
+4.  **Evening (Handover):** The Boss tells the bot to pause for the night or provide a closing report.
+5.  **Refill:** When balance is low, the Boss chats with the **Master Bot** (The Cashier), pays via Paystack, and returns to their shop bot instantly.
 
 ---
 

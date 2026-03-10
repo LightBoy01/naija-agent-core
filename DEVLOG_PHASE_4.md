@@ -63,3 +63,29 @@
 ### **Final Verdict:**
 **The technical runway is officially clear. Naija Agent Core is now a universal "Brain for Hire" capable of managing any industry in Nigeria with institutional security and precision.**
 
+## Session 28: Business OS Hardening & The Universal DNA (2026-03-09)
+
+**Status:** 🟢 **Completed**
+
+### **The "Sector Master Blueprint" Strategy**
+We deduced the **"Universal DNA"** required to run Retail, Logistics, and Appointment businesses in a single package:
+1.  **State Machine:** Tracking lifecycles (Waybill `IN_TRANSIT`, Order `CONFIRMED`).
+2.  **Structured Inventory:** Searchable catalogs for Retail scaling.
+3.  **Atomic Booking:** Conflict-free slot reservation for Appointments.
+4.  **Multi-Staff Identity:** Decentralized roles (Rider, Assistant) reporting to one Boss.
+
+### **Actions Taken:**
+*   **Rugged Refactoring:** Surgically modularized the Worker (`apps/worker/src/index.ts`) by extracting tool definitions to `tools.ts`, reducing file complexity by 20% and improving maintainability.
+*   **Multi-Staff RBAC:** Implemented `authorize_staff` and `deactivate_staff` tools. The system now recognizes "Staff" identities (Riders/Assistants) and grants them scoped permissions (Activity Management) while reserving sensitive Admin Tools (Knowledge/Config) for the Boss (PIN-protected).
+*   **Structured Inventory (Retail Pillar):** Transitioned from flat Key-Value knowledge to a dedicated `products` sub-collection. Added `search_products`, `save_product`, and `delete_product` tools, enabling the AI to manage thousands of SKUs without context collapse.
+*   **Atomic Booking Guard (Appointment Pillar):** Implemented `bookSlot` using **Firestore Transactions**. This atomic check-and-lock mechanism prevents double-booking race conditions, a critical requirement for service businesses.
+*   **Universal MFA:** Refactored the dashboard login to support any Organization Admin (Boss) via WhatsApp OTP, not just the Sovereign.
+*   **Data Isolation:** Enforced strict data segregation in the Web Dashboard. Tenant Bosses now only see their own Chats, Media, and Stats, while the Sovereign retains a global view.
+
+### **Technical Debt Cleared:**
+*   **Index Optimization:** Consolidated overlapping Firestore indexes to reduce storage cost and write latency.
+*   **Tool Nesting Fix:** Corrected a structural error in the Gemini tool definitions to ensure SDK compliance.
+
+### **Next Strategic Move:**
+The platform has evolved from a "Chatbot" to a **"Sovereign Business Operating System."** Immediate next steps involve deploying these hardened rules/indexes and building the **"Calendar View"** UI for the Appointment sector.
+

@@ -12,8 +12,10 @@ export interface Transaction {
 }
 
 export interface PaymentProvider {
-  verify(reference: string, expectedAmount: number): Promise<Transaction | null>;
+  verify(reference: string, amount: number): Promise<Transaction | null>;
+  createPaymentLink(orgId: string, email: string, amountNaira: number): Promise<string | null>;
 }
+
 
 export class MockProvider implements PaymentProvider {
   async verify(reference: string, expectedAmount: number): Promise<Transaction | null> {

@@ -45,6 +45,36 @@ export class WhatsAppService {
     }
   }
 
+  // Send Image Message
+  async sendImage(to: string, imageUrl: string, caption?: string): Promise<string> {
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/${this.phoneId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          to: to,
+          type: 'image',
+          image: { 
+            link: imageUrl,
+            caption: caption 
+          },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.apiToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      const data = WhatsAppSendResponseSchema.parse(response.data);
+      return data.messages[0].id;
+    } catch (error: any) {
+      console.error('WhatsApp Send Image Error:', error.response?.data || error.message);
+      throw new Error('Failed to send WhatsApp image');
+    }
+  }
+
   // Download Media (Audio/Image)
   async downloadMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
     try {

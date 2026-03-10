@@ -69,8 +69,8 @@ The `manage_activity` tool allows the worker to transition between sectors:
 *   **Appointments:** Records Bookings.
 *   **Retail:** Records Orders.
 
-### 4.3 Quota-Aware Stability
-The Worker uses an **"Anti-Spam & Quota Guard"** pattern:
-*   `sendText` is moved to the absolute end of the process.
-*   If AI Quota (429) is hit, the job retries silently without bothering the user.
-*   Only successful end-to-end interactions result in a WhatsApp reply.
+### 4.4 Decentralized Proactivity (The "COO" Engine)
+To prevent the Master Bot from becoming a bottleneck, proactive tasks (Morning Reports/Reminders) are decentralized:
+*   **Infrastructure:** A BullMQ Cron Worker triggers a daily job at 8:00 AM for all active Organizations.
+*   **Context:** The job is pushed to the `whatsapp-queue` with the specific `orgId`.
+*   **Execution:** The Worker process retrieves the Org's unique `adminPhone` and `systemPrompt`, then uses the Client Bot's own identity to message the Boss. This ensures that every bot operates as an independent "Digital COO" within its own rate limits and context.

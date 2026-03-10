@@ -49,3 +49,25 @@ The codebase is in a "Foundation" state. The core architecture (Fastify, BullMQ,
 1.  **Environment Validation:** Use a library like `env-schema` or `zod` to validate all environment variables at application startup.
 2.  **Structured Logging:** Replace `console.log` and `console.error` with a structured logger (e.g., `pino`) for better observability in production.
 3.  **Rate Limiting:** Implement the loop detection and rate limiting strategy described in `MASTER_STRATEGY.md` immediately in the worker.
+
+---
+
+## Session 28 Audit - Security & Stability (2026-03-09)
+**Reviewer:** Gemini CLI (Senior Reviewer)
+
+### Critical Vulnerabilities & Fixes
+
+#### 7. Tool Definition Syntax Error (HIGH SEVERITY)
+*   **Location:** `apps/worker/src/tools.ts`
+*   **Issue:** A missing comma between tool objects in the `isAdmin` conditional block caused a compilation failure.
+*   **Fix:** Surgically corrected the syntax error and verified with a successful build.
+
+#### 8. Decentralized Tool Security (MEDIUM SEVERITY)
+*   **Location:** `apps/worker/src/index.ts` & `apps/worker/src/tools.ts`
+*   **Issue:** The "Boss-Only" security list was hardcoded in the Worker loop, separate from the tool definitions. This created a "Bypass Risk" if new high-value tools were added to `tools.ts` but forgotten in the `index.ts` check.
+*   **Fix:** Implemented a centralized `BOSS_ONLY_TOOLS` array in `tools.ts`. The Worker now imports this list and performs mandatory PIN verification for any tool on that list, ensuring "Security by Default" for all management tools.
+
+#### 9. MFA Delivery Resilience
+*   **Location:** `apps/web/app/auth/actions.ts`
+*   **Issue:** Hardcoded fallback to `localhost:3000` for the internal API URL risked locking out production users if the `API_URL` environment variable was missing or misconfigured.
+*   **Fix:** Hardened the API URL resolution logic to check both `API_URL` and `NEXT_PUBLIC_API_URL`, and added detailed error logging for failed MFA deliveries.

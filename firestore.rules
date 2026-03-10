@@ -1,10 +1,11 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Basic: allow read/write for now to prevent blocking development.
-    // Dashboard uses Server Components (Admin SDK), so it bypasses these rules.
+    // SECURITY HARDENING: Deny all public access.
+    // The API, Worker, and Web Dashboard use the Admin SDK, which bypasses these rules.
+    // This prevents any unauthorized direct access via the Firebase Client SDK.
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }

@@ -11,8 +11,8 @@
     }
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc -w",
+    "build": "../../node_modules/.bin/tsc",
+    "dev": "../../node_modules/.bin/tsc -w",
     "seed": "npx ts-node-dev scripts/seed.ts"
   },
   "dependencies": {

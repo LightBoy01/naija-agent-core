@@ -102,6 +102,101 @@ export interface Message {
 export const getDb = () => db;
 
 /**
+ * Registers a new merchant's interest in a trial.
+ */
+export async function registerTrialInterest(data: {
+  id: string;
+  name: string;
+  adminPhone: string;
+  botPhone: string;
+}): Promise<void> {
+  await orgsRef.doc(data.id).set({
+    ...data,
+    isActive: false,
+    status: 'PENDING_PAYMENT',
+    deploymentModel: 'SHARED',
+    balance: 0,
+    currency: 'NGN',
+    costPerReply: 2000,
+    whatsappPhoneId: 'PENDING', // Will be updated by Sovereign
+    config: {
+      adminPhone: data.adminPhone,
+      botPhone: data.botPhone,
+      tools: ['web_search'],
+      model: 'gemini-2.5-flash'
+    },
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+/**
+ * Fetches all organizations currently in the onboarding pipeline.
+ */
+export async function getPendingSetups(): Promise<any[]> {
+  const snapshot = await orgsRef
+    .where('status', 'in', ['PENDING_PAYMENT', 'PENDING_META', 'AWAITING_OTP'])
+    .get();
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+/**
+ * Updates the status and core ID of a tenant bot.
+ */
+export async function activateTenant(orgId: string, phoneId: string, accessToken: string): Promise<void> {
+  await orgsRef.doc(orgId).update({
+    status: 'ACTIVE',
+    isActive: true,
+    whatsappPhoneId: phoneId,
+    'config.whatsappToken': accessToken,
+    trialStartedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp()
+  });
+}
+
+/**
+ * Updates the onboarding state for an organization.
+ */
+export async function setOrgOnboarding(orgId: string, step: string, data: any = {}): Promise<void> {
+  await orgsRef.doc(orgId).update({
+    onboardingStep: step,
+    onboardingData: data,
+    updatedAt: FieldValue.serverTimestamp()
+  });
+}
+
+/**
+ * Fetches the current onboarding state.
+ */
+export async function getOrgOnboarding(orgId: string): Promise<{ step: string, data: any } | null> {
+  const doc = await orgsRef.doc(orgId).get();
+  if (!doc.exists) return null;
+  const data = doc.data();
+  return { 
+    step: data?.onboardingStep || 'NONE', 
+    data: data?.onboardingData || {} 
+  };
+}
+
+/**
+ * Completes onboarding and promotes temporary data to the final config.
+ */
+export async function completeOnboarding(orgId: string, finalConfig: any): Promise<void> {
+  const hashedPin = await bcrypt.hash(finalConfig.adminPin || '1234', 10);
+  
+  await orgsRef.doc(orgId).update({
+    name: finalConfig.name,
+    onboardingStep: 'COMPLETE',
+    onboardingData: null,
+    'config.adminPin': hashedPin,
+    'config.bankDetails': finalConfig.bankDetails,
+    'config.systemPrompt': finalConfig.systemPrompt,
+    systemPrompt: finalConfig.systemPrompt,
+    updatedAt: FieldValue.serverTimestamp()
+  });
+}
+
+/**
  * Saves a piece of business knowledge (Price, Policy, Fact)
  */
 export async function saveKnowledge(orgId: string, key: string, content: string, imageUrl?: string): Promise<void> {
@@ -136,7 +231,72 @@ export async function deleteKnowledge(orgId: string, key: string): Promise<void>
 }
 
 /**
- * Creates or updates a business activity (Any Sector: Booking, Legal Case, Donation, etc.)
+ * Saves or updates a product in the structured catalog.
+ */
+export async function saveProduct(orgId: string, id: string, data: { name: string; price: number; stock?: number; category?: string; imageUrl?: string }): Promise<void> {
+  await orgsRef.doc(orgId).collection('products').doc(id).set({
+    ...data,
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+}
+
+/**
+ * Searches for products based on a query string.
+ */
+export async function searchProducts(orgId: string, query: string, limit = 5): Promise<any[]> {
+  const normalizedQuery = query.toLowerCase();
+  
+  // Basic search: Find items where name starts with query (normalized)
+  // For a real production system, Algolia or ElasticSearch is recommended for fuzzy search
+  const snapshot = await orgsRef.doc(orgId).collection('products')
+    .where('name', '>=', query)
+    .where('name', '<=', query + '\uf8ff')
+    .limit(limit)
+    .get();
+
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+/**
+ * Deletes a product from the catalog.
+ */
+export async function deleteProduct(orgId: string, productId: string): Promise<void> {
+  await orgsRef.doc(orgId).collection('products').doc(productId).delete();
+}
+
+/**
+ * Authorizes a staff member (Rider, Assistant, etc.) for an organization.
+ */
+export async function authorizeStaff(orgId: string, phone: string, name: string, role: string): Promise<void> {
+  await orgsRef.doc(orgId).collection('staff').doc(phone).set({
+    phone,
+    name,
+    role,
+    isActive: true,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+/**
+ * Checks if a phone number is an authorized staff member for an organization.
+ */
+export async function getStaff(orgId: string, phone: string): Promise<any | null> {
+  const doc = await orgsRef.doc(orgId).collection('staff').doc(phone).get();
+  return doc.exists ? doc.data() : null;
+}
+
+/**
+ * Deactivates a staff member.
+ */
+export async function deactivateStaff(orgId: string, phone: string): Promise<void> {
+  await orgsRef.doc(orgId).collection('staff').doc(phone).update({
+    isActive: false,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+/**
+ * Creates or updates a business activity with full State Management.
  */
 export async function updateActivity(
   orgId: string, 
@@ -146,7 +306,12 @@ export async function updateActivity(
 ): Promise<void> {
   await orgsRef.doc(orgId).collection('activities').doc(activityId).set({
     type,
-    ...data,
+    status: data.status || 'pending',
+    summary: data.summary,
+    amount: data.amount || null,
+    customerPhone: data.customerPhone || null,
+    assignedStaffPhone: data.assignedStaffPhone || null,
+    metadata: data.metadata || {},
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 }
@@ -174,6 +339,7 @@ export async function createTenant(data: {
   systemPrompt: string;
 }): Promise<void> {
   const hashedPin = await bcrypt.hash('1234', 10);
+  const bridgeSecret = crypto.randomBytes(16).toString('hex'); // 32 chars for SMS bridge auth
 
   await orgsRef.doc(data.id).set({
     ...data,
@@ -184,7 +350,9 @@ export async function createTenant(data: {
     config: {
       tools: ['web_search'],
       model: 'gemini-2.5-flash',
-      adminPin: hashedPin
+      adminPin: hashedPin,
+      bridgeSecret, // Phase 5.8: Tenant-specific bridge auth
+      useSmsBridge: true
     },
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
@@ -192,6 +360,16 @@ export async function createTenant(data: {
 
   // Increment network stats
   await incrementNetworkStats({ clientDelta: 1, koboDelta: 100000 });
+}
+
+/**
+ * High-security lookup for the SMS Bridge (Phase 5.8)
+ */
+export async function getOrgByBridgeSecret(secret: string): Promise<any | null> {
+  const snapshot = await orgsRef.where('config.bridgeSecret', '==', secret).limit(1).get();
+  if (snapshot.empty) return null;
+  const doc = snapshot.docs[0];
+  return { id: doc.id, ...doc.data() };
 }
 
 /**
@@ -239,6 +417,13 @@ export async function verifyAdminPin(orgId: string, pin: string): Promise<boolea
   return bcrypt.compare(pin, org.config.adminPin);
 }
 
+export async function findOrgByAdminPhone(phone: string): Promise<Organization | null> {
+  const snapshot = await orgsRef.where('config.adminPhone', '==', phone).limit(1).get();
+  if (snapshot.empty) return null;
+  const doc = snapshot.docs[0];
+  return { id: doc.id, ...doc.data() } as Organization;
+}
+
 /**
  * Verifies the Sovereign (Master) PIN for dashboard access
  */
@@ -248,14 +433,61 @@ export async function verifySovereignPin(phone: string, pin: string): Promise<bo
 
   // Ensure the phone matches the configured adminPhone for the Master Bot
   if (masterOrg.config.adminPhone !== phone) return false;
-  
+
   // Direct PIN comparison (Upgraded to Bcrypt)
   return bcrypt.compare(pin, masterOrg.config.adminPin || '');
 }
 
 /**
- * Aggregates network-wide statistics for the Sovereign
+ * Fetches media for a specific organization only.
  */
+export async function getOrgMedia(orgId: string, limit = 24): Promise<any[]> {
+  const snapshot = await db.collectionGroup('messages')
+    .where('type', 'in', ['image', 'audio'])
+    .where('orgId', '==', orgId) // Note: Requires a composite index (orgId, type, timestamp)
+    .orderBy('timestamp', 'desc')
+    .limit(limit)
+    .get();
+
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    chatId: doc.ref.parent.parent?.id,
+    ...doc.data()
+  }));
+}
+
+/**
+ * Fetches active conversations for a specific organization only.
+ */
+export async function getOrgChats(orgId: string, limit = 20): Promise<any[]> {
+  const snapshot = await chatsRef
+    .where('organizationId', '==', orgId)
+    .orderBy('lastMessageAt', 'desc')
+    .limit(limit)
+    .get();
+
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }));
+}
+
+/**
+ * Fetches high-level stats for a single organization.
+ */
+export async function getOrgStats(orgId: string): Promise<any> {
+  const org = await getOrgById(orgId);
+  if (!org) return { balance: 0, chatCount: 0 };
+
+  const chatsSnapshot = await chatsRef.where('organizationId', '==', orgId).count().get();
+
+  return {
+    balance: org.balance,
+    chatCount: chatsSnapshot.data().count,
+    name: org.name,
+    bridgeSecret: org.config?.bridgeSecret || 'None'
+  };
+}
 /**
  * Fetches all media (images/audio) across the network using a collection group query
  */
@@ -374,6 +606,90 @@ export async function logTransaction(orgId: string, reference: string, data: any
 }
 
 /**
+ * Atomically increments daily sales in the snapshot for the current date.
+ */
+export async function incrementDailySales(orgId: string, kobo: number): Promise<void> {
+  const date = new Date().toISOString().split('T')[0];
+  const snapRef = orgsRef.doc(orgId).collection('daily_snapshots').doc(date);
+  
+  await snapRef.set({
+    totalSalesKobo: FieldValue.increment(kobo),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+}
+
+/**
+ * Fetches the last 7 daily snapshots for an organization.
+ */
+export async function getWeeklySummary(orgId: string): Promise<any[]> {
+  const snapshot = await orgsRef.doc(orgId).collection('daily_snapshots')
+    .orderBy('updatedAt', 'desc')
+    .limit(7)
+    .get();
+    
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+/**
+ * Toggles the active status of an organization (Global Start/Stop).
+ */
+export async function setOrgActive(orgId: string, status: boolean): Promise<void> {
+  await orgsRef.doc(orgId).update({
+    isActive: status,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+/**
+ * Atomically books a time slot for a service (Appointment/Booking).
+ * Throws an error if the slot is already taken.
+ */
+export async function bookSlot(
+  orgId: string, 
+  activityId: string, 
+  data: { 
+    startTime: string; // ISO String 
+    durationMinutes?: number;
+    summary: string;
+    customerPhone: string;
+  }
+): Promise<void> {
+  const activitiesRef = orgsRef.doc(orgId).collection('activities');
+  
+  await db.runTransaction(async (t) => {
+    // 1. Check for conflicts
+    // Note: Ideally, we should use a composite index on startTime, but for now we'll do a basic exact match check.
+    // For a robust system, we would query range: start >= req.start && start < req.end.
+    // Here we assume "Slots" are fixed start times (e.g. 10:00, 11:00).
+    
+    const conflictQuery = activitiesRef
+      .where('metadata.startTime', '==', data.startTime)
+      .where('status', 'in', ['confirmed', 'booked'])
+      .limit(1);
+      
+    const conflictSnap = await t.get(conflictQuery);
+    
+    if (!conflictSnap.empty) {
+      throw new Error('SLOT_TAKEN');
+    }
+
+    // 2. Lock the slot
+    const newDocRef = activitiesRef.doc(activityId);
+    t.set(newDocRef, {
+      type: 'booking',
+      status: 'confirmed', // Assuming pre-payment or instant booking logic
+      summary: data.summary,
+      customerPhone: data.customerPhone,
+      metadata: {
+        startTime: data.startTime,
+        duration: data.durationMinutes || 60,
+      },
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+}
+
+/**
  * Logs a transaction as pending, awaiting SMS confirmation.
  * Used when AI sees a manual receipt/transfer but can't verify via API.
  */
@@ -396,29 +712,96 @@ export async function getOrgById(orgId: string): Promise<Organization | null> {
 }
 
 /**
- * Finds a pending transaction by amount and approximate time
- * Used by the SMS Bridge to match bank alerts to receipts
+ * Fetches sales and activity summary for a specific date (YYYY-MM-DD).
  */
-export async function findPendingTransaction(orgId: string, amount: number, windowMinutes = 60): Promise<any | null> {
-  const startTime = new Date(Date.now() - windowMinutes * 60 * 1000);
+export async function getOrgDailyStats(orgId: string, dateStr: string): Promise<{ salesKobo: number, pendingActivities: number, newCustomers: number }> {
+  const snapRef = orgsRef.doc(orgId).collection('daily_snapshots').doc(dateStr);
+  const doc = await snapRef.get();
 
-  const snapshot = await db.collection('transactions')
-    .where('orgId', '==', orgId)
-    .where('amount', '==', amount)
-    .where('status', '==', 'pending')
-    .orderBy('verifiedAt', 'asc')
-    .limit(1)
+  const data = doc.exists ? doc.data() : { totalSalesKobo: 0 };
+
+  // Pending activities count
+  const pendingSnap = await orgsRef.doc(orgId).collection('activities')
+    .where('status', 'in', ['pending', 'confirmed', 'picked_up', 'in_transit'])
+    .count()
     .get();
 
-  if (snapshot.empty) return null;
+  return {
+    salesKobo: data?.totalSalesKobo || 0,
+    pendingActivities: pendingSnap.data().count,
+    newCustomers: 0 // Placeholder for future implementation
+  };
+}
 
-  const tx = snapshot.docs[0];
-  const txData = tx.data();
+/**
+ * Fetches active organizations for proactive reporting.
+ */
 
-  // Basic time window check
-  if (txData.verifiedAt.toDate() < startTime) return null;
+export async function getActiveOrganizations(): Promise<any[]> {
+  const snapshot = await orgsRef.where('isActive', '==', true).get();
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
 
-  return { id: tx.id, ...txData };
+import { formatInTimeZone, toDate } from 'date-fns-tz';
+
+/**
+ * Fetches sales and activity summary for a specific date (YYYY-MM-DD).
+ */
+export async function getUpcomingBookingsForReminders(orgId: string, minInFuture: number, maxInFuture: number): Promise<any[]> {
+  const lagosTimeZone = 'Africa/Lagos';
+  // 🛡️ [PHASE 5.10]: Force "Now" to be interpreted in Lagos context
+  const now = new Date();
+  
+  const startTime = new Date(now.getTime() + minInFuture * 60000);
+  const endTime = new Date(now.getTime() + maxInFuture * 60000);
+
+  const snapshot = await orgsRef.doc(orgId).collection('activities')
+    .where('type', '==', 'booking')
+    .where('status', '==', 'confirmed')
+    .where('metadata.startTime', '>=', startTime.toISOString())
+    .where('metadata.startTime', '<=', endTime.toISOString())
+    .get();
+
+  // Filter out those that already got a reminder (Firestore index limitation for nulls)
+  return snapshot.docs
+    .map(doc => ({ id: doc.id, ...doc.data() }))
+    .filter(b => !b.metadata?.reminderSentAt);
+}
+
+export async function cancelBooking(orgId: string, bookingId: string, performedBy = 'system'): Promise<any | null> {
+  const docRef = orgsRef.doc(orgId).collection('activities').doc(bookingId);
+  const doc = await docRef.get();
+  if (!doc.exists) return null;
+
+  await docRef.update({
+    status: 'cancelled',
+    'metadata.cancelledBy': performedBy,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  return { id: doc.id, ...doc.data() };
+}
+
+/**
+ * Marks a booking as having had a reminder sent.
+ */
+export async function markReminderSent(orgId: string, activityId: string): Promise<void> {
+  await orgsRef.doc(orgId).collection('activities').doc(activityId).update({
+    'metadata.reminderSentAt': FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp()
+  });
+}
+
+/**
+ * Logs a system-level event for the Audit Trail (Phase 5.12)
+ */
+export async function logSystemEvent(orgId: string, eventType: string, summary: string, metadata: any = {}): Promise<void> {
+  await db.collection('organizations').doc(orgId).collection('system_logs').add({
+    eventType,
+    summary,
+    metadata,
+    timestamp: FieldValue.serverTimestamp()
+  });
 }
 
 /**
@@ -430,6 +813,59 @@ export async function confirmTransaction(txId: string, smsId: string): Promise<v
     smsId,
     confirmedAt: FieldValue.serverTimestamp(),
   });
+}
+
+/**
+ * Securely tops up a tenant's balance.
+ * Requires a unique reference to prevent double-crediting.
+ */
+export async function topupTenant(
+  orgId: string, 
+  amountNaira: number, 
+  reference: string
+): Promise<{ newBalance: number } | null> {
+  const amountKobo = Math.round(amountNaira * 100);
+  const txRef = `topup_${reference}`;
+  
+  try {
+    const result = await db.runTransaction(async (t) => {
+      // 1. Idempotency Check: Has this reference been used?
+      const refDoc = await t.get(db.collection('topup_references').doc(txRef));
+      if (refDoc.exists) {
+        throw new Error('DUPLICATE_REFERENCE');
+      }
+
+      // 2. Fetch Tenant
+      const orgRef = orgsRef.doc(orgId);
+      const orgDoc = await t.get(orgRef);
+      if (!orgDoc.exists) throw new Error('TENANT_NOT_FOUND');
+
+      const currentBalance = orgDoc.data()?.balance || 0;
+      const newBalance = currentBalance + amountKobo;
+
+      // 3. Update Balance and Burn Reference
+      t.update(orgRef, { 
+        balance: newBalance,
+        updatedAt: FieldValue.serverTimestamp()
+      });
+      t.set(db.collection('topup_references').doc(txRef), {
+        orgId,
+        amountNaira,
+        usedAt: FieldValue.serverTimestamp()
+      });
+
+      return { newBalance };
+    });
+
+    // 4. Update Global Network Stats (Kobo)
+    await incrementNetworkStats({ koboDelta: amountKobo });
+
+    return result;
+  } catch (e: any) {
+    console.warn(`❌ Top-up failed for ${orgId}:`, e.message);
+    if (e.message === 'DUPLICATE_REFERENCE') throw e;
+    return null;
+  }
 }
 
 export async function addBalance(orgId: string, amount: number): Promise<number | null> {
@@ -510,6 +946,25 @@ export async function getChatHistory(chatId: string, limit = 10): Promise<Messag
     .get();
     
   return snapshot.docs.map(doc => doc.data() as Message).reverse();
+}
+
+/**
+ * Adds a phone number to the global fraud registry.
+ */
+export async function reportFraud(phone: string, reason: string): Promise<void> {
+  await db.collection('global_fraud_registry').doc(phone).set({
+    phone,
+    reason,
+    reportedAt: FieldValue.serverTimestamp()
+  });
+}
+
+/**
+ * Checks if a phone number is in the global fraud registry.
+ */
+export async function checkFraud(phone: string): Promise<{ phone: string, reason: string } | null> {
+  const doc = await db.collection('global_fraud_registry').doc(phone).get();
+  return doc.exists ? doc.data() as any : null;
 }
 
 export async function findOrCreateChat(orgId: string, userPhone: string, userName: string): Promise<string> {

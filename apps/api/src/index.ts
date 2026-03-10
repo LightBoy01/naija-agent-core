@@ -1,6 +1,16 @@
 import Fastify from 'fastify';
 import fastifyRawBody from 'fastify-raw-body';
 import dotenv from 'dotenv';
+import pino from 'pino';
+
+// Configure Structured Logging
+const logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  transport: process.env.NODE_ENV !== 'production' ? {
+    target: 'pino-pretty',
+    options: { colorize: true }
+  } : undefined
+});
 
 console.log('🚀 [VERSION 1.0.2] API Service Starting...');
 import { Queue } from 'bullmq';
@@ -18,26 +28,59 @@ import {
   checkOptOut,
   getDb,
   findPendingTransaction,
-  confirmTransaction
+  confirmTransaction,
+  topupTenant,
+  getOrgById,
+  getActiveOrganizations,
+  getOrgDailyStats,
+  getOrgByBridgeSecret,
+  getNetworkStats
 } from '@naija-agent/firebase';
+import { getProvider } from '@naija-agent/payments';
 
 dotenv.config();
+
+/**
+ * Caches the Organization lookup by Bridge Secret in Redis for 1 hour
+ * to save Firestore read costs on high-frequency heartbeats/SMS alerts.
+ */
+async function getCachedOrgBySecret(secret: string): Promise<any | null> {
+  const cacheKey = `bridge_auth:${secret}`;
+  const cached = await redisConnection.get(cacheKey);
+  
+  if (cached) {
+    return JSON.parse(cached);
+  }
+
+  const org = await getOrgByBridgeSecret(secret);
+  if (org) {
+    await redisConnection.setex(cacheKey, 3600, JSON.stringify(org));
+  }
+  return org;
+}
 
 /**
  * Extracts amount from typical Nigerian bank SMS formats
  * e.g. "Amt: NGN 5,000.00", "Cr: 10,000", "Credit: 2,500.50"
  */
 function extractAmountFromSMS(body: string): number | null {
-  const cleanBody = body.replace(/,/g, ''); // Remove commas
+  const cleanBody = body.replace(/,/g, ''); // Remove commas for easier matching
   const patterns = [
-    /(?:Amt|Amount|Cr|Credit|Received|Value)[:\s]+(?:NGN|N|#)?\s*([\d.]+)/i,
-    /([\d.]+)\s*has\s*been\s*credited/i
+    /(?:Amt|Amount|Cr|Credit|Received|Value|Inflow)[:\s]+(?:NGN|N|#)?\s*([\d.]+)/i,
+    /([\d.]+)\s*has\s*been\s*credited/i,
+    /Acct:\s*\d+\s*Type:Cr\s*Amt:\s*([\d.]+)/i, // Specialized for Access/Zenith
+    /Trans\s*Amt:\s*NGN\s*([\d.]+)/i, // Specialized for GTB
+    /Inflow:\s*NGN\s*([\d.]+)/i, // Specialized for Kuda/OPay
+    /successfully\s*credited\s*with\s*NGN\s*([\d.]+)/i
   ];
 
   for (const pattern of patterns) {
     const match = cleanBody.match(pattern);
     if (match && match[1]) {
-      return parseFloat(match[1]);
+      const amount = parseFloat(match[1]);
+      if (!isNaN(amount) && amount > 0) {
+         return amount;
+      }
     }
   }
   return null;
@@ -50,7 +93,9 @@ if (!process.env.WHATSAPP_APP_SECRET) {
 }
 
 // [FORCE REDEPLOY] This comment is here to trigger a build so new ENV variables are picked up.
-const fastify = Fastify({ logger: true });
+const fastify = Fastify({ 
+  logger: logger
+});
 
 fastify.setErrorHandler((error, request, reply) => {
   console.error('🔥 [CRITICAL ERROR]:', error);
@@ -141,6 +186,69 @@ fastify.get('/webhook', async (request, reply) => {
     reply.status(403).send('Forbidden');
   }
 });
+// 3. Webhook Ingestion (POST)
+fastify.post('/webhook/paystack', async (request, reply) => {
+  const signature = request.headers['x-paystack-signature'] as string;
+  const rawBody = request.rawBody as string;
+
+  if (!process.env.PAYSTACK_SECRET_KEY) {
+    return reply.status(500).send('Paystack secret key not configured');
+  }
+
+  const paystack = getProvider('paystack', process.env.PAYSTACK_SECRET_KEY) as any;
+  
+  if (!paystack.verifyWebhookSignature(rawBody, signature)) {
+    console.warn('❌ Invalid Paystack Webhook Signature!');
+    return reply.status(403).send('Invalid Signature');
+  }
+
+  const payload = request.body as any;
+  if (payload.event !== 'charge.success') {
+    return reply.status(200).send('Ignored');
+  }
+
+  const { reference, amount, metadata } = payload.data;
+  const orgId = metadata?.orgId;
+
+  if (!orgId) {
+    console.warn(`⚠️ Received Paystack top-up without orgId metadata. Ref: ${reference}`);
+    return reply.status(200).send('OK'); // Acknowledge anyway
+  }
+
+  try {
+    const amountNaira = amount / 100; // Paystack sends amount in Kobo
+    const result = await topupTenant(orgId, amountNaira, reference);
+
+    if (result) {
+      console.log(`✅ [PAYSTACK] Credited ₦${amountNaira.toLocaleString()} to ${orgId}`);
+      
+      // Notify Boss via WhatsApp
+      const org = await getOrgById(orgId);
+      if (org?.config?.adminPhone) {
+        const notificationJob: JobData = {
+          type: 'text',
+          orgId: 'system',
+          phoneId: org.whatsappPhoneId,
+          from: org.config.adminPhone,
+          timestamp: Date.now(),
+          content: {
+            text: `💳 *Top-up Successful!*\n\nOga, your account has been credited with *₦${amountNaira.toLocaleString()}* (Ref: ${reference}).\n\nYour new balance is *₦${(result.newBalance / 100).toLocaleString()}*.`
+          }
+        };
+        await whatsappQueue.add('process-message', notificationJob, { removeOnComplete: true });
+      }
+    }
+  } catch (e: any) {
+    if (e.message === 'DUPLICATE_REFERENCE') {
+      console.log(`⏭️ [PAYSTACK] Duplicate top-up ignored for Ref: ${reference}`);
+    } else {
+      console.error('❌ Paystack processing error:', e);
+    }
+  }
+
+  return reply.status(200).send('OK');
+});
+
 // 3. Webhook Ingestion (POST)
 fastify.post('/webhook', async (request, reply) => {
   console.log('📝 [DEBUG] Webhook Hit!');
@@ -279,7 +387,8 @@ fastify.post('/send', async (request, reply) => {
 
   const schema = z.object({
     to: z.string(),
-    templateName: z.string(),
+    text: z.string().optional(),
+    templateName: z.string().optional(),
     languageCode: z.string().default('en_US'),
     phoneId: z.string().optional(), // Optional, defaults to env or first org
   });
@@ -289,10 +398,13 @@ fastify.post('/send', async (request, reply) => {
     return reply.status(400).send(result.error);
   }
 
-  const { to, templateName, languageCode, phoneId } = result.data;
+  const { to, text, templateName, languageCode, phoneId } = result.data;
   
+  if (!text && !templateName) {
+    return reply.status(400).send('Either text or templateName is required');
+  }
+
   // Use provided phoneId or fallback to the one in env (if single tenant)
-  // For multi-tenant, phoneId is mandatory
   const effectivePhoneId = phoneId || process.env.WHATSAPP_PHONE_ID;
 
   if (!effectivePhoneId) {
@@ -300,17 +412,19 @@ fastify.post('/send', async (request, reply) => {
   }
 
   const jobData: JobData = {
-    type: 'template',
+    type: templateName ? 'template' : 'text',
     phoneId: effectivePhoneId,
+    orgId: 'system', // System job
     from: to, // In outbound context, 'from' is the recipient
     timestamp: Date.now(),
     content: {
+      text,
       templateName,
       languageCode,
     },
   };
 
-  await whatsappQueue.add('send-template', jobData, {
+  await whatsappQueue.add(templateName ? 'send-template' : 'process-message', jobData, {
     removeOnComplete: true,
   });
 
@@ -319,16 +433,16 @@ fastify.post('/send', async (request, reply) => {
 
 // 5. SMS Bridge (POST) - AUTO-MATCHING ENGINE
 fastify.post('/bridge/sms', async (request, reply) => {
-  const apiKey = request.headers['x-api-key'];
-  if (apiKey !== process.env.ADMIN_API_KEY) {
-    return reply.status(401).send('Unauthorized');
-  }
+  const bridgeSecret = request.headers['x-bridge-secret'] as string;
+  if (!bridgeSecret) return reply.status(401).send('Missing Bridge Secret');
+
+  const org = await getCachedOrgBySecret(bridgeSecret);
+  if (!org) return reply.status(403).send('Invalid Bridge Secret');
 
   const schema = z.object({
     from: z.string(),
     body: z.string(),
     timestamp: z.number(),
-    phoneId: z.string(),
   });
 
   const result = schema.safeParse(request.body);
@@ -336,16 +450,12 @@ fastify.post('/bridge/sms', async (request, reply) => {
     return reply.status(400).send(result.error);
   }
 
-  const { from, body, timestamp, phoneId } = result.data;
-  
-  const org = await getOrgByPhoneId(phoneId);
-  if (!org) {
-    return reply.status(404).send('Organization not found for this phoneId');
-  }
+  const { from, body, timestamp } = result.data;
+  const phoneId = org.whatsappPhoneId;
 
   // Idempotency: Check if this SMS was already processed
   const alertId = `sms_${timestamp}_${from.substring(0, 5)}`;
-  const db = getDb();
+  const db = (await import('@naija-agent/firebase')).getDb();
   const alertDoc = await db.collection('organizations').doc(org.id).collection('sms_alerts').doc(alertId).get();
   
   if (alertDoc.exists) {
@@ -362,33 +472,173 @@ fastify.post('/bridge/sms', async (request, reply) => {
   });
 
   // --- Matching Logic ---
-  const amount = extractAmountFromSMS(body);
+  let amount = extractAmountFromSMS(body);
+  
+  // 🎯 LLM FALLBACK: If regex fails, use Gemini to parse the bank SMS
+  if (amount === null && process.env.GEMINI_API_KEY) {
+     console.log(`🔍 [SMS BRIDGE] Regex failed for ${org.id}. Calling Gemini...`);
+     try {
+       const genAI = new (await import('@google/generative-ai')).GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+       const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+       const prompt = `Extract the transaction amount as a number only from this Nigerian bank SMS. 
+       If no amount is found, return "NULL". 
+       SMS: "${body}"`;
+       
+       const aiResult = await model.generateContent(prompt);
+       const aiText = aiResult.response.text().trim();
+       if (aiText !== "NULL") {
+          const parsed = parseFloat(aiText.replace(/[^0-9.]/g, ''));
+          if (!isNaN(parsed)) {
+             amount = parsed;
+             console.log(`✅ [SMS BRIDGE] Gemini extracted ₦${amount} for ${org.id}`);
+          }
+       }
+     } catch (e: any) {
+        console.error(`❌ [SMS BRIDGE] Gemini fallback failed:`, e.message);
+     }
+  }
+
   if (amount !== null) {
-    console.log(`🎯 [MATCHING] Extracted amount ₦${amount} from alert.`);
-    const pendingTx = await findPendingTransaction(org.id, amount);
-    
-    if (pendingTx) {
-      console.log(`✅ [MATCH FOUND] Linking SMS ${alertId} to Tx ${pendingTx.id}`);
-      await confirmTransaction(pendingTx.id, alertId);
+    const { findPendingTransaction, confirmTransaction, topupTenant } = await import('@naija-agent/firebase');
 
-      // Notify User via WhatsApp (Queuing an internal job)
-      const notificationJob: JobData = {
-        type: 'text',
-        orgId: org.id,
-        phoneId: phoneId,
-        from: pendingTx.from,
-        timestamp: Date.now(),
-        content: {
-          text: `✅ *Payment Confirmed!*\n\nWe have received your payment of *₦${amount.toLocaleString()}*. Your order is now being processed. Thank you!`
-        }
-      };
+    // --- REFILL CHECK: Does the SMS body contain the Sovereign's Account Number? ---
+    const sovereignAccount = org.config?.sovereignBankDetails?.accountNumber;
+    const isRefill = sovereignAccount && body.includes(sovereignAccount);
 
-      await whatsappQueue.add('process-message', notificationJob, { removeOnComplete: true });
+    if (isRefill) {
+       console.log(`💳 [REFILL MATCH] SMS ${alertId} linked to Sovereign account. Crediting Org ${org.id}`);
+       const result = await topupTenant(org.id, amount, alertId);
+       
+       if (result && org.config?.adminPhone) {
+          // Notify Boss via Master Bot (System job)
+          const notificationJob: JobData = {
+            type: 'text',
+            orgId: 'system',
+            phoneId: org.whatsappPhoneId,
+            from: org.config.adminPhone,
+            timestamp: Date.now(),
+            content: {
+              text: `✅ *AI Credit Refill Confirmed (SMS Bridge)*\n\nOga, your payment of *₦${amount.toLocaleString()}* has been received via bank alert.\n\nYour bot has been credited! New balance: *₦${(result.newBalance / 100).toLocaleString()}*.`
+            }
+          };
+          await whatsappQueue.add('process-message', notificationJob, { removeOnComplete: true });
+       }
+    } else {
+       // --- STANDARD SALE MATCHING ---
+       const pendingTx = await findPendingTransaction(org.id, amount);
+       if (pendingTx) {
+         console.log(`✅ [SALE MATCH] Linking SMS ${alertId} to Tx ${pendingTx.id}`);
+         await confirmTransaction(pendingTx.id, alertId);
+
+         // Notify Customer via WhatsApp
+         const notificationJob: JobData = {
+           type: 'text',
+           orgId: org.id,
+           phoneId: phoneId,
+           from: pendingTx.from,
+           timestamp: Date.now(),
+           content: {
+             text: `✅ *Payment Confirmed!*\n\nWe have received your payment of *₦${amount.toLocaleString()}*. Your order is now being processed. Thank you!`
+           }
+         };
+         await whatsappQueue.add('process-message', notificationJob, { removeOnComplete: true });
+       }
     }
   }
 
-  console.log(`📡 [SMS BRIDGE] Logged alert from ${from} for org ${org.id}`);
   return { success: true, alertId };
+});
+
+// 6. SMS Bridge Heartbeat (POST)
+fastify.post('/bridge/heartbeat', async (request, reply) => {
+  const bridgeSecret = request.headers['x-bridge-secret'] as string;
+  if (!bridgeSecret) return reply.status(401).send('Missing Bridge Secret');
+
+  const org = await getCachedOrgBySecret(bridgeSecret);
+  if (!org) return reply.status(403).send('Invalid Bridge Secret');
+
+  // Store heartbeat in Redis (Expire in 24h)
+  const heartbeatKey = `bridge_heartbeat:${org.id}`;
+  await redisConnection.set(heartbeatKey, Date.now().toString());
+
+  console.log(`💓 [HEARTBEAT] Bridge for ${org.name} is alive.`);
+  return { success: true };
+});
+
+// 4. Proactive Cron (GET) - Triggered by Railway Scheduler
+fastify.get('/cron/daily-reports', async (request, reply) => {
+  const cronSecret = request.headers['x-cron-secret'];
+  
+  if (cronSecret !== process.env.CRON_SECRET) {
+    console.warn('❌ Unauthorized CRON attempt!');
+    return reply.status(401).send('Unauthorized');
+  }
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const dateStr = yesterday.toISOString().split('T')[0];
+
+  const orgs = await getActiveOrganizations();
+  console.log(`📡 [CRON] Generating reports for ${orgs.length} orgs for ${dateStr}`);
+
+  let totalSalesNGN = 0;
+  let activeBotCount = 0;
+
+  for (const org of orgs) {
+    if (!org.config?.adminPhone) continue;
+    if (org.id === 'naija-agent-master') continue;
+
+    try {
+      const stats = await getOrgDailyStats(org.id, dateStr);
+      totalSalesNGN += (stats.salesKobo / 100);
+      activeBotCount++;
+
+      const balanceNaira = (org.balance || 0) / 100;
+
+      const reportMessage = `☀️ *Oga, Good Morning!*\n\n` +
+        `Here is your ${org.name} summary for yesterday (*${dateStr}*):\n\n` +
+        `💰 *Sales:* ₦${(stats.salesKobo / 100).toLocaleString()}\n` +
+        `📝 *Pending Activities:* ${stats.pendingActivities}\n` +
+        `💳 *Bot Balance:* ₦${balanceNaira.toLocaleString()}\n\n` +
+        `I am ready for another productive day! Any instruction for me?`;
+
+      const reportJob: JobData = {
+        type: 'text',
+        orgId: 'system', // Free message (System Outbound)
+        phoneId: org.whatsappPhoneId,
+        from: org.config.adminPhone,
+        timestamp: Date.now(),
+        content: { text: reportMessage }
+      };
+
+      await whatsappQueue.add('process-message', reportJob, { removeOnComplete: true });
+    } catch (e: any) {
+      console.error(`❌ Failed to generate report for ${org.id}:`, e.message);
+    }
+  }
+
+  // --- SOVEREIGN EMPIRE REPORT (PHASE 5.19) ---
+  if (process.env.MASTER_ADMIN_PHONE) {
+      const networkStats = await getNetworkStats();
+      const empireMessage = `🏰 *SOVEREIGN MORNING REPORT*\n\n` +
+        `Date: *${dateStr}*\n\n` +
+        `💰 *Network Sales:* ₦${totalSalesNGN.toLocaleString()}\n` +
+        `🏦 *Vault Balance:* ₦${(networkStats.totalVaultKobo / 100).toLocaleString()}\n` +
+        `🤖 *Active Bots:* ${activeBotCount}\n\n` +
+        `The Empire is growing, Oga Boss!`;
+
+      const empireJob: JobData = {
+        type: 'text',
+        orgId: 'system',
+        phoneId: process.env.WHATSAPP_PHONE_ID || '',
+        from: process.env.MASTER_ADMIN_PHONE,
+        timestamp: Date.now(),
+        content: { text: empireMessage }
+      };
+      await whatsappQueue.add('process-message', empireJob, { removeOnComplete: true });
+  }
+
+  return reply.send({ status: 'success', processed: orgs.length });
 });
 
 // Start Server
