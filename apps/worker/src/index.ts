@@ -319,6 +319,38 @@ const worker = new Worker<JobData>(
       const text = type === 'text' ? (content.text || '').trim() : '';
       const onboarding = await getOrgOnboarding(orgId);
       
+      // 1. RESTART / CANCEL COMMANDS
+      if (isAdmin && text === '#cancel') {
+          await setOrgOnboarding(orgId, 'START', {});
+          await tenantWhatsAppService.sendText(from, "🛑 *Setup Cancelled.*\n\nOga, I have cleared your temporary setup data. Type *#setup* when you are ready to start again.");
+          return { success: true };
+      }
+
+      // 2. STATUS COMMAND (BOSS ONLY)
+      if (isAdmin && text.toLowerCase() === '#status') {
+          const heartbeatKey = `bridge_heartbeat:${orgId}`;
+          const lastHeartbeat = await redisClient.get(heartbeatKey);
+          const balanceNaira = (org.balance || 0) / 100;
+          
+          let bridgeStatus = "❌ OFFLINE";
+          if (lastHeartbeat) {
+              const diffMinutes = (Date.now() - parseInt(lastHeartbeat)) / (1000 * 60);
+              if (diffMinutes <= 15) bridgeStatus = "✅ ONLINE";
+              else bridgeStatus = `⚠️ LAGGING (${Math.floor(diffMinutes)}m ago)`;
+          }
+
+          const statusMsg = `📊 *BOT STATUS REPORT*\n\n` +
+            `🤖 *Bot Name:* ${org.name}\n` +
+            `🔋 *Service:* ${org.isActive ? '✅ ACTIVE' : '💤 MAINTENANCE'}\n` +
+            `💳 *Balance:* ₦${balanceNaira.toLocaleString()}\n` +
+            `📲 *SMS Bridge:* ${bridgeStatus}\n` +
+            `🧠 *Model:* ${org.config?.model || 'gemini-2.5-flash'}\n\n` +
+            `Oga, I am at your service!`;
+          
+          await tenantWhatsAppService.sendText(from, statusMsg);
+          return { success: true };
+      }
+
       if (isAdmin && (text === '#setup' || (onboarding && onboarding.step !== 'COMPLETE'))) {
           console.log(`🛠️ [ONBOARDING] Boss of ${orgId} is in step: ${onboarding?.step || 'START'}`);
           
@@ -358,26 +390,30 @@ const worker = new Worker<JobData>(
               nextStep = 'TONE';
               reply = "Bank details set! 💰\n\n*Step 4 (Final):* How should I talk to your customers?\n\n1. *Professional* (Official & Polite)\n2. *Street-Smart* (Mix of English & Pidgin)\n\nType 1 or 2.";
           } else if (nextStep === 'TONE') {
-              const tone = text === '1' ? 'Professional' : 'Street-Smart';
-              const prompt = tone === 'Professional' 
-                ? `You are the Professional Assistant for ${nextData.name}. You are polite, efficient, and speak clear English.` 
-                : `You are the Street-Smart Apprentice for ${nextData.name}. You speak a mix of English and Nigerian Pidgin. You are witty and respect the hustle.`;
-              
-              nextData.systemPrompt = prompt;
-              
-              await completeOnboarding(orgId, {
-                  name: nextData.name,
-                  adminPin: nextData.adminPin,
-                  bankDetails: {
-                      bankName: nextData.bankName,
-                      accountNumber: nextData.accountNumber,
-                      accountName: nextData.accountName
-                  },
-                  systemPrompt: prompt
-              });
-              
-              reply = `🎉 *SETUP COMPLETE!*\n\nI am now the ${tone} Apprentice for *${nextData.name}*.\n\nBoss, I am ready to work! But right now, *my shop is empty*. 📦\n\nPlease tell me your prices so I can start selling (e.g. type: "Save price of Bread to ₦1000").\n\nHow can I help you today?`;
-              nextStep = 'COMPLETE';
+              if (text !== '1' && text !== '2') {
+                  reply = "Please type *1* for Professional or *2* for Street-Smart.";
+              } else {
+                  const tone = text === '1' ? 'Professional' : 'Street-Smart';
+                  const prompt = tone === 'Professional' 
+                    ? `You are the Professional Assistant for ${nextData.name}. You are polite, efficient, and speak clear English.` 
+                    : `You are the Street-Smart Apprentice for ${nextData.name}. You speak a mix of English and Nigerian Pidgin. You are witty and respect the hustle.`;
+                  
+                  nextData.systemPrompt = prompt;
+                  
+                  await completeOnboarding(orgId, {
+                      name: nextData.name,
+                      adminPin: nextData.adminPin,
+                      bankDetails: {
+                          bankName: nextData.bankName,
+                          accountNumber: nextData.accountNumber,
+                          accountName: nextData.accountName
+                      },
+                      systemPrompt: prompt
+                  });
+                  
+                  reply = `🎉 *SETUP COMPLETE!*\n\nI am now the ${tone} Apprentice for *${nextData.name}*.\n\nBoss, I am ready to work! But right now, *my shop is empty*. 📦\n\nPlease tell me your prices so I can start selling (e.g. type: "Save price of Bread to ₦1000").\n\nHow can I help you today?`;
+                  nextStep = 'COMPLETE';
+              }
           }
 
           if (reply) {

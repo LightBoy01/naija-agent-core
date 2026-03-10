@@ -184,6 +184,25 @@ export async function handleToolCall(
       } else {
           // --- VISION-FIRST MODE (PHASE 5.18) ---
           // Merchant doesn't have a bridge, so we "Trust" the AI Vision for now.
+          const HIGH_VALUE_THRESHOLD = 10000;
+          const isHighValue = args.amount >= HIGH_VALUE_THRESHOLD;
+
+          if (isHighValue) {
+              console.warn(`🛡️ [VALUE GUARD] High-value receipt (${args.amount}) detected for ${orgId} without bridge.`);
+              await logPendingTransaction(orgId, from, args.amount, args.reference);
+              
+              if (orgConfig?.adminPhone) {
+                  const alert = `⚠️ *HIGH VALUE RECEIPT*\n\nA customer (${from}) sent a receipt for *₦${args.amount.toLocaleString()}* (Ref: ${args.reference}).\n\nBecause this is a large amount and you don't have an SMS Bridge, I have *NOT* verified it automatically. Please check your bank and confirm manually!`;
+                  await whatsappService.sendText(orgConfig.adminPhone, alert);
+              }
+
+              return { 
+                status: 'pending', 
+                code: 'HIGH_VALUE_VISION', 
+                message: "This is a large amount. We are verifying it with our bank manually. Please wait." 
+              };
+          }
+
           await logTransaction(orgId, args.reference, {
               status: 'success',
               amount: args.amount,
