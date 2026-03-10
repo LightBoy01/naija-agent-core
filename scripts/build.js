@@ -6,20 +6,10 @@ async function build(appName, entryPath, outPath) {
   console.log(`
 🔨 Building ${appName} to ESM (.mjs)...`);
 
-  // Plugin to externalize ALL dependencies except @naija-agent/*
-  const externalizeDepsPlugin = {
-    name: 'externalize-deps',
-    setup(build) {
-      build.onResolve({ filter: /^[^.{}/]/ }, (args) => {
-        // If it's one of our local packages, let esbuild bundle it (using the alias)
-        if (args.path.startsWith('@naija-agent/')) {
-          return null; 
-        }
-        // Otherwise, mark it as external (e.g., fastify, firebase-admin, bullmq)
-        return { path: args.path, external: true };
-      });
-    },
-  };
+  // --- SOVEREIGN BUNDLING STRATEGY ---
+  // We bundle EVERYTHING except native modules (bcrypt)
+  // to ensure the app is self-contained and stable on Railway.
+  const external = ['bcrypt'];
 
   try {
     await esbuild.build({
@@ -31,7 +21,7 @@ async function build(appName, entryPath, outPath) {
       format: 'esm',
       sourcemap: true,
       logLevel: 'info',
-      plugins: [externalizeDepsPlugin],
+      external: external,
       // CRITICAL: Point to SOURCE instead of DIST to avoid the "dist/index.js not found" error
       alias: {
         '@naija-agent/types': path.resolve(process.cwd(), 'packages/types/src/index.ts'),
