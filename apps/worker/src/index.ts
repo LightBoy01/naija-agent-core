@@ -551,37 +551,51 @@ const worker = new Worker<JobData>(
         promptParts.push(content.text);
       } else if (type === 'audio' && content.audioId) {
         const { buffer, mimeType } = await tenantWhatsAppService.downloadMedia(content.audioId);
-        
-        // --- Persistence: FREE TIER PIVOT (No Upload) ---
-        // mediaTask = uploadMedia(...) // DISABLED
-        mediaId = content.audioId;
-
         userMessageContent = "[AUDIO MESSAGE]";
         promptParts.push({ inlineData: { data: buffer.toString('base64'), mimeType } });
         promptParts.push("The user sent a voice note. Please reply in text.");
 
       } else if (type === 'image' && content.imageId) {
         const { buffer, mimeType } = await tenantWhatsAppService.downloadMedia(content.imageId);
-        
-        // --- Persistence: FREE TIER PIVOT (No Upload) ---
-        // mediaTask = uploadMedia(...) // DISABLED
         mediaId = content.imageId;
+
+        // --- Persistent Storage for Managers (Phase 7: Seamless Product Photos) ---
+        let permanentUrl = "";
+        if (isManager) {
+           try {
+             const { uploadMedia } = await import('@naija-agent/storage');
+             const fileName = `${Date.now()}_${mediaId.substring(0, 8)}.jpg`;
+             permanentUrl = await uploadMedia(orgId, fileName, buffer, mimeType || 'image/jpeg');
+             console.log(`🖼️ [STORAGE] Persistent URL generated for Boss/Staff of ${orgId}: ${permanentUrl}`);
+           } catch (e: any) {
+             console.error(`❌ [STORAGE] Upload failed for ${orgId}:`, e.message);
+           }
+        }
 
         userMessageContent = content.caption ? `[IMAGE] ${content.caption}` : "[IMAGE]";
         promptParts.push({ inlineData: { data: buffer.toString('base64'), mimeType } });
         
-        // --- Enhanced Vision Prompt (Anti-Fraud) ---
-        const visionInstruction = `
-        The user sent an image. ANALYZE it as a financial receipt or bank alert.
+        // --- Enhanced Vision Prompt (Anti-Fraud + Product Context) ---
+        let visionInstruction = `
+        The user sent an image. 
         
-        [ANTI-FRAUD PROTOCOL]:
-        1. CHECK FOR EDITS: Look for font mismatches (different sizes/styles), text misalignment, or "boxy" artifacts around numbers.
-        2. DATA EXTRACTION: Extract the Reference/Session ID, Amount, Bank Name, and Date.
-        3. FAKE DETECTION: If the reference looks suspicious (e.g. "1234567890" or "TEST_PAYMENT"), flag it.
+        [CONTEXT]:
+        Role: ${isAdmin ? 'BOSS' : (isStaff ? 'STAFF' : 'CUSTOMER')}
+        Permanent URL: ${permanentUrl || 'NONE (Meta Temp only)'}
+
+        If the user is the BOSS/STAFF:
+        - They might want to save this as a Product Image or Business Knowledge.
+        - If they say "Save this...", use 'save_product' or 'save_knowledge' and pass the Permanent URL above.
+        - NEVER use the Meta temporary media IDs for saving products.
+
+        [ANTI-FRAUD PROTOCOL] (If Customer):
+        1. CHECK FOR EDITS: Look for font mismatches, misalignment, or "boxy" artifacts.
+        2. DATA EXTRACTION: Extract Reference, Amount, Bank, Date.
+        3. FAKE DETECTION: If reference looks suspicious, flag it.
         
         If it's a receipt:
-        - Use 'verify_transaction' to check the reference against the bank system.
-        - If you detect any sign of editing or Photoshop, report it as 'SUSPICIOUS' in your reply.
+        - Use 'verify_transaction' to check the reference.
+        - If you detect editing, report it as 'SUSPICIOUS'.
         
         Caption: "${content.caption || 'None'}"
         `;
