@@ -124,7 +124,7 @@ export async function registerTrialInterest(data: {
     deploymentModel: 'SHARED',
     balance: 0,
     currency: 'NGN',
-    costPerReply: 2000,
+    costPerReply: 3300, // 33.00 NGN (Strategic Odd)
     whatsappPhoneId: 'PENDING', // Will be updated by Sovereign
     config: {
       adminPhone: data.adminPhone,
@@ -191,7 +191,7 @@ export async function getOrgOnboarding(orgId: string): Promise<{ step: string, d
  */
 export async function completeOnboarding(orgId: string, finalConfig: any): Promise<void> {
   const hashedPin = await bcrypt.hash(finalConfig.adminPin || '1234', 10);
-  const bonusKobo = 50000; // 500.00 NGN
+  const bonusKobo = 33300; // 333.00 NGN
   
   await orgsRef.doc(orgId).update({
     name: finalConfig.name,
@@ -404,14 +404,14 @@ export async function createTenant(data: {
 }): Promise<void> {
   const hashedPin = await bcrypt.hash('1234', 10);
   const bridgeSecret = crypto.randomBytes(16).toString('hex'); // 32 chars for SMS bridge auth
-  const bonusKobo = 50000; // 500.00 NGN starting bonus
+  const bonusKobo = 33300; // 333.00 NGN starting bonus
 
   await orgsRef.doc(data.id).set({
     ...data,
     isActive: true,
     balance: bonusKobo, 
     currency: 'NGN',
-    costPerReply: 2000,
+    costPerReply: 3300, // 33.00 NGN
     config: {
       tools: ['web_search'],
       model: 'gemini-2.5-flash',

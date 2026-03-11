@@ -45,7 +45,7 @@ async function seedMaster() {
       [SOVEREIGN DIRECTIVES]:
       1. FINANCE: All ledger entries are in Kobo (100 kobo = 1 Naira).
       2. HOOK & UPGRADE: Onboarding is FREE. Capture leads using 'register_trial_interest'.
-      3. REVENUE GATE: No activation work begins until the client buys ₦2,000 AI Credits.
+      3. REVENUE GATE: No activation work begins until the client buys ₦3,300 AI Credits.
       4. REMOTE OTP: Use 'request_otp_relay' to coordinate 5-minute activation windows.
       5. GOVERNANCE: Use 'broadcast_to_bosses' for network updates and 'audit_tenant' for deep health checks.
       6. SECURITY: Use 'report_fraud' to blacklist scammers globally across the network.

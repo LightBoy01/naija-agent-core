@@ -526,7 +526,7 @@ const worker = new Worker<JobData>(
                       systemPrompt: prompt
                   });
                   
-                  reply = `🎉 *SETUP COMPLETE!*\n\nI am now the ${tone} Apprentice for *${nextData.name}*.\n\n🎁 *Oga Boss, I have gifted you ₦500.00 in AI credits* so you can see how I work! \n\n*Here is how I will help your business grow:* \n\n1. 💰 *I handle Sales:* I can take orders and manage a cart for your customers.\n2. ✅ *I verify Payments:* If you use the SMS Bridge, I confirm bank alerts instantly. No more fake alerts!\n3. 📊 *I am your Manager:* I will send you a *Morning Report* every 8 AM so you know exactly what happened yesterday.\n4. 🛡️ *I guard your Shop:* I block known scammers and never quote a price you haven't approved.\n5. 🤝 *I handle your Staff:* You can authorize your riders or assistants to work with me.\n\nBoss, I am ready! But right now, *my shop is empty*. 📦\n\n*Start now:* Tell me your prices (e.g. type: "Save price of Bread to ₦1000") or ask me "How do I add a rider?"`;
+                  reply = `🎉 *SETUP COMPLETE!*\n\nI am now the ${tone} Apprentice for *${nextData.name}*.\n\n🎁 *Oga Boss, I have gifted you ₦333.00 in AI credits* so you can see how I work! \n\n*Here is how I will help your business grow:* \n\n1. 💰 *I handle Sales:* I can take orders and manage a cart for your customers.\n2. ✅ *I verify Payments:* If you use the SMS Bridge, I confirm bank alerts instantly. No more fake alerts!\n3. 📊 *I am your Manager:* I will send you a *Morning Report* every 8 AM so you know exactly what happened yesterday.\n4. 🛡️ *I guard your Shop:* I block known scammers and never quote a price you haven't approved.\n5. 🤝 *I handle your Staff:* You can authorize your riders or assistants to work with me.\n\nBoss, I am ready! But right now, *my shop is empty*. 📦\n\n*Start now:* Tell me your prices (e.g. type: "Save price of Bread to ₦1000") or ask me "How do I add a rider?"`;
                   nextStep = 'COMPLETE';
               }
           }
@@ -635,14 +635,14 @@ const worker = new Worker<JobData>(
 
       // 1.5 Balance Check & Deduction (PRE-DEBIT to prevent race conditions)
       const balance = org.balance || 0;
-      costPerReply = isAdmin ? 0 : (org.costPerReply || 2000);
+      costPerReply = isAdmin ? 0 : (org.costPerReply || 3300); // 33.00 NGN Default
       
       if (!isAdmin && type === 'image') {
-          costPerReply = org.costPerImage || Math.floor(costPerReply * 2.5); 
+          costPerReply = org.costPerImage || 7700; // 77.00 NGN Vision Fee
       }
 
       if (!isAdmin && type === 'document') {
-          costPerReply = org.costPerDocument || 5000; // SPECIALIST FEE: 50.00 NGN
+          costPerReply = org.costPerDocument || 9900; // 99.00 NGN Specialist Fee
       }
 
       if (!isAdmin && balance < costPerReply) {
@@ -662,6 +662,18 @@ const worker = new Worker<JobData>(
         }
         newBalance = resultBalance;
         deductionDone = true;
+
+        // Proactive Alert: If balance is low (< 333.00 NGN), nudge the Boss
+        const alertThreshold = 33300; 
+        if (newBalance < alertThreshold) {
+           try {
+             const balanceNaira = (newBalance / 100).toFixed(2);
+             const alert = `🚨 *LOW BALANCE ALERT*\n\nYour bot "${org.name}" has only ₦${balanceNaira} remaining. Please top up soon to prevent service interruption.`;
+             await tenantWhatsAppService.sendText(org.config.adminPhone, alert);
+           } catch (err) {
+             console.warn('Failed to send low balance alert to Boss:', err);
+           }
+        }
       }
 
       // --- FEEDBACK: Immediate Response for Long Tasks (Phase 7) ---
