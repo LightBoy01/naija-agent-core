@@ -627,7 +627,16 @@ const worker = new Worker<JobData>(
         !!tenantPaymentProvider
       );
 
-      const tenantModelName = org.config?.model || "gemini-2.5-flash";
+      // --- Identity-Based Model Routing (PHASE 7.2: March 2026 Standards) ---
+      let tenantModelName = org.config?.model;
+      
+      if (!tenantModelName) {
+          // Sovereign Directive: Assign brains based on rank
+          tenantModelName = org.config?.isMaster 
+            ? "gemini-3.1-pro" 
+            : "gemini-3.1-flash-lite";
+      }
+
       const model = genAI.getGenerativeModel({ 
         model: tenantModelName,
         tools: tenantTools.length > 0 ? tenantTools : undefined
