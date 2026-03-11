@@ -20,7 +20,6 @@ export const BOSS_ONLY_TOOLS = [
   'broadcast_to_bosses',
   'audit_tenant',
   'report_fraud',
-  'register_trial_interest',
   'request_otp_relay',
   'activate_tenant',
   'get_pending_setups'
@@ -344,6 +343,23 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
   }
 
   // 3. Master Tools (Sovereign Only)
+  if (isMaster) {
+    allFunctionDeclarations.push({
+      name: "register_trial_interest",
+      description: "Captures a new lead's interest in a free setup trial. (Master Bot Only, Publicly Available)",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          id: { type: SchemaType.STRING, description: "Organization slug (e.g. kudirat_kitchen)" },
+          name: { type: SchemaType.STRING, description: "Business display name" },
+          adminPhone: { type: SchemaType.STRING, description: "The Boss's personal WhatsApp (234...)" },
+          botPhone: { type: SchemaType.STRING, description: "The new SIM number for the bot (234...)" }
+        },
+        required: ["id", "name", "adminPhone", "botPhone"]
+      }
+    });
+  }
+
   if (isAdmin && isMaster) {
     allFunctionDeclarations.push(
       {
@@ -416,20 +432,6 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
             reason: { type: SchemaType.STRING, description: "Reason for blacklisting (e.g. Fake Receipt)" }
           },
           required: ["phone", "reason"]
-        }
-      },
-      {
-        name: "register_trial_interest",
-        description: "Captures a new lead's interest in a free setup trial. (Master Bot Only)",
-        parameters: {
-          type: SchemaType.OBJECT,
-          properties: {
-            id: { type: SchemaType.STRING, description: "Organization slug (e.g. kudirat_kitchen)" },
-            name: { type: SchemaType.STRING, description: "Business display name" },
-            adminPhone: { type: SchemaType.STRING, description: "The Boss's personal WhatsApp (234...)" },
-            botPhone: { type: SchemaType.STRING, description: "The new SIM number for the bot (234...)" }
-          },
-          required: ["id", "name", "adminPhone", "botPhone"]
         }
       },
       {
