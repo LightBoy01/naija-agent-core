@@ -138,7 +138,7 @@ export type DailySnapshot = z.infer<typeof DailySnapshotSchema>;
 
 export const ConfigSchema = z.object({
   systemPrompt: z.string().optional(),
-  model: z.enum(['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash']).default('gemini-1.5-flash'),
+  model: z.enum(['gemini-2.5-flash', 'gemini-flash-lite-latest', 'gemini-3.1-flash-lite-preview', 'gemini-2.0-flash']).default('gemini-flash-lite-latest'),
   tools: z.array(z.string()).default([]), // List of enabled tool names
   payment: PaymentConfigSchema.optional(), // Per-tenant payment config
   bankDetails: BankDetailsSchema.optional(), // The Boss's bank details for customer payments

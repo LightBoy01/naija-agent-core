@@ -20,6 +20,12 @@ export class WhatsAppService {
 
   // Send Text Message
   async sendText(to: string, text: string): Promise<string> {
+    const body = (text || '').trim();
+    if (!body) {
+      console.warn('⚠️ [WHATSAPP_SERVICE] Attempted to send empty text. Using fallback.');
+    }
+    const finalBody = body || "I'm sorry, I couldn't generate a response. Please try again.";
+
     try {
       const response = await axios.post(
         `${this.baseUrl}/${this.phoneId}/messages`,
@@ -27,7 +33,7 @@ export class WhatsAppService {
           messaging_product: 'whatsapp',
           to: to,
           type: 'text',
-          text: { body: text },
+          text: { body: finalBody },
         },
         {
           headers: {

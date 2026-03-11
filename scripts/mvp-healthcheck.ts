@@ -1,7 +1,6 @@
-import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import * as dotenv from 'dotenv';
-import { getActiveOrganizations, getNetworkStats } from '../packages/firebase/src/index.js';
+import { getActiveOrganizations, getNetworkStats, getDb } from '../packages/firebase/src/index.js';
 
 dotenv.config();
 
@@ -13,46 +12,43 @@ const redisConfig = {
 };
 
 async function runHealthCheck() {
-  console.log('\n🏥 --- NAIJA AGENT MVP HEALTH CHECK --- 🏥');
+  console.log('\n🏥 --- NAIJA AGENT EMPIRE HEALTH CHECK (Phase 7) --- 🏥');
   console.log(`Timestamp: ${new Date().toLocaleString()}\n`);
 
   // 1. Redis Connection
-  console.log('🔍 [1/5] Checking Redis...');
+  console.log('🔍 [1/5] Checking Redis & Staff Limits...');
   try {
     const redis = new Redis(redisConfig);
     await redis.ping();
     console.log('✅ Redis is ONLINE.');
+    
+    // Check for any active staff limits today
+    const today = new Date().toISOString().split('T')[0];
+    const staffKeys = await redis.keys(`limit:staff:*:*:${today}`);
+    console.log(`📊 Active Staff Usage: ${staffKeys.length} staff members chatting today.`);
+    
     redis.disconnect();
   } catch (err: any) {
     console.error('❌ Redis is OFFLINE:', err.message);
   }
 
-  // 2. BullMQ Schedulers
-  console.log('\n🔍 [2/5] Checking Proactive Pulses...');
+  // 2. Global Cron Heartbeat
+  console.log('\n🔍 [2/5] Checking Empire Pulse (Reports)...');
   try {
-    const whatsappQueue = new Queue('whatsapp-queue', { connection: redisConfig });
-    const repeatableJobs = await whatsappQueue.getRepeatableJobs();
-    const orgs = await getActiveOrganizations();
+    const db = await getDb();
+    const todayStr = new Date().toISOString().split('T')[0];
+    const historyDoc = await db.collection('network_metadata').doc('global').collection('history').doc(todayStr).get();
     
-    let healthyOrgs = 0;
-    for (const org of orgs) {
-       const hasReport = repeatableJobs.some(j => j.id === `daily-report:${org.id}`);
-       const hasHealth = repeatableJobs.some(j => j.id === `health-check:${org.id}`);
-       const hasReminder = repeatableJobs.some(j => j.id === `reminder-scan:${org.id}`);
-       
-       if (hasReport && hasHealth && hasReminder) {
-          healthyOrgs++;
-       } else {
-          console.warn(`⚠️  Org ${org.name} (${org.id}) is missing pulses: ${!hasReport ? 'Daily ' : ''}${!hasHealth ? 'Health ' : ''}${!hasReminder ? 'Reminder' : ''}`);
-       }
+    if (historyDoc.exists) {
+       console.log('✅ Daily Network Snapshot has been captured for today.');
+    } else {
+       console.warn('⚠️  Daily Snapshot missing. Wait for the 8 AM Cron to run.');
     }
-    console.log(`✅ ${healthyOrgs}/${orgs.length} organizations have full proactive pulses.`);
-    await whatsappQueue.close();
   } catch (err: any) {
-    console.error('❌ Failed to check BullMQ:', err.message);
+    console.error('❌ Failed to check snapshots:', err.message);
   }
 
-  // 3. Bridge Heartbeats
+  // 3. Bridge Status
   console.log('\n🔍 [3/5] Checking SMS Bridge Status...');
   try {
     const redis = new Redis(redisConfig);
@@ -60,52 +56,50 @@ async function runHealthCheck() {
     let onlineBridges = 0;
     
     for (const org of orgs) {
+       if (org.id === 'naija-agent-master') continue;
        const heartbeat = await redis.get(`bridge_heartbeat:${org.id}`);
        if (heartbeat) {
           const diffMinutes = (Date.now() - parseInt(heartbeat)) / (1000 * 60);
           if (diffMinutes <= 15) onlineBridges++;
        }
     }
-    console.log(`✅ ${onlineBridges}/${orgs.length} bridges have sent heartbeats in the last 15 minutes.`);
+    const tenantCount = orgs.filter(o => o.id !== 'naija-agent-master').length;
+    console.log(`✅ ${onlineBridges}/${tenantCount} tenant bridges are ONLINE.`);
     redis.disconnect();
   } catch (err: any) {
     console.error('❌ Failed to check heartbeats:', err.message);
   }
 
-  // 4. Financial Health (Low Balance Check)
-  console.log('\n🔍 [4/5] Checking Financial Safety...');
+  // 4. Financial Wisdom Check
+  console.log('\n🔍 [4/5] Checking Multi-Tenant Financials...');
   try {
-    const stats = await getNetworkStats();
+    const stats = await getNetworkStats('naija-agent-master');
     console.log(`🏦 Total Vault Balance: ₦${(stats.totalVaultKobo / 100).toLocaleString()}`);
     
-    const lowBalanceOrgs = stats.clients.filter((c: any) => (c.balance || 0) < 1000);
+    const trialGiftCount = stats.clients.filter((c: any) => c.balance === 100000).length;
+    console.log(`🎁 New Leads: ${trialGiftCount} businesses currently on the ₦1,000 trial.`);
+
+    const lowBalanceOrgs = stats.clients.filter((c: any) => (c.balance || 0) < 50000);
     if (lowBalanceOrgs.length > 0) {
-       console.warn(`⚠️  ${lowBalanceOrgs.length} organizations have low balance (< ₦10.00).`);
-       lowBalanceOrgs.forEach((c: any) => console.log(`   - ${c.name}: ₦${((c.balance || 0)/100).toLocaleString()}`));
+       console.warn(`⚠️  ${lowBalanceOrgs.length} businesses have low balance (< ₦500.00).`);
     } else {
-       console.log('✅ All active organizations have healthy balances.');
+       console.log('✅ All active businesses have healthy balances.');
     }
   } catch (err: any) {
     console.error('❌ Failed to check financial health:', err.message);
   }
 
   // 5. Env Verification
-  console.log('\n🔍 [5/5] Checking Environment Variables...');
-  const required = [
-    'GEMINI_API_KEY',
-    'FIREBASE_PROJECT_ID',
-    'REDIS_HOST',
-    'WHATSAPP_API_TOKEN',
-    'WHATSAPP_PHONE_ID'
-  ];
+  console.log('\n🔍 [5/5] Checking System Readiness...');
+  const required = ['GEMINI_API_KEY', 'FIREBASE_PROJECT_ID', 'WHATSAPP_API_TOKEN', 'MASTER_ADMIN_PHONE'];
   const missing = required.filter(key => !process.env[key]);
   if (missing.length > 0) {
-    console.error(`❌ Missing critical variables: ${missing.join(', ')}`);
+    console.error(`❌ Critical Envs Missing: ${missing.join(', ')}`);
   } else {
-    console.log('✅ All critical environment variables are set.');
+    console.log('✅ All Empire Era environment variables are set.');
   }
 
-  console.log('\n🏁 --- HEALTH CHECK COMPLETE --- 🏁');
+  console.log('\n🏁 --- IMPACT CHECK COMPLETE --- 🏁');
   process.exit(0);
 }
 

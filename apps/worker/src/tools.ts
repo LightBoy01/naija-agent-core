@@ -70,8 +70,22 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
   }
 
   allFunctionDeclarations.push({
-    name: "generate_order_summary",
-    description: "Generates a professional order summary for the customer including items and total. (All Users)",
+    name: "generate_image",
+    description: "Generate a creative image based on a text description. Use this when the user asks to see something, create an image, or design a logo.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        prompt: {
+          type: SchemaType.STRING,
+          description: "The detailed description of the image to generate (e.g., 'A futuristic Lagos at night with flying danfo buses')."
+        }
+      },
+      required: ["prompt"]
+    }
+  });
+
+  allFunctionDeclarations.push({
+    name: "generate_order_summary",    description: "Generates a professional order summary for the customer including items and total. (All Users)",
     parameters: {
       type: SchemaType.OBJECT,
       properties: {

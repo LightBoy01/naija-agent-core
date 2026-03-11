@@ -314,25 +314,114 @@ export async function handleToolCall(
       return { status: 'success', data: products };
 
     case 'web_search':
-      // The "Master Wrapper" Pattern: Use a secondary, cheap call to get search results.
-      // This avoids the Tool Conflict in the main session.
+      // The "Master Wrapper" Pattern with Sovereign Fallback (Phase 7)
+      // Primary: Gemini 3.1 Flash-Lite (Fastest)
+      // Fallback: Gemini 2.5 Flash (Most Reliable)
       try {
         const { GoogleGenerativeAI } = await import('@google/generative-ai');
         const searchGenAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-        const searchModel = searchGenAI.getGenerativeModel({ 
-          model: "gemini-3.1-flash-lite-preview", // Cheap & Fast
-          tools: [{ googleSearch: {} }] 
-        });
-
-        const searchResult = await searchModel.generateContent({
-          contents: [{ role: 'user', parts: [{ text: `Search for: ${args.query}. Summarize the key facts, prices, or news found.` }] }]
-        });
         
-        const summary = searchResult.response.text();
-        return { status: 'success', result: summary };
+        const trySearch = async (modelName: string) => {
+          const searchModel = searchGenAI.getGenerativeModel({ 
+            model: modelName,
+            tools: [{ googleSearch: {} }] as any
+          });
+
+          const searchResult = await searchModel.generateContent({
+            contents: [{ role: 'user', parts: [{ text: `Search for: ${args.query}. Summarize the key facts, prices, or news found.` }] }]
+          });
+          
+          return searchResult.response.text();
+        };
+
+        try {
+          // Tier 1: Gemini 3.1 Preview
+          const summary = await trySearch("gemini-3.1-flash-lite-preview");
+          return { status: 'success', result: summary };
+        } catch (firstTryErr: any) {
+           if (firstTryErr.message.includes('429')) {
+              console.warn(`🔄 [SEARCH FALLBACK L1] 3.1 Quota Exceeded. Retrying with Flash-Lite Latest...`);
+              try {
+                  // Tier 2: Flash-Lite Latest (Stable)
+                  const secondSummary = await trySearch("gemini-flash-lite-latest");
+                  return { status: 'success', result: secondSummary, metadata: { fallback: 'flash-lite-latest' } };
+              } catch (secondTryErr: any) {
+                  if (secondTryErr.message.includes('429')) {
+                      console.warn(`🔄 [SEARCH FALLBACK L2] Flash-Lite Latest Busy. Retrying with Gemini 2.5 Flash...`);
+                      // Tier 3: 2.5 Flash (Ultimate Reliability)
+                      const thirdSummary = await trySearch("gemini-2.5-flash");
+                      return { status: 'success', result: thirdSummary, metadata: { fallback: 'gemini-2.5-flash' } };
+                  }
+                  throw secondTryErr;
+              }
+           }
+           throw firstTryErr;
+        }
       } catch (err: any) {
         console.error('Web Search Failed:', err.message);
-        return { status: 'error', message: 'I tried to search, but the connection failed. Please try again.' };
+        return { status: 'error', message: 'Oga, I don search tire for today! I don reach my limit for now. Please try again later.' };
+      }
+
+    case 'generate_image':
+      // Sovereign Multimodal Strategy (Phase 7: Creative Eyes)
+      const imageGenFee = 5000; // ₦50.00 Creative Fee
+      try {
+        const { deductBalance } = await import('@naija-agent/firebase');
+        const { GoogleGenerativeAI } = await import('@google/generative-ai');
+
+        if (!isAdmin && !isStaff) {
+           const deductResult = await deductBalance(orgId, imageGenFee);
+           if (deductResult === null) {
+              return { status: 'error', message: "Oga, your balance no reach for this creative work. Image generation costs ₦50.00." };
+           }
+        }
+
+        const imageGenAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+        const imageModel = imageGenAI.getGenerativeModel({ 
+          model: "gemini-3.1-flash-image-preview" 
+        });
+
+        try {
+          console.log(`🎨 [IMAGE GEN] Generating image for ${orgId}: ${args.prompt}`);
+          
+          // --- IMAGE GENERATION (March 2026 Native API) ---
+          const imageResult = await imageModel.generateContent({
+             contents: [{ role: 'user', parts: [{ text: `Generate a high-quality image based on this description: ${args.prompt}. Make it look professional and vibrant.` }] }]
+          });
+
+          // The image model returns the image as inlineData in the response parts
+          const imagePart = imageResult.response.candidates?.[0].content.parts.find(p => p.inlineData);
+          
+          if (imagePart && imagePart.inlineData) {
+             const buffer = Buffer.from(imagePart.inlineData.data, 'base64');
+             // Send the generated image directly to the user
+             await whatsappService.sendImage(from, buffer, `✨ *Generated Image:* "${args.prompt}"`);
+             return { status: 'success', message: "Image generated and sent successfully." };
+          } else {
+             const textResponse = imageResult.response.text();
+             return { status: 'error', message: `Oga, I no fit generate that image: ${textResponse}` };
+          }
+        } catch (genErr: any) {
+           if (genErr.message.includes('429')) {
+              console.warn(`🔄 [IMAGE FALLBACK] 3.1 Flash-Image Quota Exceeded. Switching to Creative Prompt Fallback...`);
+              
+              // Secondary: Use Flash-Lite to write a stunning prompt for the user
+              const promptModel = imageGenAI.getGenerativeModel({ model: "gemini-flash-lite-latest" });
+              const promptResult = await promptModel.generateContent({
+                contents: [{ role: 'user', parts: [{ text: `The image generator is busy. Create a stunning, high-quality, professional image generation prompt for this idea: ${args.prompt}. Write it in a way that the user can visualize the result.` }] }]
+              });
+
+              const artisticPrompt = promptResult.response.text();
+              const response = `🎨 *Creative Engine Update:* Oga, my drawing hand don tire small (Quota Limit), but look wetin I been wan draw for you:\n\n${artisticPrompt}\n\n_Wait small, I go fit draw am later!_`;
+              
+              return { status: 'success', result: response, metadata: { fallback: 'creative-prompt' } };
+           }
+           throw genErr;
+        }
+
+      } catch (err: any) {
+        console.error('Image Generation Failed:', err.message);
+        return { status: 'error', message: 'I tried to create the image, but my creative engine failed. Please try again later.' };
       }
 
     case 'get_shipping_rates':
@@ -504,45 +593,14 @@ export async function handleToolCall(
         systemPrompt: args.prompt
       });
       
-      // --- Phase 5.8: Auto-Pulse Scheduling ---
-      try {
-        const { Queue } = await import('bullmq');
-        const whatsappQueue = new Queue('whatsapp-queue', { 
-          connection: {
-            host: process.env.REDIS_HOST || 'localhost',
-            port: parseInt(process.env.REDIS_PORT || '6379'),
-            password: process.env.REDIS_PASSWORD,
-          }
-        });
-
-        // 1. Daily Report (8 AM Lagos)
-        await whatsappQueue.add('daily-report', 
-          { orgId: args.id, from: args.adminPhone, type: 'text', timestamp: Date.now(), messageId: `auto_${Date.now()}`, content: {} }, 
-          { repeat: { cron: '0 7 * * *' }, jobId: `daily-report:${args.id}`, removeOnComplete: true }
-        );
-
-        // 2. Health Guardian (Every 10 mins)
-        await whatsappQueue.add('check-bridge-health', 
-          { orgId: args.id },
-          { repeat: { cron: '*/10 * * * *' }, jobId: `health-check:${args.id}`, removeOnComplete: true }
-        );
-
-        // 3. Appointment Nudges (Every hour)
-        await whatsappQueue.add('hourly-reminder-scan', 
-          { orgId: args.id },
-          { repeat: { cron: '0 * * * *' }, jobId: `reminder-scan:${args.id}`, removeOnComplete: true }
-        );
-
-        console.log(`✅ [AUTO-PULSE] Scheduled all proactive jobs for new tenant: ${args.id}`);
-      } catch (schedError: any) {
-        console.error(`⚠️ [AUTO-PULSE] Failed to schedule for ${args.id}:`, schedError.message);
-        // We don't fail the whole tool call, the tenant is already created.
-      }
+      // --- Phase 5.8: Auto-Pulse Scheduling (Consolidated to Global Cron) ---
+      // We no longer schedule individual repeat jobs here to avoid redundancy.
+      // The Global Cron in the API handles the morning pulse for all active orgs.
 
       if (args.wabaId) {
          await whatsappService.subscribeWaba(args.wabaId);
       }
-      return { status: 'success', message: `Tenant '${args.name}' created. Proactive pulse active.` };
+      return { status: 'success', message: `Tenant '${args.name}' created. Proactive pulse active via Global Cron.` };
 
     case 'topup_tenant':
       const result = await topupTenant(args.tenantId, args.amount, args.reference);
@@ -606,7 +664,28 @@ export async function handleToolCall(
       // Prevent overwriting existing merchants
       const dbInstance = getDb();
       const existing = await dbInstance.collection('organizations').doc(args.id).get();
-      if (existing.exists) return { status: 'error', message: 'This business ID is already taken. Please choose another name.' };
+      
+      if (existing.exists) {
+        // Friction: ID taken. Suggest variations.
+        const suggestions = [
+           `${args.id}_ng`,
+           `${args.id}_ai`,
+           `${args.id}_${Math.floor(10 + Math.random() * 90)}`
+        ];
+        return { 
+          status: 'error', 
+          code: 'ID_TAKEN', 
+          message: `Oga, the ID "${args.id}" is already taken by another business. How about one of these instead? \n\n1. ${suggestions[0]}\n2. ${suggestions[1]}\n3. ${suggestions[2]}`,
+          suggestions 
+        };
+      }
+
+      // Check if this Boss already has a business (Inform, don't block)
+      const existingBossOrg = await (await import('@naija-agent/firebase')).findOrgByAdminPhone(args.adminPhone);
+      let bossContext = "";
+      if (existingBossOrg) {
+         bossContext = `\n\n*Note:* I see you already manage "${existingBossOrg.name}". No problem, I will set this one up separately!`;
+      }
 
       await registerTrialInterest({
         id: args.id,
@@ -621,7 +700,10 @@ export async function handleToolCall(
         await whatsappService.sendText(process.env.MASTER_ADMIN_PHONE, alert);
       }
       
-      return { status: 'success', message: `Interest registered for ${args.name}. Oga Sovereign has been notified. We will send your activation code shortly.` };
+      return { 
+        status: 'success', 
+        message: `Interest registered for ${args.name}. Oga Sovereign has been notified. We will send your activation code shortly.${bossContext}` 
+      };
 
     case 'request_otp_relay':
       if (!isAdmin || !orgConfig?.isMaster) return { status: 'error', code: 'UNAUTHORIZED' };
@@ -665,7 +747,7 @@ export async function handleToolCall(
       return { status: 'success', message: `🚩 *SETUP PIPELINE*\n\n${setupSummary}` };
 
     case 'get_network_stats':
-      const stats = await getNetworkStats();
+      const stats = await getNetworkStats(orgId);
       return { status: 'success', data: stats };
 
     case 'generate_login_code':

@@ -117,7 +117,7 @@ export async function registerTrialInterest(data: {
   adminPhone: string;
   botPhone: string;
 }): Promise<void> {
-  const trialBonus = 33300; // 333.00 NGN Trial Gift
+  const trialBonus = 100000; // 1,000.00 NGN Trial Gift
   
   await orgsRef.doc(data.id).set({
     ...data,
@@ -196,7 +196,7 @@ export async function getOrgOnboarding(orgId: string): Promise<{ step: string, d
  */
 export async function completeOnboarding(orgId: string, finalConfig: any): Promise<void> {
   const hashedPin = await bcrypt.hash(finalConfig.adminPin || '1234', 10);
-  const bonusKobo = 33300; // 333.00 NGN
+  const bonusKobo = 100000; // 1,000.00 NGN
   
   await orgsRef.doc(orgId).update({
     name: finalConfig.name,
@@ -409,7 +409,7 @@ export async function createTenant(data: {
 }): Promise<void> {
   const hashedPin = await bcrypt.hash('1234', 10);
   const bridgeSecret = crypto.randomBytes(16).toString('hex'); // 32 chars for SMS bridge auth
-  const bonusKobo = 33300; // 333.00 NGN starting bonus
+  const bonusKobo = 100000; // 1,000.00 NGN starting bonus
 
   await orgsRef.doc(data.id).set({
     ...data,
@@ -560,8 +560,13 @@ export async function getOrgStats(orgId: string): Promise<any> {
 }
 /**
  * Fetches all media (images/audio) across the network using a collection group query
+ * 🛡️ [RED TEAM SHIELD]: Strictly restricted to Sovereign Master Bot.
  */
-export async function getNetworkMedia(limit = 24): Promise<any[]> {
+export async function getNetworkMedia(orgId: string, limit = 24): Promise<any[]> {
+  if (orgId !== 'naija-agent-master') {
+    throw new Error('UNAUTHORIZED_GLOBAL_QUERY: This action is restricted to the Sovereign HQ.');
+  }
+
   const snapshot = await db.collectionGroup('messages')
     .where('type', 'in', ['image', 'audio'])
     .orderBy('timestamp', 'desc')
@@ -578,7 +583,11 @@ export async function getNetworkMedia(limit = 24): Promise<any[]> {
 /**
  * Fetches all active conversations across the network for the Sovereign
  */
-export async function getNetworkChats(limit = 20): Promise<any[]> {
+export async function getNetworkChats(orgId: string, limit = 20): Promise<any[]> {
+  if (orgId !== 'naija-agent-master') {
+    throw new Error('UNAUTHORIZED_GLOBAL_QUERY');
+  }
+
   const snapshot = await chatsRef
     .orderBy('lastMessageAt', 'desc')
     .limit(limit)
@@ -593,7 +602,11 @@ export async function getNetworkChats(limit = 20): Promise<any[]> {
 /**
  * Aggregates network-wide statistics for the Sovereign (O(1) Optimized)
  */
-export async function getNetworkStats(): Promise<any> {
+export async function getNetworkStats(orgId: string): Promise<any> {
+  if (orgId !== 'naija-agent-master') {
+    throw new Error('UNAUTHORIZED_VAULT_QUERY');
+  }
+
   // 1. Fetch Aggregated Totals (Single Read)
   const metaDoc = await db.collection('network_metadata').doc('global').get();
   const meta = metaDoc.data() || { totalVaultKobo: 0, activeClients: 0 };
@@ -618,8 +631,9 @@ export async function getNetworkStats(): Promise<any> {
 
 /**
  * Calculates anonymized sales benchmarks for the network.
+ * 🛡️ [RED TEAM]: Returns only averages to prevent individual data leakage.
  */
-export async function getNetworkHealthInsight(dateStr: string): Promise<{ avgSalesKobo: number, totalActiveBots: number }> {
+export async function getNetworkHealthInsight(orgId: string, dateStr: string): Promise<{ avgSalesKobo: number, totalActiveBots: number }> {
   const snapshot = await db.collectionGroup('daily_snapshots')
     .where('updatedAt', '>', Timestamp.fromDate(new Date(Date.now() - 48 * 60 * 60 * 1000))) // Simple heuristic: recent snapshots
     .get();
@@ -826,6 +840,33 @@ export async function getOrgDailyStats(orgId: string, dateStr: string): Promise<
     pendingActivities: pendingSnap.data().count,
     newCustomers: 0 // Placeholder for future implementation
   };
+}
+
+/**
+ * Calculates the total value of "Potential Sales" (Pending/Confirmed orders).
+ */
+export async function getPotentialSalesValue(orgId: string): Promise<number> {
+  const snapshot = await orgsRef.doc(orgId).collection('activities')
+    .where('status', 'in', ['pending', 'confirmed'])
+    .where('type', '==', 'order')
+    .get();
+  
+  let totalKobo = 0;
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    if (data.amount) {
+      // 🛡️ [WISDOM]: Robust parsing to handle strings, symbols, or numbers
+      const rawValue = typeof data.amount === 'string' 
+        ? data.amount.replace(/[^0-9.]/g, '') 
+        : data.amount;
+      
+      const parsed = parseFloat(rawValue);
+      if (!isNaN(parsed)) {
+        totalKobo += Math.round(parsed * 100);
+      }
+    }
+  });
+  return totalKobo;
 }
 
 /**

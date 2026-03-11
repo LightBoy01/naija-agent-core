@@ -481,8 +481,7 @@ fastify.post('/bridge/sms', async (request, reply) => {
      console.log(`🔍 [SMS BRIDGE] Regex failed for ${org.id}. Calling Gemini...`);
      try {
        const genAI = new (await import('@google/generative-ai')).GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-       const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-       const prompt = `Extract the transaction amount as a number only from this Nigerian bank SMS. 
+       const model = genAI.getGenerativeModel({ model: "gemini-flash-lite-latest" });       const prompt = `Extract the transaction amount as a number only from this Nigerian bank SMS. 
        If no amount is found, return "NULL". 
        SMS: "${body}"`;
        
