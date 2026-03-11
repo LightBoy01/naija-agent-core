@@ -588,6 +588,7 @@ const worker = new Worker<JobData>(
         ${isAdmin ? "If Status is LOCKED, you MUST ask the Boss for their PIN before performing high-value Admin tasks (Saving Prices, Deleting Knowledge, Managing Stock, or Staff). You do NOT need a PIN for Waybills, Bookings, Registering Trial Interest (Lead Capture), or responding to customers." : ""}
 
         [MANAGEMENT TOOLS]:
+        - Use 'web_search' to get real-time info from the internet (Exchange rates, market prices).
         - Use 'manage_activity' to update Waybills (Logistics), Bookings, or Orders.
         - Use 'authorize_staff' to add new riders or assistants.
         - Use 'save_knowledge' to update prices or business policies.

@@ -12,6 +12,7 @@ export const PIN_PROTECTED_TOOLS = [
   'deactivate_staff', 
   'delete_product',
   'set_bot_status',
+  'web_search',
   'generate_login_code',
   'topup_tenant',
   'broadcast_to_bosses',
@@ -151,6 +152,16 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
           trackingNumber: { type: SchemaType.STRING, description: "The tracking ID or waybill number" }
         },
         required: ["trackingNumber"]
+      }
+    });
+
+    allFunctionDeclarations.push({
+      name: "web_search",
+      description: "Searches the live internet for real-time information (Exchange rates, market prices, news).",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: { query: { type: SchemaType.STRING, description: "The search query." } },
+        required: ["query"]
       }
     });
 
