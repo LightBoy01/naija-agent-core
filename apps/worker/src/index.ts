@@ -627,15 +627,10 @@ const worker = new Worker<JobData>(
         !!tenantPaymentProvider
       );
 
-      // --- Identity-Based Model Routing (PHASE 7.3: March 2026 Advanced Aliases) ---
-      let tenantModelName = org.config?.model;
-      
-      if (!tenantModelName) {
-          // Sovereign Directive: Assign optimized brains based on rank
-          tenantModelName = org.config?.isMaster 
-            ? "gemini-3.1-pro-preview-customtools" // Optimized for Master Bot Tool Use
-            : "gemini-3.1-flash-lite-preview";     // Optimized for Tenant Scale
-      }
+      // --- Identity-Based Model Routing (PHASE 7.4: Universal Flash-Lite for Profit) ---
+      // We default to Flash-Lite for everything to keep costs low and responses fast.
+      // The "Model Switcher" is powered by the Firestore 'config.model' field.
+      const tenantModelName = org.config?.model || "gemini-3.1-flash-lite-preview";
 
       const model = genAI.getGenerativeModel({ 
         model: tenantModelName,
