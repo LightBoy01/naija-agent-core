@@ -17,7 +17,7 @@ import { JobData } from '@naija-agent/types';
 import { WhatsAppService } from './services/whatsapp.js';
 import { GoogleGenerativeAI, SchemaType, Tool } from '@google/generative-ai';
 import { getProvider, PaymentProvider } from '@naija-agent/payments';
-import { getTenantTools, BOSS_ONLY_TOOLS } from './tools.js';
+import { getTenantTools, PIN_PROTECTED_TOOLS } from './tools.js';
 import { handleToolCall } from './tool-handlers.js';
 // import { uploadMedia } from '@naija-agent/storage'; // FREE TIER PIVOT: Disabled to save cost
 import { 
@@ -791,12 +791,14 @@ const worker = new Worker<JobData>(
           const args = call.args as any;
 
           // SECURITY: Certain tools are strictly BOSS only and require PIN Auth
-          if (BOSS_ONLY_TOOLS.includes(call.name) && !isAdmin) {
+          const isPinProtected = PIN_PROTECTED_TOOLS.includes(call.name);
+
+          if (isPinProtected && !isAdmin) {
              functionResponses.push({ functionResponse: { name: call.name, response: { status: 'error', message: 'UNAUTHORIZED: This action requires Boss privileges.' } } });
              continue;
           }
 
-          if (BOSS_ONLY_TOOLS.includes(call.name) && !isAuth) {
+          if (isPinProtected && !isAuth) {
             functionResponses.push({ functionResponse: { name: call.name, response: { status: 'error', message: 'SECURITY_LOCKED: Boss, you must verify your PIN before doing this.' } } });
             continue;
           }
@@ -857,15 +859,28 @@ const worker = new Worker<JobData>(
                  }
               }
 
+              // Also include prices from Business Knowledge (Knowledge Context)
+              const knowledgePrices: number[] = [];
+              Object.values(businessKnowledge).forEach(val => {
+                 const matches = val.match(/₦?([\d,.]+)/g);
+                 if (matches) {
+                    matches.forEach(m => {
+                       const p = parseFloat(m.replace(/[₦,]/g, ''));
+                       if (!isNaN(p)) knowledgePrices.push(p);
+                    });
+                 }
+              });
+
               for (const match of quotedPrices) {
                   const rawPriceStr = match[1].replace(/,/g, '');
                   const quotedPrice = parseFloat(rawPriceStr);
                   
-                  // Verification: Is this price in our valid products?
-                  const isValid = validProducts.some(p => Math.abs(p.price - quotedPrice) < 1); // 1 Naira tolerance
+                  // Verification: Is this price in our valid products or knowledge?
+                  const isValidProduct = validProducts.some(p => Math.abs(p.price - quotedPrice) < 1);
+                  const isValidKnowledge = knowledgePrices.some(p => Math.abs(p - quotedPrice) < 1);
                   
-                  if (!isValid) {
-                      console.warn(`🛡️ [PRICE GUARD] Hallucination detected! AI quoted ₦${quotedPrice} but no matching product found.`);
+                  if (!isValidProduct && !isValidKnowledge) {
+                      console.warn(`🛡️ [PRICE GUARD] Hallucination detected! AI quoted ₦${quotedPrice} but no matching product or knowledge found.`);
                       // REDACTION: Replace the price with a placeholder to prevent fraud
                       const replacement = "₦[Verification Pending]";
                       finalMessage = finalMessage.replace(match[0], replacement);

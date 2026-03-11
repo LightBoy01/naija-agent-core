@@ -2,25 +2,21 @@ import { SchemaType, Tool, FunctionDeclaration } from '@google/generative-ai';
 
 /**
  * Defines which tools require 4-digit PIN authentication (Boss Only).
- * This centralizes security logic to prevent bypasses when adding new tools.
+ * Tools NOT in this list can be used by Staff or the Public (if provided in getTenantTools).
  */
-export const BOSS_ONLY_TOOLS = [
-  'save_knowledge', 
+export const PIN_PROTECTED_TOOLS = [
   'delete_knowledge', 
   'create_tenant', 
   'get_network_stats', 
   'authorize_staff', 
   'deactivate_staff', 
-  'save_product', 
   'delete_product',
-  'manage_stock',
   'set_bot_status',
   'generate_login_code',
   'topup_tenant',
   'broadcast_to_bosses',
   'audit_tenant',
   'report_fraud',
-  'request_otp_relay',
   'activate_tenant',
   'get_pending_setups'
 ];
