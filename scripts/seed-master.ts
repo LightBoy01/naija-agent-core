@@ -63,7 +63,7 @@ async function seedMaster() {
         tools: ['web_search', 'calculator'],
         adminPhone: BOSS_PHONE,
         adminPin: '0000', 
-        model: 'gemini-3.1-pro',
+        model: 'gemini-3.1-pro-preview-customtools',
         isMaster: true,
         sovereignBankDetails: SOVEREIGN_BANK
       },
