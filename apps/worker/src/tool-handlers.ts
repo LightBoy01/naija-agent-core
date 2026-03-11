@@ -313,6 +313,28 @@ export async function handleToolCall(
       const products = await searchProducts(orgId, args.query);
       return { status: 'success', data: products };
 
+    case 'web_search':
+      // The "Master Wrapper" Pattern: Use a secondary, cheap call to get search results.
+      // This avoids the Tool Conflict in the main session.
+      try {
+        const { GoogleGenerativeAI } = await import('@google/generative-ai');
+        const searchGenAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+        const searchModel = searchGenAI.getGenerativeModel({ 
+          model: "gemini-3.1-flash-lite-preview", // Cheap & Fast
+          tools: [{ googleSearch: {} }] 
+        });
+
+        const searchResult = await searchModel.generateContent({
+          contents: [{ role: 'user', parts: [{ text: `Search for: ${args.query}. Summarize the key facts, prices, or news found.` }] }]
+        });
+        
+        const summary = searchResult.response.text();
+        return { status: 'success', result: summary };
+      } catch (err: any) {
+        console.error('Web Search Failed:', err.message);
+        return { status: 'error', message: 'I tried to search, but the connection failed. Please try again.' };
+      }
+
     case 'get_shipping_rates':
       const { getLogisticsProvider } = await import('@naija-agent/logistics');
       const logisticsApiKey = orgConfig?.logistics?.apiKey || process.env.TERMINAL_AFRICA_API_KEY;
