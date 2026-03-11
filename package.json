@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "clean": "rm -rf apps/*/dist packages/*/dist apps/*/.tsbuildinfo packages/*/.tsbuildinfo",
+    "clean": "rm -rf apps/*/dist packages/*/dist apps/*/.tsbuildinfo packages/*/.tsbuildinfo packages/*/tsconfig.tsbuildinfo",
     "build": "npm run clean && node scripts/build.js",
     "dev": "npm run dev --workspaces",
     "start": "npm run start --workspaces",
