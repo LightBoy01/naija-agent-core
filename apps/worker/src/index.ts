@@ -549,7 +549,7 @@ const worker = new Worker<JobData>(
       }
 
       // --- ONBOARDING STATE MACHINE (PHASE 5.15) ---
-      const onboarding = await getOrgOnboarding(orgId);
+      // Re-use already declared 'onboarding' variable from line 453
       
       // 🛡️ [RE-SETUP PROTECTION]: Don't let a Boss accidentally wipe their setup
       if (isAdmin && text === '#setup' && onboarding?.step === 'COMPLETE') {
@@ -959,7 +959,7 @@ const worker = new Worker<JobData>(
 
       // --- Sovereign AI Logic with Tiered Fallback (Phase 7) ---
       let result;
-      let responseText = "";
+      // Removed duplicate responseText declaration here
 
       const sendMessageWithFallback = async (parts: any) => {
           const tryWithModel = async (modelName: string) => {
@@ -1007,12 +1007,19 @@ const worker = new Worker<JobData>(
           }
       };
 
-      result = await sendMessageWithFallback(promptParts);
-      responseText = result.response.text();
-      
-      const functionCalls = result.response.functionCalls();
-      const functionResponses: any[] = [];
-      if (functionCalls && functionCalls.length > 0) {
+      // Variables needed in final processing or catch blocks
+      let responseText = "";
+      let functionCalls: any[] = [];
+      let functionResponses: any[] = [];
+
+      try {
+        result = await sendMessageWithFallback(promptParts);
+        responseText = result.response.text();
+        
+        const calls = result.response.functionCalls();
+        if (calls) functionCalls = calls;
+        
+        if (functionCalls && functionCalls.length > 0) {
         for (const call of functionCalls) {
           const args = call.args as any;
 
@@ -1047,12 +1054,17 @@ const worker = new Worker<JobData>(
             functionResponses.push({ functionResponse: { name: call.name, response: { status: 'error', message: e.message } } });
           }
         }
+
         if (functionResponses.length > 0) {
            // Reuse the fallback-aware logic for tool response follow-up
            // Note: The original chatSession might have failed, but sendMessageWithFallback handles it.
            result = await sendMessageWithFallback(functionResponses);
            responseText = result.response.text();
         }
+      }
+    } catch (geminiError: any) {
+        console.error(`❌ [GEMINI_ERROR] ${orgId}:`, geminiError.message);
+        responseText = "I'm sorry, I'm having a bit of trouble thinking right now. Please try again in a moment.";
       }
       
       // 8. Finalize Persistence
@@ -1081,7 +1093,8 @@ const worker = new Worker<JobData>(
           if (quotedPrices.length > 0) {
               // Collect all valid products found in this turn
               const validProducts: any[] = [];
-              for (const response of functionResponses) {
+              const responsesToProcess = Array.isArray(functionResponses) ? functionResponses : [];
+              for (const response of responsesToProcess) {
                  if ((response as any).functionResponse?.name === 'search_products') {
                     const data = (response as any).functionResponse.response?.data;
                     if (Array.isArray(data)) validProducts.push(...data);
@@ -1121,13 +1134,14 @@ const worker = new Worker<JobData>(
           }
       }
 
-      if (!isAdmin && !isMasterBot) {
+      if (!isAdmin && !isStaff) {
         let imagesSentCount = 0;
         const maxImagesPerTurn = 3;
         const visualTurnFee = 5000; // Flat ₦50.00 for any turn with images
         let visualFeeDeducted = false;
 
-        for (const call of functionCalls || []) {
+        const callsToProcess = Array.isArray(functionCalls) ? functionCalls : [];
+        for (const call of callsToProcess) {
           if (imagesSentCount >= maxImagesPerTurn) break; 
 
           const response = functionResponses.find(r => (r as any).functionResponse.name === call.name);
@@ -1229,7 +1243,6 @@ const worker = new Worker<JobData>(
            await redisClient.setex(alertKey, 86400, '1');
          }
       }
-
     } catch (error: any) {
       console.error(`Job ${job.id} failed attempt ${job.attemptsMade + 1}/${job.opts.attempts}:`, error.message);
       

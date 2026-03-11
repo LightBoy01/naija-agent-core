@@ -1,60 +1,62 @@
-# Setup Guide & Resources
+# 🚀 Merchant Onboarding Playbook (Empire Era)
 
-## 1. External Accounts Required
+Welcome to the **Naija Agent Network**. This guide is for Bosses (Merchants) who want to launch their own Digital Apprentice.
 
-### A. Meta for Developers (WhatsApp API)
-1.  **Sign Up:** [developers.facebook.com](https://developers.facebook.com/)
-2.  **Create App:** Type "Business" -> "Other".
-3.  **Add Product:** Select "WhatsApp".
-4.  **Get Credentials:**
-    *   `Phone Number ID`
-    *   `WhatsApp Business Account ID`
-    *   `System User Access Token` (Permanent token).
-5.  **Configure Webhook:** You will need a public URL (`ngrok`) to verify the webhook.
+---
 
-### B. Google AI Studio (The Brain)
-1.  **Sign Up:** [aistudio.google.com](https://aistudio.google.com/)
-2.  **Get API Key:** Create a new API key.
-3.  **Model:** Ensure you have access to `gemini-1.5-flash`.
+## 1. The Hook (The Trial)
+Every new business gets a **FREE Trial** to see the magic.
+- **Gift:** ₦1,000.00 in AI credits (approx. 30 high-value interactions).
+- **Setup:** Type `#setup` to the Master Bot to begin.
+- **No Commitment:** Try it out on our shared number before moving to your own SIM.
 
-### C. Firebase (The Database)
-1.  **Console:** [console.firebase.google.com](https://console.firebase.google.com/)
-2.  **Project:** Create "NaijaAgent Core".
-3.  **Firestore:** Enable Firestore in `europe-west1` (Test Mode).
-4.  **Key:** Generate a new Service Account JSON key from Project Settings.
+## 2. Launching Your Apprentice (#setup)
+Once you message your bot, use these commands to manage your shop:
 
-### D. Redis (Queue)
-1.  **Local:** Install via `pkg install redis`.
-2.  **Production:** Use Upstash or Railway Redis.
+| Command | Action |
+| :--- | :--- |
+| **#setup** | Start the onboarding guide (Name, PIN, Bank Details). |
+| **#status** | Check your AI balance, SMS Bridge status, and Bot health. |
+| **#cancel** | Stop the current setup if you made a mistake. |
+| **#reset** | Clear ALL data and start fresh (Requires confirmation). |
 
-## 2. Local Environment Setup
+### Setup Steps:
+1.  **Business Name:** What customers will call your shop.
+2.  **Admin PIN:** Your 4-digit secret key for changing prices.
+3.  **Bank Details:** Where customers will send money (Bank, Account #, Name).
+4.  **Tone:** Choose between **Professional** or **Street-Smart** (Pidgin mix).
 
-### Environment Variables (.env)
-Create a `.env` file in the root:
+---
 
-```ini
-# App
-PORT=3000
-NODE_ENV=development
+## 3. The Money (AI Credits & Sales)
+We use a **Kobo-based Ledger** for 100% precision.
 
-# Meta / WhatsApp
-WHATSAPP_API_TOKEN=your_token
-WHATSAPP_PHONE_ID=your_id
-WHATSAPP_VERIFY_TOKEN=your_random_string
-WHATSAPP_APP_SECRET=your_secret
+- **Sales:** Customers pay **DIRECTLY** to your bank account. We take 0% of your sales.
+- **AI Fees:** You only pay for what the bot does:
+    - **Text Reply:** ₦33.00
+    - **Vision (Receipt Check):** ₦77.00
+    - **Visual Turn (Sending Product Photos):** Flat ₦50.00 (per turn).
+    - **Document Processing (PDFs):** ₦99.00
 
-# Google Gemini
-GEMINI_API_KEY=your_key
+### How to Top Up:
+1.  Ask your bot: *"How do I top up?"*
+2.  Follow the **Paystack Link** or transfer to **Naija Agent HQ**.
+3.  Use your **Business ID** as the reference for instant crediting.
 
-# Firebase (Client)
-FIREBASE_PROJECT_ID=naija-agent-core
-NEXT_PUBLIC_FIREBASE_API_KEY=...
-# (Add other client vars from the dashboard if needed)
-```
+---
 
-### Initializing the Project
-1.  **Install:** `npm install`
-2.  **Key Setup:** Place your service account key in `packages/firebase/serviceAccountKey.json`.
-3.  **Seed:** `cd packages/firebase && npm run seed`
-4.  **Build:** `npm run build`
-5.  **Dev:** `npm run dev`
+## 4. The Shield (SMS Bridge)
+To verify bank alerts instantly and stop fake alerts:
+1.  Install the **Naija Agent Bridge** on an Android phone with your bank SIM.
+2.  Keep the phone online and charged.
+3.  The bot will automatically confirm payments to your customers.
+
+---
+
+## 5. Staff Management
+You can add riders or assistants to help you:
+- Tell the bot: *"Authorize [Name] with phone [234...] as a Rider."*
+- Staff have a **50-message daily limit** to protect your balance.
+
+---
+*⚡ Powered by Naija Agent AI. Build your Empire.*

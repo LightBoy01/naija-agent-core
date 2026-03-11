@@ -15,10 +15,13 @@ async function testGemini() {
   console.log('✅ Found GEMINI_API_KEY');
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-3.1-flash-lite-preview",
+    tools: [{ googleSearch: {} }] as any
+  });
 
   const systemPrompt = "You are a helpful Nigerian AI assistant. You understand and speak Nigerian Pidgin English fluently. You are witty, helpful, and concise.";
-  const userPrompt = "How far now? Wetin dey sup for this Naija economy?";
+  const userPrompt = "How far now? Search the web and tell me the current exchange rate of Naira to Dollar today, March 11, 2026.";
 
   console.log(`\n🤖 System Prompt: ${systemPrompt}`);
   console.log(`👤 User Prompt: ${userPrompt}\n`);

@@ -1,21 +1,14 @@
-import admin from 'firebase-admin';
+import * as admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
-
-// Fix for ESM/CJS interop for firebase-admin
-const firebaseAdmin = (admin as any).default || admin;
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const serviceAccountPath = path.join(__dirname, '../packages/firebase/serviceAccountKey.json');
 const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
 
-if (!firebaseAdmin.apps.length) {
-  firebaseAdmin.initializeApp({
-    credential: firebaseAdmin.credential.cert(serviceAccount),
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
   });
 }
 
@@ -25,14 +18,17 @@ async function checkPin() {
   const masterDoc = await db.collection('organizations').doc('naija-agent-master').get();
   const pin = masterDoc.data()?.config?.adminPin;
   
-  console.log('--- PIN STATUS CHECK ---');
+  console.log('--- SOVEREIGN PIN STATUS CHECK ---');
   console.log('Org ID: naija-agent-master');
-  console.log('Current PIN:', pin);
   
-  if (pin && pin.startsWith('$2b$')) {
-    console.log('✅ Result: PIN is already SECURE (Hashed with Bcrypt).');
+  if (!pin) {
+    console.log('❌ Result: NO PIN FOUND! Please re-seed the Master Bot.');
+  } else if (pin.startsWith('$2b$')) {
+    console.log('✅ Result: PIN is SECURE (Hashed with Bcrypt).');
+    console.log(`🔒 Hash Length: ${pin.length} chars`);
   } else {
-    console.log('❌ Result: PIN is still INSECURE (Plain Text)!');
+    console.log('⚠️  Result: PIN is INSECURE (Plain Text).');
+    console.log(`📏 Length: ${pin.length} digits`);
   }
   
   process.exit(0);

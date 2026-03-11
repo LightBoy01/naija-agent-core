@@ -1,24 +1,20 @@
-import admin from 'firebase-admin';
+import * as admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
-import bcrypt from 'bcrypt';
-
-const firebaseAdmin = (admin as any).default || admin;
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import * as bcrypt from 'bcrypt';
 
 const serviceAccountPath = path.join(__dirname, '../packages/firebase/serviceAccountKey.json');
 const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
 
-if (!firebaseAdmin.apps.length) {
-  firebaseAdmin.initializeApp({
-    credential: firebaseAdmin.credential.cert(serviceAccount),
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
   });
 }
 
 const db = getFirestore();
+
 
 async function migrate() {
   const ORG_ID = 'naija-agent-master';

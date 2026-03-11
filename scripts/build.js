@@ -45,6 +45,18 @@ async function build(appName, entryPath, outPath) {
 async function main() {
   console.log("🚀 Starting Monorepo Bundle Build...");
   
+  // --- MONOREPO LINKING PROTECTION ---
+  // Ensure dist/ folders exist for local packages so npm ci links don't break
+  const packages = ['types', 'firebase', 'payments', 'storage', 'logistics'];
+  for (const pkg of packages) {
+    const distPath = path.join(process.cwd(), `packages/${pkg}/dist`);
+    if (!fs.existsSync(distPath)) {
+      console.log(`📁 Creating placeholder dist for @naija-agent/${pkg}...`);
+      fs.mkdirSync(distPath, { recursive: true });
+      fs.writeFileSync(path.join(distPath, 'index.js'), '// placeholder');
+    }
+  }
+
   // Build API to .js
   await build('apps/api', 'apps/api/src/index.ts', 'apps/api/dist/index.js');
   

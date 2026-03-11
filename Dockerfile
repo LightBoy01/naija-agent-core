@@ -3,33 +3,46 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# CRITICAL: Ensure we are in development mode so devDependencies (TypeScript, esbuild) are installed
+# Monorepo optimization: Install ALL dependencies for building
 ENV NODE_ENV=development
 
-# Copy package management files first for better caching
 COPY package.json package-lock.json ./
 COPY packages/firebase/package.json packages/firebase/
 COPY packages/types/package.json packages/types/
+COPY packages/payments/package.json packages/payments/
+COPY packages/storage/package.json packages/storage/
+COPY packages/logistics/package.json packages/logistics/
 COPY apps/api/package.json apps/api/
 COPY apps/worker/package.json apps/worker/
 
-# Install dependencies (including devDependencies for build)
+# Pre-create dist folders to satisfy monorepo links before build
+RUN mkdir -p packages/firebase/dist packages/types/dist packages/payments/dist packages/storage/dist packages/logistics/dist
+RUN touch packages/firebase/dist/index.js packages/types/dist/index.js packages/payments/dist/index.js packages/storage/dist/index.js packages/logistics/dist/index.js
+
+# Install dependencies
 RUN npm ci
 
 # Copy the rest of the source code
 COPY . .
 
-# Build all workspaces via monorepo command
+# Build all bundled apps
 RUN npm run build
 
-# SAFETY CHECK: Fail the build if any artifact is missing
-RUN ls -la apps/api/dist/index.js || (echo "❌ CRITICAL ERROR: apps/api/dist/index.js was NOT created!" && ls -R apps && exit 1)
-RUN ls -la apps/worker/dist/index.js || (echo "❌ CRITICAL ERROR: apps/worker/dist/index.js was NOT created!" && ls -R apps && exit 1)
+# Stage 2: Production Runner (Lean)
+FROM node:20-alpine AS runner
 
-# --- Single Stage for Debugging ---
-# We keep this single stage for now to ensure all dependencies (node_modules) are available
-# Since we bundled local packages, we don't strictly need symlinks for them, but we need node_modules for external deps
+WORKDIR /app
 ENV NODE_ENV=production
 
-# Default command (can be overridden by docker-compose or Railway)
+# Only copy necessary files from builder
+COPY --from=builder /app/package.json /app/package-lock.json ./
+COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/worker/dist ./apps/worker/dist
+
+# Install ONLY production dependencies (no devDeps, no TS needed for bundled CJS)
+RUN npm ci --omit=dev
+
+# SAFETY CHECK
+RUN ls -la apps/api/dist/index.js && ls -la apps/worker/dist/index.js
+
 CMD ["npm", "run", "start:api"]

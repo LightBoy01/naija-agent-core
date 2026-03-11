@@ -13,13 +13,13 @@ const firebaseAdmin = (admin as any).default || admin;
 
 // Fix for __dirname in ESM/CJS transition
 let currentDir: string;
-try {
-  // @ts-ignore
+if (typeof __dirname !== 'undefined') {
   currentDir = __dirname;
-} catch (e) {
-  // If __dirname is not defined, we are in ESM
+} else {
+  // ESM fallback
   const { fileURLToPath } = require('url');
-  currentDir = path.dirname(fileURLToPath((import.meta as any).url));
+  // @ts-ignore
+  currentDir = path.dirname(fileURLToPath(import.meta.url));
 }
 const _dirname = currentDir;
 
