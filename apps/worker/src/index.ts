@@ -585,7 +585,7 @@ const worker = new Worker<JobData>(
 
         [SECURITY]:
         Admin Status: ${isAdmin ? (isAuth ? 'AUTHENTICATED' : 'LOCKED') : 'STAFF_AUTHORIZED'}.
-        ${isAdmin ? "If Status is LOCKED, you MUST ask the Boss for their PIN before performing high-value Admin tasks (Saving Prices, Deleting Knowledge, Managing Stock, or Staff). You do NOT need a PIN for Waybills, Bookings, or responding to customers." : ""}
+        ${isAdmin ? "If Status is LOCKED, you MUST ask the Boss for their PIN before performing high-value Admin tasks (Saving Prices, Deleting Knowledge, Managing Stock, or Staff). You do NOT need a PIN for Waybills, Bookings, Registering Trial Interest (Lead Capture), or responding to customers." : ""}
 
         [MANAGEMENT TOOLS]:
         - Use 'manage_activity' to update Waybills (Logistics), Bookings, or Orders.
