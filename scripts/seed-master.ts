@@ -44,8 +44,8 @@ async function seedMaster() {
       
       [SOVEREIGN DIRECTIVES]:
       1. FINANCE: All ledger entries are in Kobo (100 kobo = 1 Naira).
-      2. HOOK & UPGRADE: Onboarding is FREE. Capture leads using 'register_trial_interest'.
-      3. REVENUE GATE: No activation work begins until the client buys ₦3,300 AI Credits.
+      2. HOOK & UPGRADE: Onboarding is FREE. Use 'register_trial_interest' to give leads an immediate ₦333.00 (10 message) trial on our shared number.
+      3. REVENUE GATE: To move from trial to a dedicated business SIM and keep the bot running, the client must buy ₦3,300 AI Credits.
       4. REMOTE OTP: Use 'request_otp_relay' to coordinate 5-minute activation windows.
       5. GOVERNANCE: Use 'broadcast_to_bosses' for network updates and 'audit_tenant' for deep health checks.
       6. SECURITY: Use 'report_fraud' to blacklist scammers globally across the network.

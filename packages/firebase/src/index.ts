@@ -109,7 +109,7 @@ export interface Message {
 export const getDb = () => db;
 
 /**
- * Registers a new merchant's interest in a trial.
+ * Registers a new merchant's interest in a trial and unlocks immediate demo access.
  */
 export async function registerTrialInterest(data: {
   id: string;
@@ -117,15 +117,17 @@ export async function registerTrialInterest(data: {
   adminPhone: string;
   botPhone: string;
 }): Promise<void> {
+  const trialBonus = 33300; // 333.00 NGN Trial Gift
+  
   await orgsRef.doc(data.id).set({
     ...data,
-    isActive: false,
-    status: 'PENDING_PAYMENT',
+    isActive: true, // UNLOCKED: Trial starts immediately
+    status: 'TRIAL',
     deploymentModel: 'SHARED',
-    balance: 0,
+    balance: trialBonus,
     currency: 'NGN',
-    costPerReply: 3300, // 33.00 NGN (Strategic Odd)
-    whatsappPhoneId: 'PENDING', // Will be updated by Sovereign
+    costPerReply: 3300, 
+    whatsappPhoneId: 'PENDING', 
     config: {
       adminPhone: data.adminPhone,
       botPhone: data.botPhone,
@@ -135,6 +137,9 @@ export async function registerTrialInterest(data: {
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
+
+  // Track the trial gift in network stats
+  await incrementNetworkStats({ clientDelta: 1, koboDelta: trialBonus });
 }
 
 /**
