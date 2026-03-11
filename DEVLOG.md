@@ -343,3 +343,23 @@
 
 --- 
 **Next Volume:** [DEVLOG_PHASE_4.md](./DEVLOG_PHASE_4.md)
+
+## Session 30: The Sovereign Shield & Bridge Deprecation (2026-03-11)
+**Status:** 🛡️ **Hardened**
+
+### **Critical Fixes Deployed:**
+*   **Anti-Fraud Regex:** Patched `apps/api/src/index.ts` to explicitly reject "Debit" SMS alerts, preventing false credit events.
+*   **Financial Integrity:** 
+    *   Hardened `deductBalance` to log failed ledger updates to `failed_ledger_updates`.
+    *   Created `scripts/reconcile-ledger.ts` to audit and correct Vault Drift (Distributed Consistency).
+*   **Scalability:** Refactored `request_otp_relay` to use O(1) lookup (`getOrgById`), eliminating a linear scan bottleneck.
+*   **Security:** Implemented HMAC-SHA256 signature verification for the Bridge API (for legacy support).
+
+### **Strategic Pivot:**
+*   **Bridge Deprecation:** The `bridge/` directory has been moved to `legacy_bridge/` and marked as **DEPRECATED**.
+*   **Vision-First:** The primary verification method is now AI Vision (Receipt Analysis) or direct Payment Provider integration (Paystack).
+*   **Legacy Support:** The API endpoints for the bridge remain active but secured with HMAC and strict fraud regex, allowing existing high-value merchants to continue using it if needed.
+
+**Next Steps:**
+1.  Deploy `scripts/reconcile-ledger.ts` as a nightly cron job.
+2.  Finalize the "Sovereign Dashboard" for visual management.

@@ -1050,8 +1050,19 @@ export async function deductBalance(orgId: string, amount: number): Promise<numb
       t.update(orgRef, { balance: newBalance });
     });
 
-    // Update global vault total (Decrement)
-    await incrementNetworkStats({ koboDelta: -amount });
+    // Update global vault total (Decrement) - Fire-and-Forget with Safety Log
+    try {
+      await incrementNetworkStats({ koboDelta: -amount });
+    } catch (statsErr: any) {
+      console.warn(`⚠️ [LEDGER DRIFT] Failed to update global stats for deduction: ${statsErr.message}`);
+      // Log for reconciliation
+      await db.collection('failed_ledger_updates').add({
+        orgId,
+        delta: -amount,
+        reason: statsErr.message,
+        timestamp: FieldValue.serverTimestamp()
+      });
+    }
 
     return newBalance;
   } catch (e) {

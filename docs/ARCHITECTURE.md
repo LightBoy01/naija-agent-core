@@ -74,3 +74,18 @@ To prevent the Master Bot from becoming a bottleneck, proactive tasks (Morning R
 *   **Infrastructure:** A BullMQ Cron Worker triggers a daily job at 8:00 AM for all active Organizations.
 *   **Context:** The job is pushed to the `whatsapp-queue` with the specific `orgId`.
 *   **Execution:** The Worker process retrieves the Org's unique `adminPhone` and `systemPrompt`, then uses the Client Bot's own identity to message the Boss. This ensures that every bot operates as an independent "Digital COO" within its own rate limits and context.
+
+### 4.5 Financial Integrity (Sovereign Vault)
+To ensure the sum of all Tenant Balances equals the Total Network Liability, we use an **Eventual Consistency** model:
+1.  **Atomic Deductions:** Tenant balances are updated transactionally.
+2.  **Fire-and-Forget Aggregation:** The global vault total is updated optimistically.
+3.  **Safety Net:** If the optimistic update fails, the error is logged to `failed_ledger_updates`.
+4.  **Reconciliation:** A nightly cron job (`scripts/reconcile-ledger.ts`) audits all tenant balances and corrects any drift in the Sovereign Vault.
+
+## 5. Legacy Components (Deprecated)
+
+### SMS Bridge (Android Relay)
+*   **Status:** Deprecated (March 2026).
+*   **Replacement:** Vision-First Verification (AI Receipt Analysis) & Direct API Integration.
+*   **Reason:** High operational friction and security complexity.
+*   **Legacy Support:** The API endpoints (`/bridge/sms`) remain active for existing high-value clients, secured by HMAC-SHA256 signatures. The code has been archived in `legacy_bridge/`.

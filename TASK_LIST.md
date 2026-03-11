@@ -171,9 +171,16 @@
 - [x] **Viral Growth Loop:** Contextual `#Apprentice` referral nudges in every customer interaction.
 - [x] **Staff Dispatcher:** Role-aware internal routing (Assign order to Rider, Bot notifies Rider).
 
-## Phase 7: VIP & Infrastructure Upgrades (Planned - Paused for MVP Launch)
-- [ ] **Native Android Bridge:** Official APK to replace Termux script.
-- [ ] **Visual Dashboard:** Enhanced Calendar and Inventory UI.
-- [ ] **Real-time Bank Verification:** Monnify/Paystack official API expansion.
-- [ ] **Automated Reminders:** BullMQ-based periodic business nudges.
+## Phase 7: The Empire Era (Hardening)
+- [x] **Scalability Fix:** Refactor `request_otp_relay` to O(1).
+- [x] **Financial Integrity:** Implement `scripts/reconcile-ledger.ts` and harden `deductBalance`.
+- [x] **Bridge Security:** Implement HMAC-SHA256 signatures for the SMS Relay.
+- [x] **Fraud Guard:** Patch Regex to block "Debit" alerts.
+- [ ] **Deploy Reconciliation:** Set up nightly cron for `reconcile-ledger.ts`.
+- [ ] **Sovereign Dashboard:** Finalize the "Vault View" and "Tenant List".
+- [ ] **Native Android Bridge:** [DEPRECATED/PAUSED] - Replaced by Vision-First Strategy.
 - [ ] **Onboarding v2.0:** Remote OTP Relay system. (Logic built, need automated UI).
+
+## Phase 8: Global Expansion
+- [ ] **International Numbers:** Support +1 (US) and +44 (UK) numbers.
+- [ ] **Multi-Currency:** Support USD/GBP ledgers.

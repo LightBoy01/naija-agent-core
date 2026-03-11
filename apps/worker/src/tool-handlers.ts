@@ -707,16 +707,23 @@ export async function handleToolCall(
 
     case 'request_otp_relay':
       if (!isAdmin || !orgConfig?.isMaster) return { status: 'error', code: 'UNAUTHORIZED' };
-      const pipelineData = await getPendingSetups();
-      const pendingTenant = pipelineData.find(t => t.id === args.tenantId);
-      if (!pendingTenant) return { status: 'error', message: 'Tenant not found in pipeline.' };
+      
+      const { getOrgById } = await import('@naija-agent/firebase');
+      const pendingTenant = await getOrgById(args.tenantId);
+      
+      if (!pendingTenant) return { status: 'error', message: 'Tenant not found.' };
+      if (!['PENDING_PAYMENT', 'PENDING_META', 'AWAITING_OTP'].includes(pendingTenant.status)) {
+         return { status: 'error', message: `Tenant is not in a pending state (Status: ${pendingTenant.status}).` };
+      }
 
       // Update state to AWAITING_OTP
       await (await getDb()).collection('organizations').doc(args.tenantId).update({ status: 'AWAITING_OTP' });
 
       // Ping the Client
-      const relayMsg = `📢 *ACTIVATION READY*\n\nOga Boss is ready to move your bot to the cloud. Are you holding the phone for SIM *${pendingTenant.config?.botPhone || 'N/A'}*?\n\nPlease type *READY* to receive your 5-minute activation code.`;
-      await whatsappService.sendText(pendingTenant.config.adminPhone, relayMsg);
+      if (pendingTenant.config?.adminPhone) {
+        const relayMsg = `📢 *ACTIVATION READY*\n\nOga Boss is ready to move your bot to the cloud. Are you holding the phone for SIM *${pendingTenant.config?.botPhone || 'N/A'}*?\n\nPlease type *READY* to receive your 5-minute activation code.`;
+        await whatsappService.sendText(pendingTenant.config.adminPhone, relayMsg);
+      }
 
       return { status: 'success', message: `Relay initiated for ${args.tenantId}. Client notified.` };
 

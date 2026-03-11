@@ -65,6 +65,13 @@ async function getCachedOrgBySecret(secret: string): Promise<any | null> {
  */
 function extractAmountFromSMS(body: string): number | null {
   const cleanBody = body.replace(/,/g, ''); // Remove commas for easier matching
+  
+  // 🛡️ [FRAUD GUARD]: Explicitly reject Debit alerts
+  if (/\b(?:Debit|Dr|Withdrawal|Sent|Paid)\b/i.test(cleanBody)) {
+     console.warn(`🛑 [SMS BRIDGE] Rejected potential Debit alert: "${body.substring(0, 50)}..."`);
+     return null;
+  }
+
   const patterns = [
     /(?:Amt|Amount|Cr|Credit|Received|Value|Inflow)[:\s]+(?:NGN|N|#)?\s*([\d.]+)/i,
     /([\d.]+)\s*has\s*been\s*credited/i,
