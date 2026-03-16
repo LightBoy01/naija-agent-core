@@ -1,44 +1,36 @@
-import * as admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
-import * as dotenv from 'dotenv';
-import * as path from 'path';
-import * as fs from 'fs';
+import dotenv from 'dotenv';
+import { getDb } from '@naija-agent/firebase';
 
-// Load .env
-dotenv.config({ path: path.join(__dirname, '../.env') });
+dotenv.config();
 
-// Initialize Firebase
-const serviceAccountPath = path.join(__dirname, '../packages/firebase/serviceAccountKey.json');
-const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+async function fixRouting() {
+  const db = await getDb();
+  const phone = '2347055229084';
+  const newOrgId = 'test_empire_084';
+  const masterOrgId = 'naija-agent-master';
 
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-}
-
-const db = getFirestore();
-
-async function fix() {
-  console.log('🔧 Fixing Routing Collision...');
+  console.log(`🛠️ [FIX ROUTING] Re-routing ${phone} from ${masterOrgId} to ${newOrgId}...`);
 
   try {
-    // 1. Pause the Demo Org by giving it a dummy Phone ID
-    await db.collection('organizations').doc('naija-agent-org-001').update({
-      whatsappPhoneId: 'DEMO_PAUSED',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    // 1. Delete old session context if it exists
+    await db.collection('chats').doc(`${masterOrgId}_${phone}`).delete();
+    console.log('✅ Old Master session cleared.');
 
-    // 2. Ensure Master Org has the correct active Phone ID
-    await db.collection('organizations').doc('naija-agent-master').update({
-      whatsappPhoneId: process.env.WHATSAPP_PHONE_ID,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    // 2. Create New Session Context
+    await db.collection('chats').doc(`${newOrgId}_${phone}`).set({
+      organizationId: newOrgId,
+      whatsappUserId: phone,
+      userName: 'Empire Boss',
+      lastMessageAt: new Date(),
+      status: 'ACTIVE',
+      createdAt: new Date()
     });
+    console.log('✅ New Empire session created.');
 
-    console.log('✅ Routing fixed! Your Test Number is now 100% dedicated to the MASTER BOT.');
-  } catch (error) {
-    console.error('❌ Fix failed:', error);
+    console.log('\n👉 NOW type #status on WhatsApp!');
+  } catch (e: any) {
+    console.error('❌ Routing Fix Failed:', e.message);
   }
 }
 
-fix();
+fixRouting();

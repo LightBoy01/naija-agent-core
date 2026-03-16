@@ -7,7 +7,9 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "scripts": {
@@ -19,7 +21,8 @@
     "@naija-agent/types": "^1.0.0",
     "bcrypt": "^6.0.0",
     "dotenv": "^16.4.1",
-    "firebase-admin": "^12.0.0"
+    "firebase-admin": "^12.0.0",
+    "libphonenumber-js": "^1.12.40"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",

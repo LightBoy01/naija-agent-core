@@ -55,19 +55,25 @@ graph TD
 ### `transactions` (Replay Protection)
 *   Logs verified payments to prevent duplicate receipt usage.
 
-## 4. Operational Workflows (Production)
+## 4. Operational Workflows (Hybrid Hub)
 
-### 4.1 Zero-Dashboard Training
-The Boss trains the bot directly via WhatsApp. 
-1.  **Handshake:** Boss enters 4-digit PIN.
-2.  **Logic:** Bot uses `save_knowledge` tool to update Firestore.
-3.  **Persistence:** Images are archived in Firebase Storage and linked to the Knowledge Base.
+The system operates as a **Hybrid Hub**, splitting responsibility between high-trust messaging and high-utility web management.
 
-### 4.2 Multi-Sector Flexibility
-The `manage_activity` tool allows the worker to transition between sectors:
-*   **Logistics:** Records Waybills.
-*   **Appointments:** Records Bookings.
-*   **Retail:** Records Orders.
+### 4.1 Front-Office: WhatsApp (Sales & Inquiries)
+The customer interacts with the **Digital Apprentice** on WhatsApp.
+- **AI Core:** Gemini 2.5 Flash handles natural language, Pidgin, and Vision.
+- **Transactions:** Payments are verified via Vision OCR or SMS Bridge signals.
+- **Auto-Loop:** Critical status updates are pushed to the customer automatically.
+
+### 4.2 Back-Office: Web Dashboard (Operations & Auditing)
+The Boss and Staff interact with the **Merchant Hub** at `/login`.
+- **Live Board:** A real-time view of all pending orders, waybills, and bookings.
+- **Inventory:** Direct visual management of prices, stock, and product categories.
+- **Fulfillment:** One-tap status updates (e.g. `Mark Packed`) that trigger WhatsApp notifications.
+
+### 4.3 Identity & Session Security
+- **WhatsApp:** 2-hour sliding window secured by a 4-digit PIN for management tools.
+- **Web:** Persistent HTTPS-only cookies (`tenant_session`) secured by PIN-based authentication and Sovereign-level sanitization.
 
 ### 4.4 Decentralized Proactivity (The "COO" Engine)
 To prevent the Master Bot from becoming a bottleneck, proactive tasks (Morning Reports/Reminders) are decentralized:

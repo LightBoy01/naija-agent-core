@@ -2,6 +2,8 @@ const esbuild = require('esbuild');
 const fs = require('fs');
 const path = require('path');
 
+process.env.NODE_ENV = 'production';
+
 async function build(appName, entryPath, outPath) {
   console.log(`
 🔨 Building ${appName} to CommonJS (.js)...`);
@@ -14,6 +16,12 @@ async function build(appName, entryPath, outPath) {
     'path', 'fs', 'os', 'crypto', 'child_process', 'http', 'https',
     'zlib', 'events', 'util', 'stream', 'url', 'net', 'tls', 'dns', 'perf_hooks'
   ];
+
+  // Ensure output directory exists
+  const outDir = path.dirname(path.join(process.cwd(), outPath));
+  if (!fs.existsSync(outDir)) {
+    fs.mkdirSync(outDir, { recursive: true });
+  }
 
   try {
     await esbuild.build({
@@ -42,18 +50,22 @@ async function build(appName, entryPath, outPath) {
   }
 }
 
+const { execSync } = require('child_process');
+
 async function main() {
   console.log("🚀 Starting Monorepo Bundle Build...");
   
-  // --- MONOREPO LINKING PROTECTION ---
-  // Ensure dist/ folders exist for local packages so npm ci links don't break
+  // --- MONOREPO PACKAGES BUILDING ---
+  // Ensure real dist/ folders exist for local packages
   const packages = ['types', 'firebase', 'payments', 'storage', 'logistics'];
   for (const pkg of packages) {
-    const distPath = path.join(process.cwd(), `packages/${pkg}/dist`);
-    if (!fs.existsSync(distPath)) {
-      console.log(`📁 Creating placeholder dist for @naija-agent/${pkg}...`);
-      fs.mkdirSync(distPath, { recursive: true });
-      fs.writeFileSync(path.join(distPath, 'index.js'), '// placeholder');
+    const pkgPath = path.join(process.cwd(), `packages/${pkg}`);
+    console.log(`🔨 Building @naija-agent/${pkg}...`);
+    try {
+      execSync('npm run build', { cwd: pkgPath, stdio: 'inherit' });
+    } catch (e) {
+      console.error(`❌ Package build failed for @naija-agent/${pkg}`);
+      process.exit(1);
     }
   }
 

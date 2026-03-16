@@ -1,30 +1,24 @@
 import { SchemaType, Tool, FunctionDeclaration } from '@google/generative-ai';
+import { AUTH_REQUIRED_TOOLS } from './tools/definitions.js';
+import { CountryCode } from 'libphonenumber-js';
+import { getPhoneExample } from './utils/phone.js';
 
 /**
  * Defines which tools require 4-digit PIN authentication (Boss Only).
- * Tools NOT in this list can be used by Staff or the Public (if provided in getTenantTools).
  */
-export const PIN_PROTECTED_TOOLS = [
-  'delete_knowledge', 
-  'create_tenant', 
-  'get_network_stats', 
-  'authorize_staff', 
-  'deactivate_staff', 
-  'delete_product',
-  'set_bot_status',
-  'web_search',
-  'generate_login_code',
-  'topup_tenant',
-  'broadcast_to_bosses',
-  'audit_tenant',
-  'report_fraud',
-  'activate_tenant',
-  'get_pending_setups'
-];
+export const PIN_PROTECTED_TOOLS = AUTH_REQUIRED_TOOLS;
 
-export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boolean, hasPayment: boolean): Tool[] {
+export function getTenantTools(
+  isAdmin: boolean, 
+  isStaff: boolean, 
+  isMaster: boolean, 
+  hasPayment: boolean,
+  orgCurrency: { code: string, symbol: string, locale: string } = { code: 'NGN', symbol: '₦', locale: 'en-NG' },
+  orgRegion: CountryCode = 'NG'
+): Tool[] {
   const allFunctionDeclarations: FunctionDeclaration[] = [];
   const isManager = isAdmin || isStaff;
+  const phoneExample = getPhoneExample(orgRegion);
 
   // 1. Transaction Verification & Payments (All users)
   allFunctionDeclarations.push({
@@ -33,7 +27,7 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
-        purpose: { type: SchemaType.STRING, enum: ['sale', 'refill'], description: "Purpose: 'sale' (paying the Boss) or 'refill' (buying AI credits from the Sovereign)." }
+        purpose: { type: SchemaType.STRING, format: "enum", enum: ['sale', 'refill'], description: "Purpose: 'sale' (paying the Boss) or 'refill' (buying AI credits from the Sovereign)." }
       },
       required: ["purpose"]
     }
@@ -45,7 +39,7 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
-        amount: { type: SchemaType.NUMBER, description: "Amount in Naira (min 2000)" }
+        amount: { type: SchemaType.NUMBER, description: `Amount in ${orgCurrency.code} (min 2000)` }
       },
       required: ["amount"]
     }
@@ -59,10 +53,12 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
         type: SchemaType.OBJECT,
         properties: {
           reference: { type: SchemaType.STRING, description: "Transaction Reference or Session ID" },
-          amount: { type: SchemaType.NUMBER, description: "Amount in Naira" },
+          amount: { type: SchemaType.NUMBER, description: `Amount in ${orgCurrency.code}` },
           bankName: { type: SchemaType.STRING, description: "Name of the sending bank" },
           date: { type: SchemaType.STRING, description: "Transaction date/time" },
-          purpose: { type: SchemaType.STRING, enum: ['sale', 'refill'], description: "Context of the payment: 'sale' for customers, 'refill' for Boss topping up AI credits." }
+          purpose: { type: SchemaType.STRING, format: "enum", enum: ['sale', 'refill'], description: "Context of the payment: 'sale' for customers, 'refill' for Boss topping up AI credits." },
+          isSuspicious: { type: SchemaType.BOOLEAN, description: "Set to true if you detect ANY Photoshop or editing artifacts in the image." },
+          suspicionReason: { type: SchemaType.STRING, description: "If suspicious, describe exactly what looks fake (e.g., font mismatch, blurred digits)." }
         },
         required: ["reference", "amount", "purpose"]
       } as any
@@ -90,10 +86,19 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
       type: SchemaType.OBJECT,
       properties: {
         items: { type: SchemaType.STRING, description: "List of items and their individual prices" },
-        total: { type: SchemaType.NUMBER, description: "Total amount in Naira" },
+        total: { type: SchemaType.NUMBER, description: `Total amount in ${orgCurrency.code}` },
         orderId: { type: SchemaType.STRING, description: "A unique order reference (e.g. ORD-101)" }
       },
       required: ["items", "total", "orderId"]
+    }
+  });
+
+  allFunctionDeclarations.push({
+    name: "check_order_status",
+    description: "Checks the status of your most recent order. (All Users)",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {}
     }
   });
 
@@ -106,10 +111,10 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
         type: SchemaType.OBJECT,
         properties: {
           id: { type: SchemaType.STRING, description: "Unique ID (e.g. WB102)" },
-          type: { type: SchemaType.STRING, enum: ['order', 'booking', 'waybill', 'donation'], description: "Category" },
-          status: { type: SchemaType.STRING, enum: ['pending', 'confirmed', 'picked_up', 'in_transit', 'delivered', 'cancelled'], description: "New status" },
+          type: { type: SchemaType.STRING, format: "enum", enum: ['order', 'booking', 'waybill', 'donation'], description: "Category" },
+          status: { type: SchemaType.STRING, format: "enum", enum: ['pending', 'confirmed', 'picked_up', 'in_transit', 'delivered', 'cancelled'], description: "New status" },
           summary: { type: SchemaType.STRING, description: "Full details/update summary" },
-          amount: { type: SchemaType.NUMBER, description: "Total value in Naira (for orders/donations)" },
+          amount: { type: SchemaType.NUMBER, description: `Total value in ${orgCurrency.code} (for orders/donations)` },
           customerPhone: { type: SchemaType.STRING, description: "Optionally tag the customer phone" }
         },
         required: ["id", "type", "summary"]      }
@@ -135,7 +140,7 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
       parameters: {
         type: SchemaType.OBJECT,
         properties: {
-          staffPhone: { type: SchemaType.STRING, description: "Phone number of the staff member (234...)" },
+          staffPhone: { type: SchemaType.STRING, description: `Phone number of the staff member (${phoneExample})` },
           activityId: { type: SchemaType.STRING, description: "ID of the activity to assign" },
           instruction: { type: SchemaType.STRING, description: "Special instructions for the staff" }
         },
@@ -186,7 +191,7 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
         type: SchemaType.OBJECT,
         properties: {
           productId: { type: SchemaType.STRING, description: "Unique ID (sku)" },
-          action: { type: SchemaType.STRING, enum: ['add', 'set', 'reduce'], description: "Action to take" },
+          action: { type: SchemaType.STRING, format: "enum", enum: ['add', 'set', 'reduce'], description: "Action to take" },
           amount: { type: SchemaType.NUMBER, description: "Quantity" },
           threshold: { type: SchemaType.NUMBER, description: "Optional: Set new low-stock alert threshold" }
         },
@@ -201,6 +206,29 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
         type: SchemaType.OBJECT,
         properties: { query: { type: SchemaType.STRING, description: "Search term" } },
         required: ["query"]
+      }
+    });
+
+    allFunctionDeclarations.push({
+      name: "get_customer_info",
+      description: "Retrieves the recent transaction and activity history for a specific customer phone number. (Manager Only)",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          phone: { type: SchemaType.STRING, description: `The customer's phone number (e.g. ${phoneExample}0000000)` }
+        },
+        required: ["phone"]
+      }
+    });
+
+    allFunctionDeclarations.push({
+      name: "get_recent_activities",
+      description: "Retrieves the last 10 activities (Orders, Bookings, Waybills) for the business. (Manager Only)",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          limit: { type: SchemaType.NUMBER, description: "Number of activities to fetch (max 20, default 10)" }
+        }
       }
     });
 
@@ -248,6 +276,28 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
       }
     });
 
+    allFunctionDeclarations.push({
+      name: "get_staff_tasks",
+      description: "Retrieves a list of all pending tasks or deliveries assigned to the current staff member. (Staff Only)",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {}
+      }
+    });
+
+    allFunctionDeclarations.push({
+      name: "schedule_reminder",
+      description: "Schedules a one-off reminder message to be sent to you after a specific delay. (Manager Only)",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          message: { type: SchemaType.STRING, description: "The reminder message content (e.g., 'Call John about the waybill')." },
+          delaySeconds: { type: SchemaType.NUMBER, description: "How many seconds from now to send the reminder (e.g., 3600 for 1 hour)." }
+        },
+        required: ["message", "delaySeconds"]
+      }
+    });
+
     // Strictly Boss-Only Tools
     if (isAdmin) {
       allFunctionDeclarations.push(
@@ -266,9 +316,9 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
           parameters: {
             type: SchemaType.OBJECT,
             properties: {
-              phone: { type: SchemaType.STRING, description: "Phone number (234...)" },
+              phone: { type: SchemaType.STRING, description: `Phone number (${phoneExample})` },
               name: { type: SchemaType.STRING, description: "Staff name" },
-              role: { type: SchemaType.STRING, enum: ['rider', 'assistant', 'teacher'], description: "Role" }
+              role: { type: SchemaType.STRING, format: "enum", enum: ['rider', 'assistant', 'teacher'], description: "Role" }
             },
             required: ["phone", "name", "role"]
           }
@@ -298,7 +348,7 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
             type: SchemaType.OBJECT,
             properties: {
               message: { type: SchemaType.STRING, description: "The marketing message content" },
-              target: { type: SchemaType.STRING, enum: ['all', 'recent'], description: "Target group" }
+              target: { type: SchemaType.STRING, format: "enum", enum: ['all', 'recent'], description: "Target group" }
             },
             required: ["message"]
           }
@@ -308,7 +358,7 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
           description: "Generates a summary of recent sales, activities, and AI recommendations. (BOSS ONLY)",
           parameters: {
             type: SchemaType.OBJECT,
-            properties: { period: { type: SchemaType.STRING, enum: ['daily', 'weekly'], description: "Reporting period" } },
+            properties: { period: { type: SchemaType.STRING, format: "enum", enum: ['daily', 'weekly'], description: "Reporting period" } },
             required: ["period"]
           }
         },
@@ -342,7 +392,7 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
             properties: {
               id: { type: SchemaType.STRING, description: "Unique ID (e.g. sku-123)" },
               name: { type: SchemaType.STRING, description: "Product name" },
-              price: { type: SchemaType.NUMBER, description: "Price in Naira" },
+              price: { type: SchemaType.NUMBER, description: `Price in ${orgCurrency.code}` },
               stock: { type: SchemaType.NUMBER, description: "Available quantity" },
               category: { type: SchemaType.STRING, description: "e.g. Electronics, Fashion" },
               imageUrl: { type: SchemaType.STRING, description: "Product Image URL" }
@@ -373,8 +423,8 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
         properties: {
           id: { type: SchemaType.STRING, description: "Organization slug (e.g. kudirat_kitchen)" },
           name: { type: SchemaType.STRING, description: "Business display name" },
-          adminPhone: { type: SchemaType.STRING, description: "The Boss's personal WhatsApp (234...)" },
-          botPhone: { type: SchemaType.STRING, description: "The new SIM number for the bot (234...)" }
+          adminPhone: { type: SchemaType.STRING, description: `The Boss's personal WhatsApp (${phoneExample})` },
+          botPhone: { type: SchemaType.STRING, description: `The new SIM number for the bot (${phoneExample})` }
         },
         required: ["id", "name", "adminPhone", "botPhone"]
       }
@@ -410,12 +460,12 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
       },
       {
         name: "topup_tenant",
-        description: "Tops up a tenant's credit balance (₦). (Sovereign Only)",
+        description: `Tops up a tenant's credit balance (${orgCurrency.symbol}). (Sovereign Only)`,
         parameters: {
           type: SchemaType.OBJECT,
           properties: {
             tenantId: { type: SchemaType.STRING, description: "Organization slug (e.g. bims_gadgets)" },
-            amount: { type: SchemaType.NUMBER, description: "Amount in Naira (e.g. 5000)" },
+            amount: { type: SchemaType.NUMBER, description: `Amount in ${orgCurrency.code} (e.g. 5000)` },
             reference: { type: SchemaType.STRING, description: "Unique payment reference/session ID." }
           },
           required: ["tenantId", "amount", "reference"]
@@ -449,7 +499,7 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
         parameters: {
           type: SchemaType.OBJECT,
           properties: {
-            phone: { type: SchemaType.STRING, description: "Customer phone number (234...)" },
+            phone: { type: SchemaType.STRING, description: `Customer phone number (${phoneExample})` },
             reason: { type: SchemaType.STRING, description: "Reason for blacklisting (e.g. Fake Receipt)" }
           },
           required: ["phone", "reason"]
@@ -461,9 +511,12 @@ export function getTenantTools(isAdmin: boolean, isStaff: boolean, isMaster: boo
         parameters: {
           type: SchemaType.OBJECT,
           properties: {
-            tenantId: { type: SchemaType.STRING, description: "Organization slug" }
+            tenantId: { type: SchemaType.STRING, description: "Organization slug" },
+            phoneId: { type: SchemaType.STRING, description: "The Meta WhatsApp Phone ID" },
+            accessToken: { type: SchemaType.STRING, description: "The temporary or permanent Meta access token" },
+            wabaId: { type: SchemaType.STRING, description: "The WhatsApp Business Account ID" }
           },
-          required: ["tenantId"]
+          required: ["tenantId", "phoneId", "accessToken", "wabaId"]
         }
       },
       {

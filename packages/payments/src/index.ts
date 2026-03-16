@@ -1,4 +1,5 @@
 import { PaystackProvider } from './paystack';
+import { MonnifyProvider } from './monnify';
 
 export interface Transaction {
   reference: string;
@@ -37,9 +38,14 @@ export class MockProvider implements PaymentProvider {
       paidAt: new Date().toISOString(),
     };
   }
+
+  async createPaymentLink(orgId: string, email: string, amountNaira: number): Promise<string | null> {
+    // Generate a dummy Paystack checkout link
+    return `https://checkout.paystack.com/mock-refill-${orgId}-${Date.now()}`;
+  }
 }
 
-export { PaystackProvider };
+export { PaystackProvider, MonnifyProvider };
 
 export function getProvider(type: 'paystack' | 'monnify' | 'mock', secretKey?: string): PaymentProvider {
   if (type === 'paystack') {
@@ -47,9 +53,8 @@ export function getProvider(type: 'paystack' | 'monnify' | 'mock', secretKey?: s
     return new PaystackProvider(secretKey);
   }
   if (type === 'monnify') {
-    // TODO: Implement MonnifyProvider
-    console.warn('MonnifyProvider not implemented yet, using MockProvider');
-    return new MockProvider();
+    if (!secretKey) throw new Error('Monnify Secret Key required (Format: API_KEY:SECRET_KEY)');
+    return new MonnifyProvider(secretKey);
   }
   return new MockProvider();
 }

@@ -3,8 +3,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 
 // Load .env
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// In CommonJS __filename is already defined.
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 const TOKEN = process.env.WHATSAPP_API_TOKEN;

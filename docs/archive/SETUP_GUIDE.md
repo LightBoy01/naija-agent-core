@@ -45,11 +45,18 @@ We use a **Kobo-based Ledger** for 100% precision.
 
 ---
 
-## 4. The Shield (SMS Bridge)
-To verify bank alerts instantly and stop fake alerts:
-1.  Install the **Naija Agent Bridge** on an Android phone with your bank SIM.
-2.  Keep the phone online and charged.
-3.  The bot will automatically confirm payments to your customers.
+## 4. The Shield (Verification)
+To verify bank transfers and stop fake alerts, your bot uses two layers of security:
+
+### Layer 1: AI Vision (Standard)
+- **Action:** Customer sends a screenshot of their bank receipt.
+- **Verification:** The bot uses **AI Vision** to instantly analyze the amount, date, and reference.
+- **Fraud Guard:** The AI checks for Photoshop edits or suspicious patterns and alerts you if it sees anything "fishy."
+
+### Layer 2: SMS Bridge (Advanced/Optional)
+- **Action:** A dedicated Android phone with your bank SIM sends bank alerts to the bot.
+- **Verification:** The bot matches the bank alert to the customer's request in real-time.
+- **Setup:** This requires the **Naija Agent Bridge** app. Ask your bot: *"How do I set up the SMS Bridge?"* for the technical guide.
 
 ---
 

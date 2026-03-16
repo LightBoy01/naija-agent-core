@@ -1,4 +1,6 @@
 import { z } from 'zod';
+export * from './interfaces/index.js';
+export * from './config/index.js';
 
 // --- WhatsApp Webhook Schemas (Meta) ---\n
 export const WhatsAppMessageSchema = z.object({
@@ -9,6 +11,8 @@ export const WhatsAppMessageSchema = z.object({
   text: z.object({ body: z.string() }).optional(),
   audio: z.object({ id: z.string(), mime_type: z.string() }).optional(),
   image: z.object({ id: z.string(), mime_type: z.string(), caption: z.string().optional() }).optional(),
+  document: z.object({ id: z.string(), mime_type: z.string(), filename: z.string().optional(), caption: z.string().optional() }).optional(),
+  button: z.object({ payload: z.string(), text: z.string() }).optional(),
 });
 
 export type WhatsAppMessage = z.infer<typeof WhatsAppMessageSchema>;
@@ -37,21 +41,20 @@ export const WhatsAppWebhookSchema = z.object({
 
 export type WhatsAppWebhook = z.infer<typeof WhatsAppWebhookSchema>;
 
-// --- Job Schemas (BullMQ) ---\n
-export const JobDataSchema = z.object({
-  from: z.string(),
-  name: z.string().optional(),
-  content: z.any(),
-  type: z.string(),
-  orgId: z.string(),
-  messageId: z.string(),
-  phoneId: z.string().optional(),
-  timestamp: z.number(),
-});
+// --- Job Schemas (BullMQ) ---
+// JobData is now imported from ./interfaces/index.js
 
-export type JobData = z.infer<typeof JobDataSchema>;
+// --- Firestore Schemas (Organizations) ---
 
-// --- Firestore Schemas (Organizations) ---\n
+// Loose check for Firestore Timestamp object, Date, or ISO string
+export const FirestoreTimestampSchema = z.union([
+  z.object({ seconds: z.number(), nanoseconds: z.number() }),
+  z.date(),
+  z.string()
+]);
+
+export type FirestoreTimestamp = z.infer<typeof FirestoreTimestampSchema>;
+
 export const BankDetailsSchema = z.object({
   bankName: z.string(),
   accountNumber: z.string(),
@@ -70,26 +73,33 @@ export type PaymentConfig = z.infer<typeof PaymentConfigSchema>;
 
 export const ActivitySchema = z.object({
   id: z.string(),
-  type: z.enum(['order', 'booking', 'waybill', 'donation']),
-  status: z.enum(['pending', 'confirmed', 'picked_up', 'in_transit', 'delivered', 'cancelled']),
+  type: z.enum(['order', 'booking', 'waybill', 'donation', 'task']),
+  status: z.enum(['pending', 'pending_payment', 'confirmed', 'ready_for_pickup', 'picked_up', 'in_transit', 'delivered', 'cancelled']),
   summary: z.string(),
   amount: z.number().optional(), // In Naira
   customerPhone: z.string().optional(),
   assignedStaffPhone: z.string().optional(),
-  createdAt: z.any(), // Firestore Timestamp
-  updatedAt: z.any(),
+  metadata: z.record(z.unknown()).optional(),
+  createdAt: FirestoreTimestampSchema,
+  updatedAt: FirestoreTimestampSchema,
 });
 
 export type Activity = z.infer<typeof ActivitySchema>;
+export type ActivityType = Activity['type'];
+export type ActivityStatus = Activity['status'];
 
 export const ProductSchema = z.object({
   id: z.string(),
   name: z.string(),
   price: z.number(), // In Naira
   stock: z.number().optional(),
+  reserved: z.number().optional(), // Units in pending checkout (Phase 7.2)
+  available: z.number().optional(), // Stock - Reserved
   category: z.string().optional(),
   imageUrl: z.string().optional(),
-  updatedAt: z.any(),
+  lowStockThreshold: z.number().optional(),
+  isLowStock: z.boolean().optional(),
+  updatedAt: FirestoreTimestampSchema,
 });
 
 export type Product = z.infer<typeof ProductSchema>;
@@ -99,43 +109,23 @@ export const StaffSchema = z.object({
   name: z.string(),
   role: z.enum(['rider', 'assistant', 'teacher']),
   isActive: z.boolean().default(true),
-  createdAt: z.any(),
+  createdAt: FirestoreTimestampSchema,
 });
 
 export type Staff = z.infer<typeof StaffSchema>;
 
-export const OrganizationSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  whatsappPhoneId: z.string(),
-  isActive: z.boolean().default(true),
-  balance: z.number().default(0), // In Kobo
-  costPerReply: z.number().default(2000), // Default 20 kobo
-  costPerImage: z.number().optional(),
-  status: z.enum(['PENDING_PAYMENT', 'PENDING_META', 'AWAITING_OTP', 'ACTIVE', 'SUSPENDED']).default('ACTIVE'),
-  deploymentModel: z.enum(['SHARED', 'INDEPENDENT']).default('SHARED'),
-  trialStartedAt: z.any().optional(),
-  trialMessageCount: z.number().default(0),
+export const OnboardingDataSchema = z.object({
+  name: z.string().optional(),
+  adminPin: z.string().optional(), // Hashed
+  bankName: z.string().optional(),
+  accountNumber: z.string().optional(),
+  accountName: z.string().optional(),
   systemPrompt: z.string().optional(),
-  onboardingStep: z.string().optional(), // e.g. 'NAME', 'PIN', 'BANK', 'TONE', 'COMPLETE'
-  onboardingData: z.any().optional(), // Temporary storage for setup data
-  config: z.any().optional(),
-  updatedAt: z.any(),
 });
 
-export type Organization = z.infer<typeof OrganizationSchema>;
+export type OnboardingData = z.infer<typeof OnboardingDataSchema>;
 
-export const DailySnapshotSchema = z.object({
-  totalSalesKobo: z.number().default(0),
-  totalChats: z.number().default(0),
-  newCustomers: z.number().default(0),
-  pendingActivities: z.number().default(0),
-  topProducts: z.array(z.string()).default([]),
-  aiInsights: z.string().optional(), // For the Sunday report
-});
-
-export type DailySnapshot = z.infer<typeof DailySnapshotSchema>;
-
+// ConfigSchema needs to be defined BEFORE OrganizationSchema to be used inside it
 export const ConfigSchema = z.object({
   systemPrompt: z.string().optional(),
   model: z.enum(['gemini-2.5-flash', 'gemini-flash-lite-latest', 'gemini-3.1-flash-lite-preview', 'gemini-2.0-flash']).default('gemini-flash-lite-latest'),
@@ -148,10 +138,66 @@ export const ConfigSchema = z.object({
   bridgeSecret: z.string().optional(), // Scoped key for SMS bridge auth (Phase 5.8)
   useSmsBridge: z.boolean().default(false), // Toggle for auto-matching engine
   adminPhone: z.string().optional(), // The Boss's phone number
-  adminPin: z.string().optional(), // 4-digit PIN for high-value actions
+  commandCenterGroupId: z.string().optional(), // Group for Ops/Riders (Phase 7.2)
+  notificationPolicy: z.enum(['boss_only', 'group_only', 'dual']).default('boss_only'), // Where to send alerts (Phase 7.2)
+  adminPin: z.string().optional(), // Hashed PIN for high-value actions
   mfaCode: z.string().optional(), // Temporary 6-digit MFA code
   mfaExpiresAt: z.string().optional(), // ISO timestamp for MFA expiry
   isMaster: z.boolean().optional(), // Sovereign powers flag
+  staffDailyLimit: z.number().optional(),
+  botPhone: z.string().optional(),
+  rateLimit: z.object({
+    windowSeconds: z.number().default(60),
+    maxRequests: z.number().default(10)
+  }).optional(),
+  alerts: z.object({
+    lowBalanceThreshold: z.number().default(50000)
+  }).optional(),
+  logistics: z.object({
+    provider: z.string().optional(),
+    apiKey: z.string().optional()
+  }).optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
+
+export const OrganizationSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  whatsappPhoneId: z.string(),
+  isActive: z.boolean().default(true),
+  balance: z.number().default(0), // In Kobo
+  reservedBalance: z.number().default(0), // Kobo locked in pending transactions (Phase 7.2)
+  costPerReply: z.number().default(2000), // Default 20 kobo
+  costPerImage: z.number().optional(),
+  costPerDocument: z.number().optional(),
+  status: z.enum(['PENDING_PAYMENT', 'PENDING_META', 'AWAITING_OTP', 'ACTIVE', 'SUSPENDED', 'TRIAL']).default('ACTIVE'),
+  deploymentModel: z.enum(['SHARED', 'INDEPENDENT']).default('SHARED'),
+  currency: z.object({
+    code: z.string().default('NGN'),
+    symbol: z.string().default('₦'),
+    locale: z.string().default('en-NG'),
+    rate: z.number().default(1.0)
+  }).default({
+    code: 'NGN',
+    symbol: '₦',
+    locale: 'en-NG',
+    rate: 1.0
+  }),
+  region: z.enum(['NG', 'US', 'UK', 'GLOBAL']).default('NG'),
+  trialStartedAt: FirestoreTimestampSchema.optional(),
+  trialMessageCount: z.number().default(0),
+  systemPrompt: z.string().optional(),
+  onboardingStep: z.string().optional(), // e.g. 'NAME', 'PIN', 'BANK', 'TONE', 'COMPLETE'
+  onboardingData: OnboardingDataSchema.optional(), // Temporary storage for setup data
+  pendingSetup: z.object({
+    phoneId: z.string(),
+    accessToken: z.string(),
+    wabaId: z.string().optional(),
+    initiatedAt: z.string()
+  }).optional().nullable(),
+  config: ConfigSchema.optional(),
+  updatedAt: FirestoreTimestampSchema,
+});
+
+export type Organization = z.infer<typeof OrganizationSchema>;

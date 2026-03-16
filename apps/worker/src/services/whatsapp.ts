@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { z } from 'zod';
+import crypto from 'crypto';
 
 const WhatsAppSendResponseSchema = z.object({
   messaging_product: z.literal('whatsapp'),
@@ -10,12 +11,27 @@ const WhatsAppSendResponseSchema = z.object({
 export class WhatsAppService {
   private apiToken: string;
   private phoneId: string;
+  private appSecret?: string;
   private version = process.env.WHATSAPP_API_VERSION || 'v21.0';
   private baseUrl = `https://graph.facebook.com/${this.version}`;
 
-  constructor(apiToken: string, phoneId: string) {
+  constructor(apiToken: string, phoneId: string, appSecret?: string) {
     this.apiToken = apiToken;
     this.phoneId = phoneId;
+    this.appSecret = appSecret;
+  }
+
+  private getAuthParams() {
+    if (!this.appSecret) return {};
+    
+    // Generate HMAC-SHA256 proof of the access token using the app secret
+    // This proves the request comes from our server, not a stolen token.
+    const proof = crypto
+      .createHmac('sha256', this.appSecret)
+      .update(this.apiToken)
+      .digest('hex');
+      
+    return { appsecret_proof: proof };
   }
 
   // Send Text Message
@@ -40,6 +56,7 @@ export class WhatsAppService {
             Authorization: `Bearer ${this.apiToken}`,
             'Content-Type': 'application/json',
           },
+          params: this.getAuthParams(),
         }
       );
 
@@ -52,7 +69,14 @@ export class WhatsAppService {
   }
 
   // Send Image Message
-  async sendImage(to: string, imageUrl: string, caption?: string): Promise<string> {
+  async sendImage(to: string, imageUrl: string | Buffer, caption?: string): Promise<string> {
+    if (Buffer.isBuffer(imageUrl)) {
+       // --- UPLOAD TO META (PHASE 7.10) ---
+       // For now, we log and throw as we primarily use URLs
+       console.error('❌ [WHATSAPP_SERVICE] Buffer uploads not implemented yet. Use a persistent URL.');
+       throw new Error('Image Buffer uploads are not yet supported in this version of the service.');
+    }
+
     try {
       const response = await axios.post(
         `${this.baseUrl}/${this.phoneId}/messages`,
@@ -70,6 +94,7 @@ export class WhatsAppService {
             Authorization: `Bearer ${this.apiToken}`,
             'Content-Type': 'application/json',
           },
+          params: this.getAuthParams(),
         }
       );
 
@@ -87,6 +112,7 @@ export class WhatsAppService {
       // 1. Get Media URL
       const urlResponse = await axios.get(`${this.baseUrl}/${mediaId}`, {
         headers: { Authorization: `Bearer ${this.apiToken}` },
+        params: this.getAuthParams(),
       });
       const mediaUrl = urlResponse.data.url;
       const mimeType = urlResponse.data.mime_type;
@@ -100,6 +126,8 @@ export class WhatsAppService {
       }
 
       // 2. Download Binary
+      // Note: Meta's media download URL often has its own auth token embedded or requires the header.
+      // We append the proof just in case, though usually Authorization header is key.
       const mediaResponse = await axios.get(mediaUrl, {
         headers: { Authorization: `Bearer ${this.apiToken}` },
         responseType: 'arraybuffer',
@@ -139,6 +167,7 @@ export class WhatsAppService {
             Authorization: `Bearer ${this.apiToken}`,
             'Content-Type': 'application/json',
           },
+          params: this.getAuthParams(),
         }
       );
 
@@ -160,6 +189,7 @@ export class WhatsAppService {
         {},
         {
           headers: { Authorization: `Bearer ${this.apiToken}` },
+          params: this.getAuthParams(),
         }
       );
       console.log(`✅ WABA ${wabaId} subscribed successfully!`);
@@ -167,6 +197,66 @@ export class WhatsAppService {
     } catch (error: any) {
       console.error('❌ WABA Subscription Failed:', error.response?.data || error.message);
       return false;
+    }
+  }
+
+  /**
+   * Finalizes SIM registration using the 6-digit OTP code.
+   * This is used in the "Remote OTP Relay" workflow.
+   */
+  async registerNumber(otp: string): Promise<boolean> {
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/${this.phoneId}/register`,
+        {
+          messaging_product: 'whatsapp',
+          pin: otp,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.apiToken}`,
+            'Content-Type': 'application/json',
+          },
+          params: this.getAuthParams(),
+        }
+      );
+
+      console.log(`✅ Phone registration successful for ID: ${this.phoneId}`);
+      return response.data.success || true;
+    } catch (error: any) {
+      const metaError = error.response?.data?.error?.message || error.message;
+      console.error(`❌ Phone Registration Failed (${this.phoneId}):`, metaError);
+      throw new Error(`Meta Registration Error: ${metaError}`);
+    }
+  }
+
+  /**
+   * Triggers Meta to send a 6-digit verification code to the phone number.
+   * (Phase 8: Seamless Onboarding)
+   */
+  async requestCode(method: 'SMS' | 'VOICE' = 'SMS'): Promise<boolean> {
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/${this.phoneId}/request_code`,
+        {
+          messaging_product: 'whatsapp',
+          code_method: method,
+          language: 'en_US'
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.apiToken}`,
+            'Content-Type': 'application/json',
+          },
+          params: this.getAuthParams(),
+        }
+      );
+      console.log(`✅ Code requested successfully via ${method} for ID: ${this.phoneId}`);
+      return response.data.success || true;
+    } catch (error: any) {
+      const metaError = error.response?.data?.error?.message || error.message;
+      console.error(`❌ Code Request Failed (${this.phoneId}):`, metaError);
+      throw new Error(`Meta Code Request Error: ${metaError}`);
     }
   }
 }

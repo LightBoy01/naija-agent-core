@@ -14,10 +14,12 @@
 - **The Upgrade:** After 14 days or when the gift balance is low, nudge the merchant to refill or move to an "Independent" Meta App for a setup fee.
 
 ### 3. Collective Security (The Fraud Guard)
-- **Shared Intelligence:** One scammer caught by any bot is blacklisted for ALL bots via the `global_fraud_registry`.
+- **Vision-First Verification:** The primary method for transaction verification is **Gemini Vision** analysis of receipt screenshots. 
+- **Shared Intelligence:** One scammer caught (via AI detection of a fake receipt or Photoshop) by any bot is blacklisted for ALL bots via the `global_fraud_registry`.
 - **Automatic Block:** Blacklisted users are served an "Access Denied" message instantly.
 
 ### 4. Operational Excellence
+- **Bridge-Paused Strategy:** The Native Android Bridge development is paused. New merchants should prioritize the AI Vision flow for immediate onboarding. 
 - **Price Guard:** No AI-guessing. Quoting a price without calling `search_products` is a firing offense.
 - **Sovereign Snitch:** High-level alerts and daily network revenue reports go only to the Oga of Ogas (2347042310893).
 - **Viral Growth:** Every customer message carries the "Powered by" footer directing leads to the Master Bot.

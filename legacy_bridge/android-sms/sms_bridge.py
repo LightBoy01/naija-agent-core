@@ -97,6 +97,8 @@ def send_heartbeat(config):
         pass
     return False
 
+from collections import deque
+
 def main():
     print("\n🚀 --- NAIJA AGENT BRIDGE --- 🚀")
     config = load_config()
@@ -109,8 +111,13 @@ def main():
         print("✅ Configuration saved to config.json\n")
 
     print(f"Watching for bank alerts for secret: {config['bridge_secret'][:4]}***")
-    processed_ids = load_seen_ids()
-    print(f"Loaded {len(processed_ids)} previously processed alerts.")
+    
+    # --- Robust Deduplication Window (Phase 7 Fix) ---
+    raw_ids = load_seen_ids()
+    processed_ids = set(raw_ids)
+    id_queue = deque(raw_ids, maxlen=1000)
+    
+    print(f"Loaded {len(processed_ids)} previously processed alerts. Monitoring for new ones...")
     last_heartbeat = 0
 
     while True:
@@ -131,13 +138,14 @@ def main():
             if any(k.lower() in msg['body'].lower() for k in keywords):
                 if msg_id not in processed_ids:
                     if forward_sms(config, msg):
+                        # Add to set and sliding queue
+                        if len(id_queue) >= 1000:
+                            oldest = id_queue.popleft()
+                            processed_ids.discard(oldest)
+                        
                         processed_ids.add(msg_id)
+                        id_queue.append(msg_id)
                         save_seen_id(msg_id)
-        
-        # Periodic cleanup of in-memory set to prevent bloat (keep last 1000)
-        if len(processed_ids) > 1000:
-           # This is a bit naive but fine for MVP
-           processed_ids = set(list(processed_ids)[-1000:])
         
         time.sleep(config['check_interval'])
 

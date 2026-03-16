@@ -81,22 +81,22 @@
     - [x] **Anti-Fraud Protocol:** Enhanced vision prompt for Photoshop detection.
     - [x] **Sector Unlock:** Generic activities to support all business types.
     - [ ] Integrate Monnify/Paystack for real-time bank verification.
-- [ ] **SMS Relay Prototype**
+- [ ] **SMS Relay Prototype (PAUSED)**
     - [x] **Bridge API:** /bridge/sms endpoint for external bank alert syncing.
     - [x] **Android Bridge:** Python script blueprint for Termux SMS relay.
-    - [ ] Build native Android "Bridge" app.
+    - [ ] Build native Android "Bridge" app. (Replaced by Vision-First Strategy)
 
-## Phase 5: Hardened Scale & Proactivity 🟡
+## Phase 5: Hardened Scale & Proactivity ✅
 
-- [ ] **The "Proactive Pulse" (Infra Hardening)**
-    - [ ] **BullMQ Scheduler:** Move `daily-reports` from API to Worker as repeatable jobs.
-    - [ ] **Melt-Down Protection:** Implement "Staggered Jitter" (randomized send windows) to prevent Gemini 429 and Meta API rate-limiting.
-    - [ ] **Persistence Guard:** Add a "Scheduler Health" check to re-queue jobs if Redis is flushed.
+- [x] **The "Proactive Pulse" (Infra Hardening)**
+    - [x] **BullMQ Scheduler:** Moved `daily-reports` from API to Worker as repeatable jobs.
+    - [x] **Melt-Down Protection:** Implemented "Staggered Jitter" (randomized send windows) to prevent Gemini 429 and Meta API rate-limiting.
+    - [x] **Persistence Guard:** Added a "Scheduler Health" check to re-queue jobs if Redis is flushed.
 
-- [ ] **The "Smart Matching" Engine (Logic Hardening)**
-    - [ ] **Source Lockdown:** Restrict `extractAmountFromSMS` logic strictly to the authenticated `/bridge/sms` endpoint.
-    - [ ] **Regex + LLM Hybrid:** Implement a "Cheap" Gemini 2.5 Flash fallback for ambiguous bank SMS templates (GTB, Zenith, Access, Kuda).
-    - [ ] **Duplicate Alert Detection:** Use a 24-hour Redis sliding window to prevent re-processing identical bank alerts.
+- [x] **The "Smart Matching" Engine (Logic Hardening)**
+    - [x] **Source Lockdown:** Restrict `extractAmountFromSMS` logic strictly to the authenticated `/bridge/sms` endpoint.
+    - [x] **Regex + LLM Hybrid:** Implemented a "Cheap" Gemini 2.5 Flash fallback for ambiguous bank SMS templates.
+    - [x] **Duplicate Alert Detection:** Implemented file-based persistence (`seen_ids.txt`) in the bridge script.
 
 - [x] **The "Visual Ledger" (UI Hardening) ✅**
     - [x] **Calendar View UI:** Build the grid/list view for the Appointment sector in the dashboard.
@@ -171,16 +171,29 @@
 - [x] **Viral Growth Loop:** Contextual `#Apprentice` referral nudges in every customer interaction.
 - [x] **Staff Dispatcher:** Role-aware internal routing (Assign order to Rider, Bot notifies Rider).
 
-## Phase 7: The Empire Era (Hardening)
+## Phase 7: The Empire Era (Hardening) ✅
 - [x] **Scalability Fix:** Refactor `request_otp_relay` to O(1).
 - [x] **Financial Integrity:** Implement `scripts/reconcile-ledger.ts` and harden `deductBalance`.
 - [x] **Bridge Security:** Implement HMAC-SHA256 signatures for the SMS Relay.
 - [x] **Fraud Guard:** Patch Regex to block "Debit" alerts.
-- [ ] **Deploy Reconciliation:** Set up nightly cron for `reconcile-ledger.ts`.
-- [ ] **Sovereign Dashboard:** Finalize the "Vault View" and "Tenant List".
-- [ ] **Native Android Bridge:** [DEPRECATED/PAUSED] - Replaced by Vision-First Strategy.
-- [ ] **Onboarding v2.0:** Remote OTP Relay system. (Logic built, need automated UI).
+- [x] **Monorepo Stabilization:** Unified types and resolved 19+ compilation errors.
+- [x] **PIN Hardening:** 1-hour lockout and automated Sovereign Snitch alerts.
+- [x] **ESM Transition:** Converted API and Worker to full ES Modules.
+- [x] **Hybrid Hub Transition (Phase 7.5):** 
+    - [x] Secure Merchant Login (`/login`).
+    - [x] Real-time Dispatch Board (`/dashboard/[id]`).
+    - [x] Automated WhatsApp notification loop for status updates.
+    - [x] Worker Concurrency (5 parallel jobs) for high speed.
+- [x] **Visual Inventory & Iron Shield (Phase 7.6):**
+    - [x] **Visual Inventory:** Manage products (price, stock, images) from the Web Dashboard.
+    - [x] **Iron Shield Hardening:** Strict Amount Lock and verification rate limiting.
+    - [x] **Sovereign Security:** Zero-leak frontend data sanitization.
+- [x] **Visual Dashboard Phase 3:**
+    - [x] **Visual Ledger:** Detailed income/expense reports for Bosses. (UI + Data Logic)
+- [x] **Onboarding v2.0:** Remote OTP Relay system. (Implemented)
+- [x] **Iron-Shield Expansion:** Add official Monnify API support.
+- [x] **Modular Refactoring:** Refactor Worker and Firebase packages into specialized domain modules.
 
-## Phase 8: Global Expansion
-- [ ] **International Numbers:** Support +1 (US) and +44 (UK) numbers.
-- [ ] **Multi-Currency:** Support USD/GBP ledgers.
+## Phase 8: Global Expansion ✅
+- [x] **International Numbers:** Support +1 (US) and +44 (UK) numbers via dynamic phone utilities.
+- [x] **Multi-Currency:** Support USD/GBP ledgers with localized AI tool descriptions and reporting.

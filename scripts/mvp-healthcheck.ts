@@ -1,6 +1,6 @@
 import { Redis } from 'ioredis';
 import * as dotenv from 'dotenv';
-import { getActiveOrganizations, getNetworkStats, getDb } from '../packages/firebase/src/index.js';
+import { getActiveOrganizations, getNetworkStats, getDb } from '../packages/firebase/src/index.ts';
 
 dotenv.config();
 

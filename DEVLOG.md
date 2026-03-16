@@ -360,6 +360,137 @@
 *   **Vision-First:** The primary verification method is now AI Vision (Receipt Analysis) or direct Payment Provider integration (Paystack).
 *   **Legacy Support:** The API endpoints for the bridge remain active but secured with HMAC and strict fraud regex, allowing existing high-value merchants to continue using it if needed.
 
+## Session 31: Modularization & Forensic Hardening (2026-03-12)
+**Status:** 🏗️ **Stabilized & Modular**
+
+### **Architecture: Worker Decomposition**
+*   **Monolith to Modular:** Broke down the massive 1,300-line worker into specialized handlers (`messaging.ts`, `onboarding.ts`, `reporting.ts`, `cart.ts`, `system.ts`).
+*   **Clean Orchestration:** The main worker loop is now reduced to <200 lines of logic, serving as a high-level dispatcher.
+*   **Strict Type Safety:** Eliminated `any` across the monorepo. Created a central `packages/types` source of truth for `JobData`, `OnboardingConfig`, `TransactionData`, and `Messages`.
+
+### **Safety & Logic Hardening:**
+*   **Centralized Config:** Moved hardcoded fees (₦33.00, ₦77.00), limits (3 images/turn), and model names to a single `SystemConfig` file.
+*   **Firebase Resilience:** Replaced fragile regex cleaning with robust JSON parsing for `FIREBASE_SERVICE_ACCOUNT`. Removed `process.exit(1)` from library code to prevent silent system crashes.
+*   **Persistent Media:** Implemented automatic storage of product/knowledge images to persistent cloud storage, bypassing Meta's 24-hour media expiry.
+*   **Anti-Fraud Vision (Forensic Protocol):** 
+    *   Updated AI Vision prompt to act as a "Forensic Analyst" (checking for pixel alignment, cloning, and font weight artifacts).
+    *   Implemented `suspicionReason` field. AI must now explain *why* it flags a receipt as fake.
+*   **Sovereign Snitch:** Integrated real-time WhatsApp alerts for critical failures, brute-force PIN lockouts, and high-value suspicious transactions.
+
+### **Verification:**
+*   **Build Integrity:** 100% verified build across `types`, `firebase`, `storage`, and `worker`.
+*   **Zero-Loss Strategy:** Implemented balance refund logic on job failure and structured JSON logging (`Pino`) for full auditability.
+
 **Next Steps:**
-1.  Deploy `scripts/reconcile-ledger.ts` as a nightly cron job.
-2.  Finalize the "Sovereign Dashboard" for visual management.
+1.  **Visual Dashboard:** Build the "Boss View" for inventory and ledger management.
+2.  **Real-time Bank Verification:** Expand Monnify/Paystack API for automated high-volume verification.
+
+## Session 32: The Sovereign Dashboard Restoration (2026-03-13)
+**Status:** 🟢 **Restored & Hardened**
+
+### **Context:**
+*   **The Pivot:** The "Vision-First" strategy initially deprecated the web dashboard in favor of a WhatsApp-only interface. However, for Phase 7 (Empire Era), a centralized "Command Center" is essential for the Sovereign to monitor the entire network, manage tenants, and audit high-value transactions.
+*   **Action:** Restored the \`apps/web\` directory from git history (Commit \`1cf29b71^\`) and upgraded it to meet current Phase 7 standards.
+
+### **Actions Taken:**
+*   **Restoration:** Recovered the Next.js dashboard app.
+*   **Strict Typing:** Enforced \`no-explicit-any\` across the dashboard codebase.
+    *   Added missing \`Chat\` interface to \`@naija-agent/types\`.
+    *   Replaced \`any\` with proper \`Message\`, \`Chat\`, and \`MediaItem\` types in UI components.
+*   **Logic Fix:** Updated \`getNetworkMedia\` and \`getNetworkChats\` calls to correctly pass the Sovereign Org ID (\`naija-agent-master\`) for global queries, aligning with the Phase 7 API signature.
+*   **Build Optimization:**
+    *   Implemented lazy Redis initialization in API routes to prevent build-time connection exhaustion (\`ECONNREFUSED\`).
+    *   Resolved JSX syntax errors (unescaped quotes) and \`next/image\` warnings.
+*   **Verification:** Successfully built the dashboard with `NODE_ENV=production`, achieving optimized static generation for all 11 routes.
+
+### **Strategic Value:**
+*   **Visibility:** The Sovereign now has a functional web portal to audit the entire bot network in real-time.
+*   **Safety:** The dashboard code is now strictly typed and aligned with the monorepo's architecture, preventing regression.
+
+## Session 33: Visual Operations & The Iron Shield (2026-03-14)
+**Status:** 🟢 **Completed & Hardened**
+
+### **Context:**
+*   **The Goal:** Transition from a "Chat-Only" management style to a high-utility "Visual Dashboard" and harden the verification system against sophisticated fraud.
+
+### **Actions Taken:**
+*   **Visual Inventory Manager:**
+    *   Implemented `/dashboard/[id]/inventory` with a professional product grid.
+    *   Added **Inline Editing** for Price and Stock.
+    *   Added **New Product Creation** modal directly on the web.
+*   **The Iron Shield (Hardened Verification):**
+    *   **Amount Lock:** Implemented strict comparison between receipt amount and bank API record.
+    *   **Rate Limiting:** Added Redis-based protection (3 attempts / 5 mins) to prevent verification spam.
+*   **Sovereign Security:**
+    *   Created `sanitizeOrgForFrontend` utility to strip sensitive secrets (tokens/keys) from the browser memory.
+*   **Worker Optimization:**
+    *   Enabled **Concurrency (5x)** in the core worker to handle parallel multi-tenant traffic.
+    *   Hardened the **Price Guard** to verify against the live Firestore catalog, preventing "Old Price" hallucinations.
+
+### **Strategic Value:**
+*   **Merchant Autonomy:** Bosses can now manage their entire shop visually without typing complex training commands to the AI.
+*   **Financial Zero-Trust:** The bot is now immune to "Small Payment" reference spoofing.
+
+
+**Next Steps:**
+1.  **Deployment:** Deploy the restored dashboard to Vercel/Railway.
+2.  **Feature Parity:** Implement the "Visual Ledger" and "Inventory Management" views as originally planned.
+
+## Session 34: Empire Modularization & Ecosystem Hardening (2026-03-15)
+**Status:** 🟢 **Completed & Modularized**
+
+### **Context:**
+*   **The Goal:** Address the technical debt of monolithic handlers and harden the monorepo build system for high-scale multi-tenancy. Complete the "Phase 7 Post-Launch" feature set.
+
+### **Actions Taken:**
+*   **Modular Refactoring (Worker):**
+    *   Decomposed the 950-line `tool-handlers.ts` into specialized domain modules: `commerce.ts`, `inventory.ts`, `admin.ts`, `content.ts`, and `system.ts`.
+    *   Unified `AUTH_REQUIRED_TOOLS` as the single source of truth for security gating.
+*   **Modular Refactoring (Firebase):**
+    *   Split the monolithic `@naija-agent/firebase` package into 12 specialized sub-modules (e.g., `ledger.ts`, `products.ts`, `orgs.ts`).
+    *   Implemented a shared `db.ts` for consistent Firebase Admin initialization.
+*   **API Ecosystem Expansion:**
+    *   **Monnify Integration:** Implemented the `/webhook/monnify` endpoint for official automated payment confirmation.
+    *   **Proactive Scheduling:** Added `/cron/reminders` and `/cron/inventory-alerts` endpoints to the API, serving as triggers for the Worker's BullMQ jobs.
+*   **Build System Hardening:**
+    *   Updated `scripts/build.js` to perform a real bottom-up `npm run build` for all local packages before application bundling.
+    *   Enforced `NODE_ENV=production` across all build and runtime scripts to stabilize Next.js and Worker bundling.
+*   **Bug Fix:** Resolved an argument mismatch in the `manage_stock` tool where the Worker expected `id` instead of the schema-defined `productId`.
+
+### **Strategic Value:**
+*   **Scalability:** The modular codebase is now much easier to navigate and extend by multiple developers.
+*   **Reliability:** The bottom-up build system eliminates "phantom" build errors and missing dependency issues in production.
+*   **Feature Completeness:** The "Empire Era" feature set (Ledger, Reminders, Monnify) is now technically fully implemented.
+
+### **Verification:**
+*   **Packages:** Built successfully (types, firebase, payments, storage, logistics).
+*   **Apps:** API and Worker bundled successfully; Next.js 15 Web Dashboard built with 100% type safety.
+
+## Session 35: Global Expansion & Dynamic Localization (2026-03-15)
+**Status:** 🌍 **Phase 8 (Foundation) Completed**
+
+### **Context:**
+*   **The Goal:** Transition the system from a Nigeria-only architecture to a true multi-tenant global platform supporting international phone numbers and currencies.
+
+### **Actions Taken:**
+*   **International Phone Engine:**
+    *   Enhanced `utils/phone.ts` to support dynamic region formatting using `libphonenumber-js`.
+    *   Implemented `getPhoneExample` to generate region-specific prompts for the AI (e.g., `1...` for US, `234...` for NG).
+*   **Multi-Currency Engine:**
+    *   Standardized price formatting across the entire Worker using `formatCurrency(amount, locale, code)`.
+    *   Updated `apps/worker/src/handlers/reporting.ts`, `tools/commerce.ts`, and `handlers/onboarding.ts` to respect the tenant's `org.currency` configuration.
+*   **Dynamic Tool Definitions:**
+    *   Refactored `getTenantTools` to accept `currency` and `region` context.
+    *   Replaced hardcoded "Naira" and "₦" in tool descriptions with dynamic placeholders, ensuring the AI understands the localized business context.
+*   **Worker Context Injection:**
+    *   Updated the main Worker loop to extract `currency` and `region` from the Organization document and pass them through the `HandlerContext` to all downstream tool handlers.
+*   **Search & Destroy mission:** Audited and replaced 30+ hardcoded Nigerian-specific strings (`₦`, `NGN`, `234`) with localized variables.
+
+### **Strategic Value:**
+*   **Scalability:** The system can now onboard merchants from the US, UK, and beyond without code changes.
+*   **UX Excellence:** Customers in different regions receive payment instructions and receipts in their local format.
+*   **AI Precision:** The **Price Guard** and **Vision Protocol** are now dynamic, preventing false positives in non-NGN transactions.
+
+### **Verification:**
+*   **Build:** Successfully built `apps/worker` and `packages/types` with 100% type safety.
+*   **Tests:** Verified dynamic description generation for `get_payment_instructions` and `verify_transaction`.

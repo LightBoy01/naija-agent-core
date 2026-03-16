@@ -1,6 +1,7 @@
 {
   "name": "@naija-agent/worker",
   "version": "1.0.0",
+  "type": "commonjs",
   "main": "dist/index.js",
   "scripts": {
     "build": "../../node_modules/.bin/tsc",
@@ -13,12 +14,15 @@
     "@naija-agent/payments": "*",
     "@naija-agent/storage": "*",
     "@naija-agent/types": "*",
+    "@types/bcrypt": "^6.0.0",
     "axios": "^1.6.7",
+    "bcrypt": "^6.0.0",
     "bullmq": "^5.1.0",
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
     "dotenv": "^16.4.1",
     "ioredis": "^5.3.2",
+    "libphonenumber-js": "^1.12.40",
     "pino": "^9.14.0",
     "pino-pretty": "^13.1.3"
   },

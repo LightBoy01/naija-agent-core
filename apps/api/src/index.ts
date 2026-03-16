@@ -5,11 +5,7 @@ import pino from 'pino';
 
 // Configure Structured Logging
 const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  transport: process.env.NODE_ENV !== 'production' ? {
-    target: 'pino-pretty',
-    options: { colorize: true }
-  } : undefined
+  level: process.env.LOG_LEVEL || 'info'
 });
 
 console.log('🚀 [VERSION 1.0.2] API Service Starting...');
@@ -227,20 +223,26 @@ fastify.post('/webhook/paystack', async (request, reply) => {
     const result = await topupTenant(orgId, amountNaira, reference);
 
     if (result) {
-      console.log(`✅ [PAYSTACK] Credited ₦${amountNaira.toLocaleString()} to ${orgId}`);
+      console.log(`✅ [PAYSTACK] Processed ₦${amountNaira.toLocaleString()} for ${orgId}`);
       
-      // Notify Boss via WhatsApp
       const org = await getOrgById(orgId);
       if (org?.config?.adminPhone) {
+        let notificationMsg = "";
+        
+        if (metadata?.purpose === 'refill') {
+           notificationMsg = `✅ *AI Credit Refill Successful!*\n\nOga, your account has been credited with *₦${amountNaira.toLocaleString()}* (Ref: ${reference}).\n\nYour new balance is *₦${(result.newBalance / 100).toLocaleString()}*.`;
+        } else {
+           notificationMsg = `💰 *NEW SALE CONFIRMED (Paystack)!*\n\nOga, a customer has just paid *₦${amountNaira.toLocaleString()}*.\n\nOrder Ref: ${reference}\nNew Bot Balance: ₦${(result.newBalance / 100).toLocaleString()}.`;
+        }
+
         const notificationJob: JobData = {
           type: 'text',
           orgId: 'system',
           phoneId: org.whatsappPhoneId,
           from: org.config.adminPhone,
+          messageId: `BR-${Date.now()}`,
           timestamp: Date.now(),
-          content: {
-            text: `💳 *Top-up Successful!*\n\nOga, your account has been credited with *₦${amountNaira.toLocaleString()}* (Ref: ${reference}).\n\nYour new balance is *₦${(result.newBalance / 100).toLocaleString()}*.`
-          }
+          content: { text: notificationMsg }
         };
         await whatsappQueue.add('process-message', notificationJob, { removeOnComplete: true });
       }
@@ -256,6 +258,75 @@ fastify.post('/webhook/paystack', async (request, reply) => {
   return reply.status(200).send('OK');
 });
 
+// 3b. Webhook Ingestion (Monnify)
+fastify.post('/webhook/monnify', async (request, reply) => {
+  const signature = request.headers['monnify-signature'] as string;
+  const rawBody = request.rawBody as string;
+
+  // We need to find the org to get their secret key, but webhooks might not have orgId in metadata easily readable without parsing.
+  // Monnify webhooks usually have a fixed structure.
+  const payload = request.body as any;
+  const reference = payload.eventData?.paymentReference;
+  
+  // Try to find orgId from reference (Standard: refill_ORGID_TIMESTAMP)
+  let orgId: string | undefined = undefined;
+  if (reference && reference.startsWith('refill_')) {
+     orgId = reference.split('_')[1];
+  }
+
+  if (!orgId) {
+    console.warn(`⚠️ Received Monnify webhook without recognizable orgId in reference: ${reference}`);
+    return reply.status(200).send('OK');
+  }
+
+  const org = await getOrgById(orgId);
+  const monnifyKey = org?.config?.payment?.secretKey || process.env.MONNIFY_SECRET_KEY;
+
+  if (!monnifyKey) {
+    return reply.status(500).send('Monnify secret key not found');
+  }
+
+  const monnify = getProvider('monnify', monnifyKey) as any;
+  
+  if (!monnify.verifyWebhookSignature(rawBody, signature)) {
+    console.warn('❌ Invalid Monnify Webhook Signature!');
+    return reply.status(403).send('Invalid Signature');
+  }
+
+  if (payload.eventType !== 'SUCCESSFUL_TRANSACTION') {
+    return reply.status(200).send('Ignored');
+  }
+
+  const amountPaid = payload.eventData.amountPaid;
+
+  try {
+    const result = await topupTenant(orgId, amountPaid, reference);
+
+    if (result) {
+      console.log(`✅ [MONNIFY] Processed ₦${amountPaid.toLocaleString()} for ${orgId}`);
+      
+      if (org?.config?.adminPhone) {
+        const notificationMsg = `✅ *AI Credit Refill Successful (Monnify)!*\n\nOga, your account has been credited with *₦${amountPaid.toLocaleString()}*.\n\nYour new balance is *₦${(result.newBalance / 100).toLocaleString()}*.`;
+
+        const notificationJob: JobData = {
+          type: 'text',
+          orgId: 'system',
+          phoneId: org.whatsappPhoneId,
+          from: org.config.adminPhone,
+          messageId: `BR-${Date.now()}`,
+          timestamp: Date.now(),
+          content: { text: notificationMsg }
+        };
+        await whatsappQueue.add('process-message', notificationJob, { removeOnComplete: true });
+      }
+    }
+  } catch (e: any) {
+    if (e.message !== 'DUPLICATE_REFERENCE') console.error('❌ Monnify processing error:', e);
+  }
+
+  return reply.status(200).send('OK');
+});
+
 // 3. Webhook Ingestion (POST)
 fastify.post('/webhook', async (request, reply) => {
   console.log('📝 [DEBUG] Webhook Hit!');
@@ -263,7 +334,11 @@ fastify.post('/webhook', async (request, reply) => {
   const rawBody = request.rawBody as string;
 
   // Multi-Tenancy: Extract phoneId BEFORE verification to lookup secret
-  let appSecret = process.env.WHATSAPP_APP_SECRET || '';
+  let appSecret = process.env.WHATSAPP_APP_SECRET;
+  if (!appSecret) {
+    fastify.log.error('CRITICAL: WHATSAPP_APP_SECRET is undefined during webhook processing.');
+    return reply.status(500).send('Internal Server Error');
+  }
   let phoneId: string | undefined = undefined;
 
   try {
@@ -307,8 +382,15 @@ fastify.post('/webhook', async (request, reply) => {
   const businessPhoneId = value.metadata.phone_number_id;
   const from = message.from;
 
-  // Tenant Lookup: Find Org by Phone ID
-  const org = await getOrgByPhoneId(businessPhoneId);
+  // --- Multi-Tenant Identity Prioritization (Phase 8.1) ---
+  // Priority 1: Check if the SENDER is a Boss of an org (Shared SIM logic)
+  const { findOrgByAdminPhone } = await import('@naija-agent/firebase');
+  let org = await findOrgByAdminPhone(from);
+  
+  if (!org) {
+    // Priority 2: Fallback to Org linked by SIM Phone ID (Standard logic)
+    org = await getOrgByPhoneId(businessPhoneId);
+  }
   
   if (!org) {
     fastify.log.warn(`Unknown Business Phone ID: ${businessPhoneId}`);
@@ -372,19 +454,24 @@ fastify.post('/webhook', async (request, reply) => {
     },
   };
 
-  // Push to Queue
-  await whatsappQueue.add('process-message', jobData, {
-    removeOnComplete: true,
-    removeOnFail: 100, // Keep last 100 failed jobs for debugging
-    attempts: 3, // Retry up to 3 times
-    backoff: {
-      type: 'exponential',
-      delay: 1000, // 1s, 2s, 4s
-    },
-  });
-
-  fastify.log.info(`Queued job for ${from}`);
-  return reply.status(200).send('OK');
+  // Push to Queue (Circuit Breaker)
+  try {
+    await whatsappQueue.add('process-message', jobData, {
+      removeOnComplete: true,
+      removeOnFail: 100, // Keep last 100 failed jobs for debugging
+      attempts: 3, // Retry up to 3 times
+      backoff: {
+        type: 'exponential',
+        delay: 1000, // 1s, 2s, 4s
+      },
+    });
+    fastify.log.info(`Queued job for ${from}`);
+    return reply.status(200).send('OK');
+  } catch (err: any) {
+    fastify.log.error(`🚨 [REDIS_FAIL] Failed to queue message from ${from}: ${err.message}`);
+    // Return 503 so WhatsApp retries later
+    return reply.status(503).send('Service Unavailable - Queue Error');
+  }
 });
 
 // 4. Outbound Message (POST)
@@ -425,6 +512,7 @@ fastify.post('/send', async (request, reply) => {
     phoneId: effectivePhoneId,
     orgId: 'system', // System job
     from: to, // In outbound context, 'from' is the recipient
+    messageId: `OUT-${Date.now()}`,
     timestamp: Date.now(),
     content: {
       text,
@@ -524,6 +612,7 @@ fastify.post('/bridge/sms', async (request, reply) => {
             orgId: 'system',
             phoneId: org.whatsappPhoneId,
             from: org.config.adminPhone,
+            messageId: `BR-${Date.now()}`,
             timestamp: Date.now(),
             content: {
               text: `✅ *AI Credit Refill Confirmed (SMS Bridge)*\n\nOga, your payment of *₦${amount.toLocaleString()}* has been received via bank alert.\n\nYour bot has been credited! New balance: *₦${(result.newBalance / 100).toLocaleString()}*.`
@@ -538,18 +627,35 @@ fastify.post('/bridge/sms', async (request, reply) => {
          console.log(`✅ [SALE MATCH] Linking SMS ${alertId} to Tx ${pendingTx.id}`);
          await confirmTransaction(pendingTx.id, alertId);
 
-         // Notify Customer via WhatsApp
-         const notificationJob: JobData = {
+         // 1. Notify Customer via WhatsApp
+         const customerJob: JobData = {
            type: 'text',
            orgId: org.id,
            phoneId: phoneId,
            from: pendingTx.from,
+           messageId: `SALE-${Date.now()}`,
            timestamp: Date.now(),
            content: {
              text: `✅ *Payment Confirmed!*\n\nWe have received your payment of *₦${amount.toLocaleString()}*. Your order is now being processed. Thank you!`
            }
          };
-         await whatsappQueue.add('process-message', notificationJob, { removeOnComplete: true });
+         await whatsappQueue.add('process-message', customerJob, { removeOnComplete: true });
+
+         // 2. Notify Boss via WhatsApp (Immediate Sale Alert)
+         if (org.config?.adminPhone) {
+            const bossJob: JobData = {
+              type: 'text',
+              orgId: 'system',
+              phoneId: phoneId,
+              from: org.config.adminPhone,
+              messageId: `BOSS-SALE-${Date.now()}`,
+              timestamp: Date.now(),
+              content: {
+                text: `💰 *SALE CONFIRMED (Bank Alert)!*\n\nOga, a customer (*${pendingTx.from}*) has just paid *₦${amount.toLocaleString()}*.\n\nOrder Ref: ${pendingTx.id}\nI have informed the customer already!`
+              }
+            };
+            await whatsappQueue.add('process-message', bossJob, { removeOnComplete: true });
+         }
        }
     }
   }
@@ -628,12 +734,63 @@ fastify.get('/cron/cart-recovery', async (request, reply) => {
     orgId: 'system',
     phoneId: '',
     from: 'system',
+    messageId: `REC-${Date.now()}`,
     timestamp: Date.now(),
     content: {}
   };
 
   await whatsappQueue.add('hourly-cart-recovery', recoveryJob, { removeOnComplete: true });
   console.log('📡 [CRON] Triggered hourly cart recovery job.');
+  
+  return reply.send({ status: 'success' });
+});
+
+// 6. Appointment Reminders Cron (GET)
+fastify.get('/cron/reminders', async (request, reply) => {
+  const cronSecret = request.headers['x-cron-secret'];
+  
+  if (cronSecret !== process.env.CRON_SECRET) {
+    console.warn('❌ Unauthorized CRON attempt!');
+    return reply.status(401).send('Unauthorized');
+  }
+
+  const jobData: JobData = {
+    type: 'text',
+    orgId: 'system',
+    phoneId: '',
+    from: 'system',
+    messageId: `REM-${Date.now()}`,
+    timestamp: Date.now(),
+    content: {}
+  };
+
+  await whatsappQueue.add('hourly-reminder-scan', jobData, { removeOnComplete: true });
+  console.log('📡 [CRON] Triggered hourly appointment reminder scan.');
+  
+  return reply.send({ status: 'success' });
+});
+
+// 7. Inventory Cleanup/Alerts Cron (GET)
+fastify.get('/cron/inventory-alerts', async (request, reply) => {
+  const cronSecret = request.headers['x-cron-secret'];
+  
+  if (cronSecret !== process.env.CRON_SECRET) {
+    console.warn('❌ Unauthorized CRON attempt!');
+    return reply.status(401).send('Unauthorized');
+  }
+
+  const jobData: JobData = {
+    type: 'text',
+    orgId: 'system',
+    phoneId: '',
+    from: 'system',
+    messageId: `INV-${Date.now()}`,
+    timestamp: Date.now(),
+    content: {}
+  };
+
+  await whatsappQueue.add('hourly-inventory-cleanup', jobData, { removeOnComplete: true });
+  console.log('📡 [CRON] Triggered hourly inventory cleanup/alert job.');
   
   return reply.send({ status: 'success' });
 });

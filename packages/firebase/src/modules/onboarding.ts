@@ -1,0 +1,169 @@
+import { 
+  getFirestore, 
+  FieldValue, 
+  Timestamp 
+} from 'firebase-admin/firestore';
+import { incrementNetworkStats } from './stats.js';
+import { setAdminAuth } from './auth.js';
+import { Organization, OnboardingData, OnboardingConfig } from '@naija-agent/types';
+import bcrypt from 'bcrypt';
+import crypto from 'crypto';
+
+const db = getFirestore();
+const orgsRef = db.collection('organizations');
+
+/**
+ * Registers a new merchant's interest in a trial and unlocks immediate demo access.
+ */
+export async function registerTrialInterest(data: {
+  id: string;
+  name: string;
+  adminPhone: string;
+  botPhone: string;
+}): Promise<void> {
+  const trialBonus = 100000; // 1,000.00 NGN Trial Gift
+  
+  await orgsRef.doc(data.id).set({
+    ...data,
+    isActive: true, // UNLOCKED: Trial starts immediately
+    status: 'TRIAL',
+    deploymentModel: 'SHARED',
+    balance: trialBonus,
+    currency: 'NGN',
+    costPerReply: 3300, 
+    whatsappPhoneId: 'PENDING', 
+    config: {
+      adminPhone: data.adminPhone,
+      botPhone: data.botPhone,
+      tools: ['web_search'],
+      model: 'gemini-3.1-flash-lite-preview'
+    },
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  await incrementNetworkStats({ clientDelta: 1, koboDelta: trialBonus });
+}
+
+/**
+ * Fetches all organizations currently in the onboarding pipeline.
+ */
+export async function getPendingSetups(): Promise<Organization[]> {
+  const snapshot = await orgsRef
+    .where('status', 'in', ['PENDING_PAYMENT', 'PENDING_META', 'AWAITING_OTP'])
+    .get();
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Organization));
+}
+
+/**
+ * Updates the status and core ID of a tenant bot.
+ */
+export async function activateTenant(orgId: string, phoneId: string, accessToken: string): Promise<void> {
+  await orgsRef.doc(orgId).update({
+    status: 'ACTIVE',
+    isActive: true,
+    whatsappPhoneId: phoneId,
+    'config.whatsappToken': accessToken,
+    trialStartedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp()
+  });
+}
+
+/**
+ * Updates the onboarding state for an organization.
+ */
+export async function setOrgOnboarding(orgId: string, step: string, data: OnboardingData = {}): Promise<void> {
+  await orgsRef.doc(orgId).update({
+    onboardingStep: step,
+    onboardingData: data,
+    updatedAt: FieldValue.serverTimestamp()
+  });
+}
+
+/**
+ * Fetches the current onboarding state.
+ */
+export async function getOrgOnboarding(orgId: string): Promise<OnboardingConfig | null> {
+  const doc = await orgsRef.doc(orgId).get();
+  if (!doc.exists) return null;
+  const data = doc.data();
+  return { 
+    step: (data?.onboardingStep || 'NONE') as OnboardingConfig['step'], 
+    data: data?.onboardingData || {} 
+  };
+}
+
+/**
+ * Completes onboarding and promotes temporary data to the final config.
+ * Award a 500 NGN starting bonus to remove friction.
+ */
+export async function completeOnboarding(orgId: string, finalConfig: OnboardingData): Promise<void> {
+  let hashedPin = finalConfig.adminPin || '1234';
+  const isBcrypt = /^\$2[aby]\$.{56}$/.test(hashedPin);
+  
+  if (!isBcrypt) {
+    hashedPin = await bcrypt.hash(hashedPin, 10);
+  }
+
+  const bonusKobo = 100000; 
+  
+  await orgsRef.doc(orgId).update({
+    name: finalConfig.name,
+    onboardingStep: 'COMPLETE',
+    onboardingData: null,
+    balance: bonusKobo,
+    'config.adminPin': hashedPin,
+    'config.bankDetails': {
+      bankName: finalConfig.bankName,
+      accountNumber: finalConfig.accountNumber,
+      accountName: finalConfig.accountName
+    },
+    'config.systemPrompt': finalConfig.systemPrompt,
+    systemPrompt: finalConfig.systemPrompt,
+    isActive: true,
+    updatedAt: FieldValue.serverTimestamp()
+  });
+
+  // 🛡️ [UX]: Auto-authenticate the Boss so they don't have to enter their PIN immediately after setup.
+  const orgDoc = await orgsRef.doc(orgId).get();
+  const adminPhone = orgDoc.data()?.config?.adminPhone;
+  if (adminPhone) {
+    await setAdminAuth(orgId, adminPhone);
+  }
+
+  await incrementNetworkStats({ clientDelta: 1, koboDelta: bonusKobo });
+}
+
+/**
+ * Spawns a new tenant organization (Onboarding)
+ */
+export async function createTenant(data: {
+  id: string;
+  name: string;
+  whatsappPhoneId: string;
+  adminPhone: string;
+  systemPrompt: string;
+}): Promise<void> {
+  const hashedPin = await bcrypt.hash('1234', 10);
+  const bridgeSecret = crypto.randomBytes(16).toString('hex'); 
+  const bonusKobo = 100000;
+
+  await orgsRef.doc(data.id).set({
+    ...data,
+    isActive: true,
+    balance: bonusKobo, 
+    currency: 'NGN',
+    costPerReply: 3300, 
+    config: {
+      tools: ['web_search'],
+      model: 'gemini-3.1-flash-lite-preview',
+      adminPin: hashedPin,
+      bridgeSecret, 
+      useSmsBridge: true
+    },
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  await incrementNetworkStats({ clientDelta: 1, koboDelta: bonusKobo });
+}

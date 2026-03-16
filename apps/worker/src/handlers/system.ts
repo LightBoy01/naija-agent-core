@@ -1,0 +1,225 @@
+import { Job } from 'bullmq';
+import { JobData, SystemConfig } from '@naija-agent/types';
+import { WhatsAppService } from '../services/whatsapp.js';
+import { 
+  getOrgById, 
+  getOrgByPhoneId,
+  logSystemEvent, 
+  getUpcomingBookingsForReminders,
+  markReminderSent,
+  getActiveOrganizations,
+  releaseExpiredReservations
+} from '@naija-agent/firebase';
+import { Redis } from 'ioredis';
+
+export async function handleInventoryCleanup(
+  job: Job<JobData>
+): Promise<{ success: boolean }> {
+  console.log(`📦 [INVENTORY CLEANUP] Starting global stock release scan...`);
+  const orgs = await getActiveOrganizations();
+  let totalReleased = 0;
+
+  for (const org of orgs) {
+    try {
+      const released = await releaseExpiredReservations(org.id);
+      if (released > 0) {
+        totalReleased += released;
+        console.log(`✅ [INVENTORY] Released ${released} expired locks for ${org.name}`);
+        await logSystemEvent(org.id, 'INVENTORY_CLEANUP', `Released ${released} expired stock reservations.`);
+      }
+    } catch (e: any) {
+      console.error(`❌ [INVENTORY] Cleanup failed for ${org.id}:`, e.message);
+    }
+  }
+  console.log(`📦 [INVENTORY CLEANUP] Scan complete. Total items released back to stock: ${totalReleased}`);
+  return { success: true };
+}
+
+export async function handleBridgeHealth(
+  job: Job<JobData>,
+  redisClient: Redis
+): Promise<{ success: boolean }> {
+  const { orgId } = job.data;
+  if (!orgId) throw new Error('Missing orgId for health-check job');
+  
+  const org = await getOrgById(orgId);
+  if (!org || !org.config?.adminPhone) return { success: true };
+
+  const heartbeatKey = `bridge_heartbeat:${orgId}`;
+  const lastHeartbeat = await redisClient.get(heartbeatKey);
+  const lastAlertKey = `bridge_offline_alert:${orgId}`;
+  const hasRecentlyAlerted = await redisClient.get(lastAlertKey);
+
+  if (lastHeartbeat) {
+    const now = Date.now();
+    const diffMinutes = (now - parseInt(lastHeartbeat)) / (1000 * 60);
+
+    // 🛡️ [RED TEAM]: Implement grace period from config
+    if (diffMinutes > SystemConfig.LIMITS.BRIDGE_OFFLINE_GRACE_MINUTES && !hasRecentlyAlerted) {
+       console.warn(`🚨 [GUARDIAN] Bridge for ${org.name} is OFFLINE for ${Math.floor(diffMinutes)} mins.`);
+       
+       const offlineMsg = `🚨 *Bridge Offline Alert*\n\nOga, your SMS Bridge for *${org.name}* hasn't sent a heartbeat for over ${SystemConfig.LIMITS.BRIDGE_OFFLINE_GRACE_MINUTES} minutes.\n\nI cannot verify bank transfers automatically until it's back online! Please check your bridge device.`;
+       
+       const tenantWhatsAppService = new WhatsAppService(
+         org.config?.whatsappToken || process.env.WHATSAPP_API_TOKEN || '',
+         org.whatsappPhoneId || process.env.WHATSAPP_PHONE_ID || '',
+         org.config?.appSecret || process.env.WHATSAPP_APP_SECRET
+       );
+
+       await tenantWhatsAppService.sendText(org.config.adminPhone, offlineMsg);
+       await logSystemEvent(org.id, 'BRIDGE_OFFLINE_ALERT', `Sent alert to Boss: Bridge offline for ${Math.floor(diffMinutes)} mins.`);
+       
+       // 🛡️ [RED TEAM]: Implement 24h cooldown to prevent alarm fatigue
+       await redisClient.setex(lastAlertKey, 86400, '1');
+    } else if (diffMinutes <= SystemConfig.LIMITS.BRIDGE_OFFLINE_GRACE_MINUTES) {
+       if (hasRecentlyAlerted) {
+          console.log(`✅ [GUARDIAN] Bridge for ${org.name} is back ONLINE.`);
+          await logSystemEvent(org.id, 'BRIDGE_RESTORED', 'Bridge heartbeat detected after outage.');
+          await redisClient.del(lastAlertKey);
+       }
+    }
+  }
+  return { success: true };
+}
+
+export async function handleReminderScan(
+  job: Job<JobData>
+): Promise<{ success: boolean }> {
+  const { orgId } = job.data;
+  if (!orgId) throw new Error('Missing orgId for reminder-scan job');
+  
+  const org = await getOrgById(orgId);
+  if (!org || !org.isActive) return { success: true };
+
+  // Look for bookings in the 2-3 hour window (110-150 minutes)
+  const upcoming = await getUpcomingBookingsForReminders(orgId, 110, 150);
+  console.log(`[NUDGE] Found ${upcoming.length} upcoming bookings for ${org.name}.`);
+
+  for (const booking of upcoming) {
+    if (!booking.customerPhone) continue;
+
+    try {
+      const startTime = new Date(booking.metadata.startTime);
+      const timeStr = startTime.toLocaleTimeString(SystemConfig.DEFAULTS.LOCALE, { hour: '2-digit', minute: '2-digit', hour12: true });
+      
+      const reminderMsg = `🔔 *Appointment Reminder*\n\nHello! This is a friendly reminder for your appointment with *${org.name}* today at *${timeStr}*.\n\nWe look forward to seeing you!`;
+
+      const tenantWhatsAppService = new WhatsAppService(
+        org.config?.whatsappToken || process.env.WHATSAPP_API_TOKEN || '',
+        org.whatsappPhoneId || process.env.WHATSAPP_PHONE_ID || '',
+        org.config?.appSecret || process.env.WHATSAPP_APP_SECRET
+      );
+
+      await tenantWhatsAppService.sendText(booking.customerPhone, reminderMsg);
+      await markReminderSent(orgId, booking.id);
+      await logSystemEvent(orgId, 'APPOINTMENT_REMINDER', `Sent nudge to ${booking.customerPhone} for slot ${booking.id}`);
+      console.log(`✅ [NUDGE] Sent reminder to ${booking.customerPhone} for ${org.name}`);
+
+      await new Promise(r => setTimeout(r, 5000)); 
+    } catch (e: any) {
+      console.error(`❌ [NUDGE] Failed for booking ${booking.id}:`, e.message);
+    }
+  }
+  return { success: true };
+}
+
+export async function handleTemplateSend(
+  job: Job<JobData>
+): Promise<{ success: boolean }> {
+  const { from, content, phoneId } = job.data;
+  if (!content.templateName) {
+    throw new Error('Missing templateName for send-template job');
+  }
+
+  let tenantWhatsAppService = new WhatsAppService(
+    process.env.WHATSAPP_API_TOKEN || '',
+    phoneId || process.env.WHATSAPP_PHONE_ID || '',
+    process.env.WHATSAPP_APP_SECRET
+  );
+
+  // Dynamic token lookup for multi-tenant outbound
+  if (phoneId) {
+    const org = await getOrgByPhoneId(phoneId);
+    if (org?.config?.whatsappToken) {
+      tenantWhatsAppService = new WhatsAppService(
+        org.config.whatsappToken, 
+        phoneId, 
+        org.config.appSecret
+      );
+    }
+  }
+
+  console.log(`Sending template '${content.templateName}' to ${from} using phoneId ${phoneId}`);
+  await tenantWhatsAppService.sendTemplate(from, content.templateName, content.languageCode || 'en_US');
+  return { success: true };
+}
+
+export async function handleRequestOtp(
+  job: Job<JobData>
+): Promise<{ success: boolean }> {
+  const { tenantId, phoneId, accessToken, wabaId } = job.data as any;
+  if (!tenantId || !phoneId || !accessToken) {
+    throw new Error('Missing required activation details (tenantId, phoneId, accessToken)');
+  }
+
+  const org = await getOrgById(tenantId);
+  if (!org) throw new Error(`Tenant ${tenantId} not found`);
+
+  // 1. Store metadata for Auto-Activation (Auto-Ignition)
+  const { getDb } = await import('@naija-agent/firebase');
+  await (await getDb()).collection('organizations').doc(tenantId).update({ 
+    status: 'AWAITING_OTP',
+    pendingSetup: {
+      phoneId,
+      accessToken,
+      wabaId: wabaId || null,
+      initiatedAt: new Date().toISOString()
+    },
+    updatedAt: new Date()
+  });
+
+  // 2. Trigger Meta OTP request
+  const tenantService = new WhatsAppService(accessToken, phoneId, process.env.WHATSAPP_APP_SECRET);
+  try {
+    console.log(`📡 [RELAY] Requesting Meta code for ${tenantId}...`);
+    await tenantService.requestCode('SMS');
+  } catch (metaErr: any) {
+    console.error(`❌ [RELAY] Meta Code Request Failed for ${tenantId}:`, metaErr.message);
+    // Don't throw yet, still notify the Boss that we tried
+  }
+
+  // 3. Ping the Boss
+  if (org.config?.adminPhone) {
+    const activationService = new WhatsAppService(
+      process.env.WHATSAPP_API_TOKEN || '',
+      process.env.WHATSAPP_PHONE_ID || '',
+      process.env.WHATSAPP_APP_SECRET
+    );
+
+    const relayMsg = `📢 *ACTIVATION READY*\n\nOga Boss is ready to move your bot to the cloud. Are you holding the phone for SIM *${org.config?.botPhone || 'N/A'}*?\n\nI have just sent your 6-digit activation code via WhatsApp message or SMS. \n\n*Action:* Simply type the 6-digit code here!`;
+    await activationService.sendText(org.config.adminPhone, relayMsg);
+    console.log(`✅ [RELAY] Initiated for ${org.name}. Message sent to ${org.config.adminPhone}`);
+  }
+
+  return { success: true };
+}
+
+export async function handleSystemOutbound(
+  job: Job<JobData>
+): Promise<{ success: boolean }> {
+  const { from, content, phoneId } = job.data;
+  console.log(`📡 [SYSTEM OUTBOUND] Sending to ${from} using phoneId ${phoneId}`);
+  
+  const masterWhatsAppService = new WhatsAppService(
+    process.env.WHATSAPP_API_TOKEN || '',
+    process.env.WHATSAPP_PHONE_ID || '',
+    process.env.WHATSAPP_APP_SECRET
+  );
+
+  if (content.text) {
+    await masterWhatsAppService.sendText(from, content.text);
+  } else if (content.templateName) {
+    await masterWhatsAppService.sendTemplate(from, content.templateName, content.languageCode || 'en_US');
+  }
+  return { success: true };
+}
