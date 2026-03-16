@@ -20,15 +20,15 @@ export async function authenticate(prevState: AuthState, formData: FormData): Pr
   const isValid = await verifySovereignPin(phone, pin);
 
   if (isValid) {
-    // Stage 1: Phone/PIN Correct. Move to MFA.
-    (await cookies()).set('mfa_pending', phone, {
+    // Stage 1: Success. Skip MFA and set full session for now.
+    (await cookies()).set('sovereign_session', 'active', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      maxAge: 600, // 10 minutes to complete MFA
+      maxAge: 86400, // 24 hours
       path: '/',
     });
 
-    redirect('/auth/mfa');
+    redirect('/dashboard');
   } else {
     return { error: 'Invalid phone or PIN. Access denied.' };
   }

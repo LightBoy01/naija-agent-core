@@ -175,9 +175,14 @@ export async function bookSlot(
 }
 
 /**
- * Fetches sales and activity summary for a specific date (YYYY-MM-DD).
+ * Fetches upcoming bookings for reminders within a specific time window.
  */
-export async function getUpcomingBookingsForReminders(orgId: string, minInFuture: number, maxInFuture: number): Promise<any[]> {
+export async function getUpcomingBookingsForReminders(
+  orgId: string, 
+  minInFuture: number, 
+  maxInFuture: number,
+  reminderType = 'default'
+): Promise<any[]> {
   const now = new Date();
   
   const startTime = new Date(now.getTime() + minInFuture * 60000);
@@ -190,9 +195,10 @@ export async function getUpcomingBookingsForReminders(orgId: string, minInFuture
     .where('metadata.startTime', '<=', endTime.toISOString())
     .get();
 
+  const reminderField = `reminderSent_${reminderType}`;
   return snapshot.docs
     .map(doc => ({ id: doc.id, ...doc.data() } as any))
-    .filter(b => !b.metadata?.reminderSentAt);
+    .filter(b => !b.metadata?.[reminderField]);
 }
 
 export async function cancelBooking(orgId: string, bookingId: string, performedBy = 'system'): Promise<any | null> {
@@ -210,11 +216,12 @@ export async function cancelBooking(orgId: string, bookingId: string, performedB
 }
 
 /**
- * Marks a booking as having had a reminder sent.
+ * Marks a booking as having had a specific type of reminder sent.
  */
-export async function markReminderSent(orgId: string, activityId: string): Promise<void> {
+export async function markReminderSent(orgId: string, activityId: string, type = 'default'): Promise<void> {
+  const field = `metadata.reminderSent_${type}`;
   await orgsRef.doc(orgId).collection('activities').doc(activityId).update({
-    'metadata.reminderSentAt': FieldValue.serverTimestamp(),
+    [field]: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp()
   });
 }

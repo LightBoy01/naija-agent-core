@@ -91,18 +91,15 @@ export async function handleReminderScan(
   const org = await getOrgById(orgId);
   if (!org || !org.isActive) return { success: true };
 
-  // Look for bookings in the 2-3 hour window (110-150 minutes)
-  const upcoming = await getUpcomingBookingsForReminders(orgId, 110, 150);
-  console.log(`[NUDGE] Found ${upcoming.length} upcoming bookings for ${org.name}.`);
+  const windows = [
+    { type: '24h', min: 23 * 60, max: 25 * 60, msg: (time: string, org: string) => `🔔 *Appointment Reminder*\n\nHello! Just a friendly reminder for your appointment with *${org}* tomorrow at *${time}*.\n\nSee you then!` },
+    { type: '2h', min: 110, max: 150, msg: (time: string, org: string) => `🏃‍♂️ *See You Soon!*\n\nHello! Just reminding you of your booking with *${org}* today at *${time}* (in about 2 hours).\n\nSafe travels!` }
+  ];
 
-  for (const booking of upcoming) {
-    if (!booking.customerPhone) continue;
-
-    try {
-      const startTime = new Date(booking.metadata.startTime);
-      const timeStr = startTime.toLocaleTimeString(SystemConfig.DEFAULTS.LOCALE, { hour: '2-digit', minute: '2-digit', hour12: true });
-      
-      const reminderMsg = `🔔 *Appointment Reminder*\n\nHello! This is a friendly reminder for your appointment with *${org.name}* today at *${timeStr}*.\n\nWe look forward to seeing you!`;
+  for (const window of windows) {
+    const upcoming = await getUpcomingBookingsForReminders(orgId, window.min, window.max, window.type);
+    if (upcoming.length > 0) {
+      console.log(`[NUDGE] Found ${upcoming.length} upcoming ${window.type} bookings for ${org.name}.`);
 
       const tenantWhatsAppService = new WhatsAppService(
         org.config?.whatsappToken || process.env.WHATSAPP_API_TOKEN || '',
@@ -110,16 +107,27 @@ export async function handleReminderScan(
         org.config?.appSecret || process.env.WHATSAPP_APP_SECRET
       );
 
-      await tenantWhatsAppService.sendText(booking.customerPhone, reminderMsg);
-      await markReminderSent(orgId, booking.id);
-      await logSystemEvent(orgId, 'APPOINTMENT_REMINDER', `Sent nudge to ${booking.customerPhone} for slot ${booking.id}`);
-      console.log(`✅ [NUDGE] Sent reminder to ${booking.customerPhone} for ${org.name}`);
+      for (const booking of upcoming) {
+        if (!booking.customerPhone) continue;
 
-      await new Promise(r => setTimeout(r, 5000)); 
-    } catch (e: any) {
-      console.error(`❌ [NUDGE] Failed for booking ${booking.id}:`, e.message);
+        try {
+          const startTime = new Date(booking.metadata.startTime);
+          const timeStr = startTime.toLocaleTimeString(SystemConfig.DEFAULTS.LOCALE, { hour: '2-digit', minute: '2-digit', hour12: true });
+          
+          const reminderMsg = window.msg(timeStr, org.name);
+
+          await tenantWhatsAppService.sendText(booking.customerPhone, reminderMsg);
+          await markReminderSent(orgId, booking.id, window.type);
+          await logSystemEvent(orgId, 'APPOINTMENT_REMINDER', `Sent ${window.type} nudge to ${booking.customerPhone} for slot ${booking.id}`);
+          
+          await new Promise(r => setTimeout(r, 2000)); 
+        } catch (e: any) {
+          console.error(`❌ [NUDGE] Failed for booking ${booking.id}:`, e.message);
+        }
+      }
     }
   }
+
   return { success: true };
 }
 

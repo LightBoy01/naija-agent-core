@@ -1,7 +1,7 @@
 {
   "name": "@naija-agent/logistics",
   "version": "0.0.1",
-  "description": "Payment Verification Services (Monnify/Paystack)",
+  "description": "Logistics & Delivery Management",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {

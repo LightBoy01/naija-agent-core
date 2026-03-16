@@ -551,7 +551,8 @@ fastify.post('/bridge/sms', async (request, reply) => {
   const phoneId = org.whatsappPhoneId;
 
   // Idempotency: Check if this SMS was already processed
-  const alertId = `sms_${timestamp}_${from.substring(0, 5)}`;
+  const rawIdSource = `${timestamp}_${from}_${body}`;
+  const alertId = crypto.createHash('sha256').update(rawIdSource).digest('hex').substring(0, 16);
   const db = (await import('@naija-agent/firebase')).getDb();
   const alertDoc = await db.collection('organizations').doc(org.id).collection('sms_alerts').doc(alertId).get();
   
