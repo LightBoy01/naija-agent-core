@@ -56,16 +56,25 @@ export async function getPendingSetups(): Promise<Organization[]> {
 }
 
 /**
- * Updates the status and core ID of a tenant bot.
+ * Updates the status and core ID of a tenant bot using a transaction.
+ * Ensures data integrity during the Meta activation relay.
  */
 export async function activateTenant(orgId: string, phoneId: string, accessToken: string): Promise<void> {
-  await orgsRef.doc(orgId).update({
-    status: 'ACTIVE',
-    isActive: true,
-    whatsappPhoneId: phoneId,
-    'config.whatsappToken': accessToken,
-    trialStartedAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp()
+  await db.runTransaction(async (transaction) => {
+    const docRef = orgsRef.doc(orgId);
+    const doc = await transaction.get(docRef);
+    
+    if (!doc.exists) throw new Error(`Organization ${orgId} not found`);
+
+    transaction.update(docRef, {
+      status: 'ACTIVE',
+      isActive: true,
+      whatsappPhoneId: phoneId,
+      'config.whatsappToken': accessToken,
+      pendingSetup: null, // Clear relay data on success
+      trialStartedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    });
   });
 }
 
@@ -95,38 +104,45 @@ export async function getOrgOnboarding(orgId: string): Promise<OnboardingConfig 
 
 /**
  * Completes onboarding and promotes temporary data to the final config.
- * Award a 500 NGN starting bonus to remove friction.
+ * Uses a transaction to ensure stat consistency and atomic deployment.
  */
 export async function completeOnboarding(orgId: string, finalConfig: OnboardingData): Promise<void> {
+  const bonusKobo = 100000; // 1,000.00 NGN Bonus
+  
+  // 🛡️ [SECURITY]: Hash the PIN *before* the transaction to keep it lean
   let hashedPin = finalConfig.adminPin || '1234';
   const isBcrypt = /^\$2[aby]\$.{56}$/.test(hashedPin);
-  
   if (!isBcrypt) {
     hashedPin = await bcrypt.hash(hashedPin, 10);
   }
 
-  const bonusKobo = 100000; 
-  
-  await orgsRef.doc(orgId).update({
-    name: finalConfig.name,
-    onboardingStep: 'COMPLETE',
-    onboardingData: null,
-    balance: bonusKobo,
-    'config.adminPin': hashedPin,
-    'config.bankDetails': {
-      bankName: finalConfig.bankName,
-      accountNumber: finalConfig.accountNumber,
-      accountName: finalConfig.accountName
-    },
-    'config.systemPrompt': finalConfig.systemPrompt,
-    systemPrompt: finalConfig.systemPrompt,
-    isActive: true,
-    updatedAt: FieldValue.serverTimestamp()
+  const adminPhone = await db.runTransaction(async (transaction) => {
+    const orgRef = orgsRef.doc(orgId);
+    const doc = await transaction.get(orgRef);
+
+    if (!doc.exists) throw new Error(`Organization ${orgId} not found`);
+
+    transaction.update(orgRef, {
+      name: finalConfig.name,
+      onboardingStep: 'COMPLETE',
+      onboardingData: null, // 🔥 CLEAR PII
+      balance: bonusKobo,
+      'config.adminPin': hashedPin,
+      'config.bankDetails': {
+        bankName: finalConfig.bankName,
+        accountNumber: finalConfig.accountNumber,
+        accountName: finalConfig.accountName
+      },
+      'config.systemPrompt': finalConfig.systemPrompt,
+      systemPrompt: finalConfig.systemPrompt,
+      isActive: true,
+      updatedAt: FieldValue.serverTimestamp()
+    });
+
+    return doc.data()?.config?.adminPhone;
   });
 
-  // 🛡️ [UX]: Auto-authenticate the Boss so they don't have to enter their PIN immediately after setup.
-  const orgDoc = await orgsRef.doc(orgId).get();
-  const adminPhone = orgDoc.data()?.config?.adminPhone;
+  // 🛡️ [UX]: Auto-authenticate the Boss (Post-Transaction)
   if (adminPhone) {
     await setAdminAuth(orgId, adminPhone);
   }
