@@ -494,3 +494,28 @@
 ### **Verification:**
 *   **Build:** Successfully built `apps/worker` and `packages/types` with 100% type safety.
 *   **Tests:** Verified dynamic description generation for `get_payment_instructions` and `verify_transaction`.
+
+## Session 36: Live-Test Polish & Identity Hardening (2026-03-16)
+**Status:** 🛡️ **Onboarding v3.0 Finalized & Verified**
+
+### **Context:**
+*   **The Goal:** Analyze the real-world merchant test (CivicStack) and resolve friction points encountered during the end-to-end journey.
+
+### **Actions Taken:**
+*   **Identity Conflict Resolution:**
+    *   Updated `handleOnboarding` to use the Organization document as the single source of truth for setup state.
+    *   This ensures the setup flow maintains control until `onboardingStep === 'COMPLETE'`, even if the bot is already marked as "ACTIVE".
+*   **PIN Security Hardening:**
+    *   Implemented mandatory trimming for all PIN inputs in both the "Greedy Extraction" engine and the `verify_admin_pin` tool.
+    *   This prevents "hidden character" failures that lead to Boss lockouts.
+*   **Live Simulation Success:**
+    *   Successfully registered, activated, and handed over the **CivicStack** bot via the new Dashboard Activation Pipeline.
+    *   Verified the "Safety Valve" training flow, where AI drafts require Boss approval before saving to the live catalog.
+
+### **Strategic Value:**
+*   **100% Completion:** Onboarding is now officially friction-free, handling both technical registration and conversational setup seamlessly.
+*   **System Stability:** The bridge between "New Lead" and "Live Admin" is now architecturally solid.
+
+### **Verification:**
+*   **Live Proof:** CivicStack bot is 100% operational and responding correctly to `#status` and `#setup`.
+*   **Build:** All packages and apps built successfully with type safety.

@@ -107,3 +107,13 @@ This log tracks recurring technical friction points and their established soluti
 *   **Issue:** Build failed with `TS2304: Cannot find name 'GoogleGenerativeAI'` in `onboarding.ts`.
 *   **Root Cause:** The greedy semantic extraction logic added to the onboarding handler used the Gemini SDK but the class was not imported in that specific file.
 *   **Solution:** Ensure `import { GoogleGenerativeAI } from '@google/generative-ai'` is present in any handler file utilizing AI extraction.
+
+### 12. Onboarding vs. Messaging Identity Conflict
+*   **Issue:** Merchants at the Bank Account setup step stopped receiving replies after the Identity Fix was applied.
+*   **Root Cause:** The system correctly identified them as a "Boss," causing the API to route messages to the standard `handleMessage` loop, which ignored the pending onboarding state.
+*   **Solution:** Refactor `handleOnboarding` to check the `organization` document's setup state as the primary signal, ensuring the setup flow stays in control until `onboardingStep === 'COMPLETE'`.
+
+### 13. PIN Verification Sensitivity
+*   **Issue:** A valid 4-digit PIN (`0101`) was rejected by the system during verification.
+*   **Root Cause:** Hidden whitespace or formatting characters in the WhatsApp text input caused the `bcrypt.compare` to fail against the clean hash.
+*   **Solution:** Implement mandatory `.trim()` on all PIN inputs before hashing and before verification.

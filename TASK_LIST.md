@@ -191,6 +191,7 @@
 - [x] **Visual Dashboard Phase 3:**
     - [x] **Visual Ledger:** Detailed income/expense reports for Bosses. (UI + Data Logic)
 - [x] **Onboarding v2.0:** Remote OTP Relay system. (Implemented)
+- [x] **Onboarding v3.0 (Polish):** Resolved Identity Conflicts and PIN sanitization for a 100% friction-free merchant journey. (Live Verified)
 - [x] **Iron-Shield Expansion:** Add official Monnify API support.
 - [x] **Modular Refactoring:** Refactor Worker and Firebase packages into specialized domain modules.
 

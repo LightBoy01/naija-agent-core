@@ -169,7 +169,7 @@ export async function handleAdminTools(name: string, args: any, ctx: HandlerCont
         };
       }
 
-      const isCorrect = await verifyAdminPin(orgId, args.pin);
+      const isCorrect = await verifyAdminPin(orgId, args.pin?.toString().trim());
       if (isCorrect) {
         await redisClient.del(lockoutKey);
         await setAdminAuth(orgId, from);

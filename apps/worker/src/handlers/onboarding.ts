@@ -131,11 +131,14 @@ export async function handleOnboarding(
   }
 
   // 5. ONBOARDING STATE MACHINE
-  if (text === '#setup' || (onboarding && onboarding.step !== 'COMPLETE' && onboarding.step !== 'NONE')) {
-      console.log(`🛠️ [ONBOARDING] Boss of ${orgId} is in step: ${onboarding?.step || 'START'}`);
+  const currentStep = onboarding?.step || (org.onboardingStep as OnboardingConfig['step']) || 'NONE';
+  const currentData = onboarding?.data || (org.onboardingData as OnboardingData) || {};
+
+  if (text === '#setup' || (currentStep !== 'COMPLETE' && currentStep !== 'NONE')) {
+      console.log(`🛠️ [ONBOARDING] Boss of ${orgId} is in step: ${currentStep || 'START'}`);
       
-      let nextStep: OnboardingConfig['step'] = onboarding?.step || 'START';
-      let nextData: OnboardingData = onboarding?.data || {};
+      let nextStep: OnboardingConfig['step'] = currentStep === 'NONE' ? 'START' : currentStep;
+      let nextData: OnboardingData = { ...currentData };
       let reply = "";
 
       // --- PHASE 7.4: GREEDY SEMANTIC EXTRACTION ---
@@ -166,9 +169,9 @@ export async function handleOnboarding(
             const currency = org.currency || { code: 'NGN' };
             
             if (extracted.businessName) nextData.name = extracted.businessName;
-            if (extracted.adminPin && /^\d{4}$/.test(extracted.adminPin)) {
+            if (extracted.adminPin && /^\d{4}$/.test(extracted.adminPin.trim())) {
                 const bcrypt = await import('bcrypt');
-                nextData.adminPin = await bcrypt.hash(extracted.adminPin, 10);
+                nextData.adminPin = await bcrypt.hash(extracted.adminPin.trim(), 10);
             }
             if (extracted.bankName) nextData.bankName = extracted.bankName;
 
