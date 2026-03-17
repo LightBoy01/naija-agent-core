@@ -145,11 +145,23 @@ const redisConfig = {
   port: parseInt(process.env.REDIS_PORT || '6379'),
   password: process.env.REDIS_PASSWORD,
   maxRetriesPerRequest: null,
+  retryStrategy: (times: number) => {
+    const delay = Math.min(times * 100, 3000);
+    return delay;
+  }
 };
 
 const redisConnection = new Redis(redisConfig);
 
-const whatsappQueue = new Queue('whatsapp-queue', { connection: redisConfig });
+redisConnection.on('error', (err) => {
+  logger.error({ err: err.message }, 'Redis Connection Error');
+});
+
+redisConnection.on('connect', () => {
+  logger.info('✅ Connected to Redis');
+});
+
+const whatsappQueue = new Queue('whatsapp-queue', { connection: redisConnection as any });
 
 // --- Helpers ---
 

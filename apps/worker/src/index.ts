@@ -42,8 +42,20 @@ const redisConfig = {
   port: parseInt(process.env.REDIS_PORT || '6379'),
   password: process.env.REDIS_PASSWORD,
   maxRetriesPerRequest: null,
+  retryStrategy: (times: number) => {
+    const delay = Math.min(times * 100, 3000);
+    return delay;
+  }
 };
 const redisClient = new Redis(redisConfig);
+
+redisClient.on('error', (err) => {
+  logger.error({ err: err.message }, 'Redis Client Error');
+});
+
+redisClient.on('connect', () => {
+  logger.info('✅ Worker Connected to Redis');
+});
 
 let globalPaymentProvider: PaymentProvider | null = null;
 if (process.env.PAYSTACK_SECRET_KEY) {

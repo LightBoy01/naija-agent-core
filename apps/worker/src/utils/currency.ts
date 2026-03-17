@@ -4,22 +4,22 @@ export function getPriceGuardRegex(symbol: string, code: string): RegExp {
   const escapedSymbol = safeSymbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   
   // Dynamic Regex Construction
-  // 1. Symbol + Amount (e.g. $50, ₦50)
-  // 2. Amount + Code/Name (e.g. 50 USD, 50 Naira)
-  // 3. Amount + 'k' (Thousands) (e.g. 50k)
-  // 4. Amount + 'm' (Millions) (e.g. 50m)
-  
-  // The 'k' and 'm' patterns are relatively universal in English-speaking contexts
-  // but we might want to gate them if needed. For now, we keep them global.
+  // 1. Symbol/Code + Amount (e.g. $50, ₦50, NGN 50)
+  // 2. Amount + Code/Symbol (e.g. 50 USD, 50 Naira, 50 ₦)
+  // 3. Amount + 'k' or 'm' (Thousands/Millions) (e.g. 50k, 50m)
   
   const safeCode = code || 'NGN';
-  const firstChar = safeCode.charAt(0);
 
+  // We require the symbol/code to be either:
+  // - A multi-char code (NGN, USD)
+  // - A special symbol (₦, $, £)
+  // - A single char only if followed immediately by a digit (e.g. N50)
+  
   return new RegExp(
-    `(?:(${escapedSymbol}|${safeCode}|\\b${firstChar}\\b)\\s*?(\\d[\\d,.]*))` + // Symbol/Code Prefix
-    `|(\\d[\\d,.]*)\\s*(${safeCode}|${escapedSymbol})` + // Code/Symbol Suffix
-    `|(\\b\\d+(?:\\.\\d+)?[kK]\\b)` + // 'k' notation
-    `|(\\b\\d+(?:\\.\\d+)?[mM]\\b)`, // 'm' notation
+    `(${escapedSymbol}|${safeCode})\\s*?(\\d[\\d,.]*\\d|\\d)` + // Prefix: Symbol/Code + Number
+    `|(\\d[\\d,.]*\\d|\\d)\\s*?(${safeCode}|${escapedSymbol}|Naira|Dollars|Pounds)` + // Suffix: Number + Code/Name
+    `|(\\b\\d+(?:\\.\\d+)?[kK]\\b)` + // 'k' notation (e.g. 50k)
+    `|(\\b\\d+(?:\\.\\d+)?[mM]\\b)`, // 'm' notation (e.g. 1.5m)
     'gi'
   );
 }
