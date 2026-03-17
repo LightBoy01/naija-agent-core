@@ -12,9 +12,12 @@ export function getPriceGuardRegex(symbol: string, code: string): RegExp {
   // The 'k' and 'm' patterns are relatively universal in English-speaking contexts
   // but we might want to gate them if needed. For now, we keep them global.
   
+  const safeCode = code || 'NGN';
+  const firstChar = safeCode.charAt(0);
+
   return new RegExp(
-    `(?:(${escapedSymbol}|${code}|\\b${code[0]}\\b)\\s*?(\\d[\\d,.]*))` + // Symbol/Code Prefix
-    `|(\\d[\\d,.]*)\\s*(${code}|${escapedSymbol})` + // Code/Symbol Suffix
+    `(?:(${escapedSymbol}|${safeCode}|\\b${firstChar}\\b)\\s*?(\\d[\\d,.]*))` + // Symbol/Code Prefix
+    `|(\\d[\\d,.]*)\\s*(${safeCode}|${escapedSymbol})` + // Code/Symbol Suffix
     `|(\\b\\d+(?:\\.\\d+)?[kK]\\b)` + // 'k' notation
     `|(\\b\\d+(?:\\.\\d+)?[mM]\\b)`, // 'm' notation
     'gi'
