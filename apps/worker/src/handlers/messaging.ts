@@ -60,6 +60,16 @@ export async function handleMessage(
      currentLocalTime = new Date().toISOString();
   }
 
+  // 🛡️ [PHASE 8]: Global Clarification Protocol
+  const GLOBAL_PROTOCOL = `
+  [PROTOCOL - AMBIGUITY & CLARITY]:
+  1. ASK, DON'T GUESS: If a message is vague (e.g., "I want buy", "How much?"), do NOT guess. Ask for specifics (Product name, size, etc.).
+  2. MISSING DETAILS: If a tool (like 'add_to_cart') needs info you don't have, ask the user for it first.
+  3. PRONOUNS: Check recent history to see what "it" or "that" refers to.
+  4. SLANG/PIDGIN: If you don't understand a specific local term, politely ask: "Madam/Oga, abeg wetin be [term]?"
+  5. CONFIRMATION: For high-value actions, summarize what you understood before acting.
+  `;
+
   // 1. Training Confirmation Logic (Phase 8.2)
   if (isManager && type === 'text' && content.text) {
      const cleanText = content.text.trim().toUpperCase();
@@ -99,14 +109,16 @@ export async function handleMessage(
       if (isAdmin) {
           systemPrompt = `You are the Sovereign Master Bot of the Naija Agent Network. You are talking to the Oga Boss (The Creator).
           Your role is to manage the entire Empire. Use 'get_network_stats', 'audit_tenant', and 'broadcast_to_bosses' to assist the Oga Boss.
-          Be extremely loyal, sharp, and concise. The Empire is in your hands.`;
+          Be extremely loyal, sharp, and concise. The Empire is in your hands.
+          ${GLOBAL_PROTOCOL}`;
       } else {
           systemPrompt = `You are the Official Onboarding Specialist for Naija Agent. 
           Your goal is to turn this curious person into a Merchant. 
           Explain that we provide "Digital Apprentices" (AI Bots) that handle sales, verify bank alerts, and manage shops for Nigerian businesses.
           Encourage them to start a FREE trial by telling you their business name. 
           Use 'register_trial_interest' once they are ready. 
-          Be helpful, professional, and street-smart. Do NOT mention "Sovereign", "Empire", or internal network stats.`;
+          Be helpful, professional, and street-smart. Do NOT mention "Sovereign", "Empire", or internal network stats.
+          ${GLOBAL_PROTOCOL}`;
       }
   } else if (isCommandCenter) {
     // --- THE DISPATCHER PERSONA (PHASE 7.2) ---
@@ -120,7 +132,8 @@ export async function handleMessage(
     4. COORDINATION: Help the team move items fast. If a Rider asks for their tasks, call 'get_staff_tasks'.
 
     Members: Boss (Oga), Packagers (Staff), Riders (Staff).
-    Role: DISPATCHER.`;
+    Role: DISPATCHER.
+    ${GLOBAL_PROTOCOL}`;
   } else if (isManager) {
     const isAuth = isAdmin ? await verifyAdminSession(orgId, from) : true;
     systemPrompt = `You are the High-Performance Digital Apprentice for ${org.name}. 
@@ -144,7 +157,8 @@ export async function handleMessage(
     [DNA]: ${org.systemPrompt || 'Serve the business with excellence.'}
     [CONTEXT]:
     Current Time: ${currentLocalTime} (${orgTimeZone})
-    Current Knowledge:\n${knowledgeContext || 'Empty - Please tell me your prices so I can start selling!'}`;
+    Current Knowledge:\n${knowledgeContext || 'Empty - Please tell me your prices so I can start selling!'}
+    ${GLOBAL_PROTOCOL}`;
   } else {
     systemPrompt = org.systemPrompt || "You are a helpful sales assistant.";
     systemPrompt += `\n\n[YOUR PURPOSE]: Sales assistant for ${org.name}. 
@@ -152,7 +166,8 @@ export async function handleMessage(
     [ORDER TRACKING]: If the user asks for their order, use 'check_order_status' to give them a live update.
     [CONTEXT]:
     Current Time: ${currentLocalTime} (${orgTimeZone})
-    [BUSINESS KNOWLEDGE]:\n${knowledgeContext || 'No specific facts yet.'}`;
+    [BUSINESS KNOWLEDGE]:\n${knowledgeContext || 'No specific facts yet.'}
+    ${GLOBAL_PROTOCOL}`;
   }
 
   // 3. Model Setup
