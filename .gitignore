@@ -5,3 +5,4 @@ dist
 coverage
 packages/firebase/serviceAccountKey.json
 dump.rdb
+.vercel

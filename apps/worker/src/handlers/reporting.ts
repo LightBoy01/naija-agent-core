@@ -30,11 +30,11 @@ export async function handleDailyReport(
   console.log(`[DAILY REPORT] Staggering report for ${org.name} by ${Math.floor(jitterMs/1000)}s`);
   await new Promise(r => setTimeout(r, jitterMs));
 
-  // 🛡️ [PHASE 5.10]: Normalize to Africa/Lagos Time
-  const lagosTimeZone = SystemConfig.DEFAULTS.TIMEZONE;
+  // 🛡️ [PHASE 5.10]: Normalize to Organization TimeZone
+  const orgTimeZone = org.timezone || SystemConfig.DEFAULTS.TIMEZONE;
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const dateStr = formatInTimeZone(yesterday, lagosTimeZone, 'yyyy-MM-dd');
+  const dateStr = formatInTimeZone(yesterday, orgTimeZone, 'yyyy-MM-dd');
   const currency = org.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
 
   try {

@@ -1,5 +1,6 @@
 import { verifyTenantSession } from '../../../../lib/auth';
 import { getOrgById, getWeeklySummary, getRecentActivities } from '@naija-agent/firebase';
+import { formatCurrency } from '../../../../lib/utils';
 import SalesChart from './SalesChart';
 import FinancialsTable from './FinancialsTable';
 import Link from 'next/link';
@@ -24,6 +25,8 @@ export default async function FinancialsPage({ params }: { params: Promise<{ id:
   ]);
 
   if (!org) return <div>Organization not found.</div>;
+
+  const currency = org.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
 
   // 3. Process Data for Chart
   const chartData = (history as DailySnapshot[]).map((day) => ({
@@ -64,16 +67,20 @@ export default async function FinancialsPage({ params }: { params: Promise<{ id:
         <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-sm">
              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Total Sales (30d)</p>
-             <h3 className="text-3xl font-black text-zinc-900">₦{totalSales30d.toLocaleString()}</h3>
+             <h3 className="text-3xl font-black text-zinc-900">
+               {formatCurrency(totalSales30d, currency.locale, currency.code, currency.symbol)}
+             </h3>
           </div>
           <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-sm">
              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Bot Costs (30d)</p>
-             <h3 className="text-3xl font-black text-red-600">₦{totalExpenses30d.toLocaleString()}</h3>
+             <h3 className="text-3xl font-black text-red-600">
+               {formatCurrency(totalExpenses30d, currency.locale, currency.code, currency.symbol)}
+             </h3>
           </div>
           <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-sm">
              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Net Profit (30d)</p>
              <h3 className={`text-3xl font-black ${netProfit30d >= 0 ? 'text-green-600' : 'text-orange-600'}`}>
-               ₦{netProfit30d.toLocaleString()}
+               {formatCurrency(netProfit30d, currency.locale, currency.code, currency.symbol)}
              </h3>
           </div>
         </section>
@@ -81,13 +88,13 @@ export default async function FinancialsPage({ params }: { params: Promise<{ id:
         {/* --- CHART --- */}
         <section className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-sm mb-8">
            <h2 className="text-lg font-bold text-zinc-900 mb-6">Revenue vs Costs</h2>
-           <SalesChart data={chartData} />
+           <SalesChart data={chartData} symbol={currency.symbol} />
         </section>
 
         {/* --- TRANSACTIONS --- */}
         <section>
           <h2 className="text-lg font-bold text-zinc-900 mb-6">Recent Transactions</h2>
-          <FinancialsTable transactions={financialActivities} />
+          <FinancialsTable transactions={financialActivities} currency={currency} />
         </section>
       </div>
     </main>

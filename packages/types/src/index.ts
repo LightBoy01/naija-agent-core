@@ -121,6 +121,7 @@ export const OnboardingDataSchema = z.object({
   accountNumber: z.string().optional(),
   accountName: z.string().optional(),
   systemPrompt: z.string().optional(),
+  timezone: z.string().optional(),
 });
 
 export type OnboardingData = z.infer<typeof OnboardingDataSchema>;
@@ -141,6 +142,7 @@ export const ConfigSchema = z.object({
   commandCenterGroupId: z.string().optional(), // Group for Ops/Riders (Phase 7.2)
   notificationPolicy: z.enum(['boss_only', 'group_only', 'dual']).default('boss_only'), // Where to send alerts (Phase 7.2)
   adminPin: z.string().optional(), // Hashed PIN for high-value actions
+  timezone: z.string().optional(), // Business timezone (e.g. Africa/Lagos)
   mfaCode: z.string().optional(), // Temporary 6-digit MFA code
   mfaExpiresAt: z.string().optional(), // ISO timestamp for MFA expiry
   isMaster: z.boolean().optional(), // Sovereign powers flag
@@ -185,6 +187,7 @@ export const OrganizationSchema = z.object({
     rate: 1.0
   }),
   region: z.enum(['NG', 'US', 'UK', 'GLOBAL']).default('NG'),
+  timezone: z.string().default('Africa/Lagos'),
   trialStartedAt: FirestoreTimestampSchema.optional(),
   trialMessageCount: z.number().default(0),
   systemPrompt: z.string().optional(),

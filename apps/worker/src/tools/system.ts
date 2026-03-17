@@ -27,7 +27,8 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
         name: args.name,
         whatsappPhoneId: args.phoneId,
         adminPhone: args.adminPhone,
-        systemPrompt: args.prompt
+        systemPrompt: args.prompt,
+        timezone: args.timezone
       });
       
       if (args.wabaId) {
@@ -131,7 +132,8 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
         id: args.id,
         name: args.name,
         adminPhone: args.adminPhone,
-        botPhone: args.botPhone
+        botPhone: args.botPhone,
+        timezone: args.timezone
       });
       
       if (process.env.MASTER_ADMIN_PHONE) {

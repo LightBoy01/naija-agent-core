@@ -13,7 +13,7 @@
     }
   },
   "scripts": {
-    "build": "../../node_modules/.bin/tsc"
+    "build": "tsc"
   },
   "dependencies": {
     "libphonenumber-js": "^1.12.40",

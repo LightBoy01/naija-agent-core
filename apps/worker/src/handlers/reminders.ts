@@ -11,6 +11,7 @@ import {
   deductBalance
 } from '@naija-agent/firebase';
 import { Product, SystemConfig } from '@naija-agent/types';
+import { formatInTimeZone } from 'date-fns-tz';
 
 /**
  * HOURLY: Scans for abandoned carts and sends gentle reminders.
@@ -60,6 +61,15 @@ export async function handleReminderScan(job: Job) {
 
   for (const org of activeOrgs) {
     try {
+      const orgTimeZone = org.timezone || SystemConfig.DEFAULTS.TIMEZONE;
+      
+      // 🛡️ [PHASE 8]: Business Hours Guard (Only send reminders between 8 AM and 8 PM local time)
+      const currentLocalHour = parseInt(formatInTimeZone(new Date(), orgTimeZone, 'H'));
+      if (currentLocalHour < 8 || currentLocalHour >= 20) {
+        // console.log(`[REMINDERS] Skipping ${org.id} - Outside business hours (${currentLocalHour}:00)`);
+        continue;
+      }
+
       // Look for bookings starting in 23-25 hours (approx 24h notice)
       const upcoming = await getUpcomingBookingsForReminders(org.id, 23 * 60, 25 * 60);
       
@@ -72,7 +82,10 @@ export async function handleReminderScan(job: Job) {
       );
 
       for (const booking of upcoming) {
-        const timeString = new Date(booking.metadata.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        // Format time in business timezone
+        const startTime = new Date(booking.metadata.startTime);
+        const timeString = formatInTimeZone(startTime, orgTimeZone, 'hh:mm a');
+        
         const reminder = `📅 *Appointment Reminder*\n\nHello! Just reminding you of your booking for *tomorrow at ${timeString}*.\n\n*Service:* ${booking.summary}\n\nSee you soon!`;
         
         await waService.sendText(booking.customerPhone, reminder);
@@ -97,6 +110,15 @@ export async function handleInventoryCleanup(job: Job) {
 
   for (const org of activeOrgs) {
     try {
+      const orgTimeZone = org.timezone || SystemConfig.DEFAULTS.TIMEZONE;
+      
+      // 🛡️ [PHASE 8]: Daily 9 AM Guard (Prevent Hourly Spam)
+      const currentLocalHour = parseInt(formatInTimeZone(new Date(), orgTimeZone, 'H'));
+      
+      if (currentLocalHour !== 9) {
+         continue; 
+      }
+
       if (!org.config?.adminPhone) continue;
 
       const lowStockItems = await getLowStockItems(org.id);

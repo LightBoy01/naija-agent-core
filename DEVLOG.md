@@ -519,3 +519,23 @@
 ### **Verification:**
 *   **Live Proof:** CivicStack bot is 100% operational and responding correctly to `#status` and `#setup`.
 *   **Build:** All packages and apps built successfully with type safety.
+
+## Session 37: Timezone-Aware Intelligence (2026-03-17)
+**Status:** 🌍 **Phase 8.1 Completed**
+
+### **Context:**
+*   **The Goal:** Ensure scheduled tasks and financial reporting respect the merchant's local timezone, rather than defaulting to the server's or Lagos time.
+
+### **Actions Taken:**
+*   **Schema Upgrade:** Added `timezone` to `OrganizationSchema` and `OnboardingDataSchema` in `@naija-agent/types`.
+*   **Smart Scheduler:** Updated `apps/worker` reporting and reminders to use `date-fns-tz` for precise local time calculations.
+*   **Business Hours Guard:** Implemented a logic gate in the Reminder Scanner to only send messages between 8 AM and 8 PM in the *merchant's* local time, preventing accidental late-night spam.
+*   **Visual Ledger Localization:** Updated the Web Dashboard (`FinancialsPage`, `SalesChart`, `FinancialsTable`) to use a robust `formatCurrency` utility, ensuring charts and tables display the correct currency symbol and formatting for the merchant's region.
+*   **Onboarding Update:** Updated `register_trial` and `create_tenant` tools to accept and persist `timezone` during the setup phase.
+
+### **Strategic Value:**
+*   **Global Readiness:** The system is now technically capable of serving merchants in New York, London, or Lagos with equal precision.
+*   **User Respect:** Preventing 3 AM reminders is a critical trust factor.
+
+### **Verification:**
+*   **Build:** 100% successful build across all packages and apps after resolving strict TypeScript errors in the Dashboard charting library.

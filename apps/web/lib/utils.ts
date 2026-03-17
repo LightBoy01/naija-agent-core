@@ -19,6 +19,17 @@ export function formatTimestamp(ts: any): Date {
   return new Date(ts);
 }
 
+export function formatCurrency(amount: number, locale = 'en-NG', currencyCode = 'NGN', symbol = '₦') {
+  try {
+     return new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency: currencyCode,
+     }).format(amount);
+  } catch {
+     return `${symbol}${amount.toLocaleString()}`;
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function sanitizeOrgForFrontend(org: any) {
   if (!org) return null;

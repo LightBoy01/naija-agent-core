@@ -195,6 +195,11 @@
 - [x] **Iron-Shield Expansion:** Add official Monnify API support.
 - [x] **Modular Refactoring:** Refactor Worker and Firebase packages into specialized domain modules.
 
-## Phase 8: Global Expansion ✅
+## Phase 8: Global Expansion (Foundation) ✅
 - [x] **International Numbers:** Support +1 (US) and +44 (UK) numbers via dynamic phone utilities.
 - [x] **Multi-Currency:** Support USD/GBP ledgers with localized AI tool descriptions and reporting.
+- [x] **Timezone Intelligence (Phase 8.1):**
+    - [x] **Schema:** Added `timezone` to Organization schema.
+    - [x] **Scheduler:** `daily-reports` and `reminders` now respect local business time.
+    - [x] **Business Hours Guard:** Prevent proactive messages outside 8am-8pm local time.
+    - [x] **Visual Ledger:** Currency-aware dashboard charts and tables.

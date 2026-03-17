@@ -424,7 +424,8 @@ export function getTenantTools(
           id: { type: SchemaType.STRING, description: "Organization slug (e.g. kudirat_kitchen)" },
           name: { type: SchemaType.STRING, description: "Business display name" },
           adminPhone: { type: SchemaType.STRING, description: `The Boss's personal WhatsApp (${phoneExample})` },
-          botPhone: { type: SchemaType.STRING, description: `The new SIM number for the bot (${phoneExample})` }
+          botPhone: { type: SchemaType.STRING, description: `The new SIM number for the bot (${phoneExample})` },
+          timezone: { type: SchemaType.STRING, description: "Business timezone (e.g. Africa/Lagos, America/New_York). Default: Africa/Lagos" }
         },
         required: ["id", "name", "adminPhone", "botPhone"]
       }
@@ -443,7 +444,8 @@ export function getTenantTools(
             name: { type: SchemaType.STRING, description: "Display name" },
             adminPhone: { type: SchemaType.STRING, description: "Boss phone" },
             phoneId: { type: SchemaType.STRING, description: "WhatsApp Phone ID" },
-            prompt: { type: SchemaType.STRING, description: "AI personality" }
+            prompt: { type: SchemaType.STRING, description: "AI personality" },
+            timezone: { type: SchemaType.STRING, description: "Business timezone (e.g. Africa/Lagos)" }
           },
           required: ["id", "name", "adminPhone", "phoneId", "prompt"]
         } as any

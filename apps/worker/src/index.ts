@@ -223,7 +223,7 @@ const worker = new Worker<JobData>(
       return messageResult;
 
     } catch (error: any) {
-      logger.error({ jobId: job.id, orgId, error: error.message }, 'Messaging flow error');
+      logger.error({ jobId: job.id, orgId, error: error.message }, `Messaging flow error: ${error.message}`);
       
       // REFUND ON FAILURE
       const isFinalAttempt = job.attemptsMade >= (job.opts.attempts || 3) - 1; 

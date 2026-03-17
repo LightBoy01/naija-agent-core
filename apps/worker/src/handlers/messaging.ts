@@ -18,6 +18,7 @@ import { Redis } from 'ioredis';
 import { handleToolCall } from '../tool-handlers.js';
 import { AUTH_REQUIRED_TOOLS as PIN_PROTECTED_TOOLS } from '../tools/definitions.js';
 import { getPriceGuardRegex, formatCurrency, parsePrice } from '../utils/currency.js';
+import { formatInTimeZone } from 'date-fns-tz';
 
 export interface MessagingDependencies {
   org: Organization;
@@ -44,6 +45,16 @@ export async function handleMessage(
 
   const isManager = isAdmin || isStaff;
   const currency = org.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
+
+  // 🛡️ [PHASE 8]: Timezone Awareness
+  const orgTimeZone = org.timezone || 'Africa/Lagos';
+  let currentLocalTime;
+  try {
+     currentLocalTime = formatInTimeZone(new Date(), orgTimeZone, 'yyyy-MM-dd HH:mm:ss');
+  } catch (tzError) {
+     console.warn(`⚠️ Invalid timezone '${orgTimeZone}' for org ${orgId}. Defaulting to UTC.`);
+     currentLocalTime = new Date().toISOString();
+  }
 
   // 1. Training Confirmation Logic (Phase 8.2)
   if (isManager && type === 'text' && content.text) {
@@ -127,12 +138,16 @@ export async function handleMessage(
     ${isAdmin ? "If Status is LOCKED, you MUST ask the Boss for their PIN before performing high-value Admin tasks." : ""}
 
     [DNA]: ${org.systemPrompt || 'Serve the business with excellence.'}
+    [CONTEXT]:
+    Current Time: ${currentLocalTime} (${orgTimeZone})
     Current Knowledge:\n${knowledgeContext || 'Empty - Please tell me your prices so I can start selling!'}`;
   } else {
     systemPrompt = org.systemPrompt || "You are a helpful sales assistant.";
     systemPrompt += `\n\n[YOUR PURPOSE]: Sales assistant for ${org.name}. 
     [THE RULES]: No price guessing! Strictly use catalog. Rapport vibes: "Sir/Ma", "Oga/Madam".
     [ORDER TRACKING]: If the user asks for their order, use 'check_order_status' to give them a live update.
+    [CONTEXT]:
+    Current Time: ${currentLocalTime} (${orgTimeZone})
     [BUSINESS KNOWLEDGE]:\n${knowledgeContext || 'No specific facts yet.'}`;
   }
 

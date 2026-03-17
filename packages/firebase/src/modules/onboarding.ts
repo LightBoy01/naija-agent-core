@@ -20,11 +20,14 @@ export async function registerTrialInterest(data: {
   name: string;
   adminPhone: string;
   botPhone: string;
+  timezone?: string;
 }): Promise<void> {
   const trialBonus = 100000; // 1,000.00 NGN Trial Gift
+  const timezone = data.timezone || 'Africa/Lagos';
   
   await orgsRef.doc(data.id).set({
     ...data,
+    timezone,
     isActive: true, // UNLOCKED: Trial starts immediately
     status: 'TRIAL',
     deploymentModel: 'SHARED',
@@ -127,6 +130,7 @@ export async function completeOnboarding(orgId: string, finalConfig: OnboardingD
       onboardingStep: 'COMPLETE',
       onboardingData: null, // 🔥 CLEAR PII
       balance: bonusKobo,
+      timezone: finalConfig.timezone || 'Africa/Lagos',
       'config.adminPin': hashedPin,
       'config.bankDetails': {
         bankName: finalConfig.bankName,
@@ -159,13 +163,16 @@ export async function createTenant(data: {
   whatsappPhoneId: string;
   adminPhone: string;
   systemPrompt: string;
+  timezone?: string;
 }): Promise<void> {
   const hashedPin = await bcrypt.hash('1234', 10);
   const bridgeSecret = crypto.randomBytes(16).toString('hex'); 
   const bonusKobo = 100000;
+  const timezone = data.timezone || 'Africa/Lagos';
 
   await orgsRef.doc(data.id).set({
     ...data,
+    timezone,
     isActive: true,
     balance: bonusKobo, 
     currency: 'NGN',

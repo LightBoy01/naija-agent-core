@@ -46,7 +46,7 @@ export default function ActivationPipeline({ clients }: { clients: PendingClient
         const err = await res.json();
         toast.error(err.error || 'Failed to trigger');
       }
-    } catch (_e) {
+    } catch {
       toast.error('Connection error');
     } finally {
       setLoading(false);

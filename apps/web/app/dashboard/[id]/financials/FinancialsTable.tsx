@@ -1,13 +1,18 @@
 'use client';
 
 import { Activity } from '@naija-agent/types';
-import { formatTimestamp } from '../../../../lib/utils';
+import { formatTimestamp, formatCurrency } from '../../../../lib/utils';
 
 interface TableProps {
   transactions: Activity[];
+  currency: {
+    code: string;
+    symbol: string;
+    locale: string;
+  };
 }
 
-export default function FinancialsTable({ transactions }: TableProps) {
+export default function FinancialsTable({ transactions, currency }: TableProps) {
   if (transactions.length === 0) {
     return (
       <div className="p-8 text-center bg-white rounded-xl border border-zinc-200">
@@ -50,7 +55,7 @@ export default function FinancialsTable({ transactions }: TableProps) {
               </td>
               <td className="px-6 py-4 text-right whitespace-nowrap">
                 <div className="text-sm font-bold text-zinc-900 font-mono">
-                  ₦{(tx.amount || 0).toLocaleString()}
+                  {formatCurrency(tx.amount || 0, currency.locale, currency.code, currency.symbol)}
                 </div>
               </td>
               <td className="px-6 py-4 text-right whitespace-nowrap">
