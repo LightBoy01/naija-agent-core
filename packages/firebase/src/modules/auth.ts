@@ -3,6 +3,7 @@ import {
   FieldValue 
 } from 'firebase-admin/firestore';
 import { getOrgById } from './orgs.js';
+import { parseAndFormatPhone } from '@naija-agent/types';
 import bcrypt from 'bcrypt';
 
 const db = getFirestore();
@@ -38,7 +39,10 @@ export async function verifySovereignPin(phone: string, pin: string): Promise<bo
   const masterOrg = await getOrgById('naija-agent-master');
   if (!masterOrg || !masterOrg.config) return false;
 
-  if (masterOrg.config.adminPhone !== phone) return false;
+  const phoneNormalized = parseAndFormatPhone(phone) || phone;
+  const masterAdminPhoneNormalized = parseAndFormatPhone(masterOrg.config.adminPhone || '') || masterOrg.config.adminPhone;
+
+  if (masterAdminPhoneNormalized !== phoneNormalized) return false;
 
   return bcrypt.compare(pin, masterOrg.config.adminPin || '');
 }

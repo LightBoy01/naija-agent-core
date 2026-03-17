@@ -2,7 +2,7 @@ import { Worker, Job } from 'bullmq';
 import { Redis } from 'ioredis';
 import dotenv from 'dotenv';
 import pino from 'pino';
-import { JobData, SystemConfig, StaffData } from '@naija-agent/types';
+import { JobData, SystemConfig, StaffData, parseAndFormatPhone } from '@naija-agent/types';
 import { WhatsAppService } from './services/whatsapp.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getProvider, PaymentProvider } from '@naija-agent/payments';
@@ -108,7 +108,10 @@ const worker = new Worker<JobData>(
     let costPerReply = 0;
     let deductionDone = false;
 
-    const isAdmin = currentOrg.config?.adminPhone === from;
+    const fromNormalized = parseAndFormatPhone(from) || from;
+    const adminPhoneNormalized = currentOrg.config?.adminPhone ? (parseAndFormatPhone(currentOrg.config.adminPhone) || currentOrg.config.adminPhone) : null;
+    const isAdmin = adminPhoneNormalized === fromNormalized;
+    
     const onboarding = await getOrgOnboarding(orgId);
     
     // --- MULTI-TENANT SERVICES ---

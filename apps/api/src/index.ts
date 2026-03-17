@@ -16,7 +16,8 @@ import { z } from 'zod';
 import { 
   WhatsAppWebhookSchema, 
   JobData, 
-  WhatsAppMessage 
+  WhatsAppMessage,
+  parseAndFormatPhone 
 } from '@naija-agent/types';
 import { 
   getOrgByPhoneId, 
@@ -384,8 +385,9 @@ fastify.post('/webhook', async (request, reply) => {
 
   // --- Multi-Tenant Identity Prioritization (Phase 8.1) ---
   // Priority 1: Check if the SENDER is a Boss of an org (Shared SIM logic)
+  const fromNormalized = parseAndFormatPhone(from) || from;
   const { findOrgByAdminPhone } = await import('@naija-agent/firebase');
-  let org = await findOrgByAdminPhone(from);
+  let org = await findOrgByAdminPhone(fromNormalized);
   
   if (!org) {
     // Priority 2: Fallback to Org linked by SIM Phone ID (Standard logic)

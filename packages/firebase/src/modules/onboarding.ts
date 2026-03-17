@@ -5,7 +5,7 @@ import {
 } from 'firebase-admin/firestore';
 import { incrementNetworkStats } from './stats.js';
 import { setAdminAuth } from './auth.js';
-import { Organization, OnboardingData, OnboardingConfig } from '@naija-agent/types';
+import { Organization, OnboardingData, OnboardingConfig, parseAndFormatPhone } from '@naija-agent/types';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 
@@ -24,9 +24,13 @@ export async function registerTrialInterest(data: {
 }): Promise<void> {
   const trialBonus = 100000; // 1,000.00 NGN Trial Gift
   const timezone = data.timezone || 'Africa/Lagos';
+  const adminPhone = parseAndFormatPhone(data.adminPhone) || data.adminPhone;
+  const botPhone = parseAndFormatPhone(data.botPhone) || data.botPhone;
   
   await orgsRef.doc(data.id).set({
     ...data,
+    adminPhone,
+    botPhone,
     timezone,
     isActive: true, // UNLOCKED: Trial starts immediately
     status: 'TRIAL',
@@ -36,8 +40,8 @@ export async function registerTrialInterest(data: {
     costPerReply: 3300, 
     whatsappPhoneId: 'PENDING', 
     config: {
-      adminPhone: data.adminPhone,
-      botPhone: data.botPhone,
+      adminPhone,
+      botPhone,
       tools: ['web_search'],
       model: 'gemini-3.1-flash-lite-preview'
     },
@@ -169,9 +173,11 @@ export async function createTenant(data: {
   const bridgeSecret = crypto.randomBytes(16).toString('hex'); 
   const bonusKobo = 100000;
   const timezone = data.timezone || 'Africa/Lagos';
+  const adminPhone = parseAndFormatPhone(data.adminPhone) || data.adminPhone;
 
   await orgsRef.doc(data.id).set({
     ...data,
+    adminPhone,
     timezone,
     isActive: true,
     balance: bonusKobo, 
