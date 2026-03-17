@@ -1,6 +1,7 @@
 export function getPriceGuardRegex(symbol: string, code: string): RegExp {
   // Escaping the symbol for regex safety (e.g., $ becomes \$)
-  const escapedSymbol = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const safeSymbol = symbol || (code === 'NGN' ? '₦' : '$');
+  const escapedSymbol = safeSymbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   
   // Dynamic Regex Construction
   // 1. Symbol + Amount (e.g. $50, ₦50)

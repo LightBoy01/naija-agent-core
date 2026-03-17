@@ -44,7 +44,11 @@ export async function handleMessage(
   } = deps;
 
   const isManager = isAdmin || isStaff;
-  const currency = org.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
+  const currency = {
+    code: org.currency?.code || 'NGN',
+    symbol: org.currency?.symbol || '₦',
+    locale: org.currency?.locale || 'en-NG'
+  };
 
   // 🛡️ [PHASE 8]: Timezone Awareness
   const orgTimeZone = org.timezone || 'Africa/Lagos';
