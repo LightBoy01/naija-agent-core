@@ -37,16 +37,40 @@ if (!process.env.WHATSAPP_API_TOKEN || !process.env.GEMINI_API_KEY) {
 }
 
 // --- Providers & Services ---
-const redisConfig = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-  maxRetriesPerRequest: null,
-  retryStrategy: (times: number) => {
-    const delay = Math.min(times * 100, 3000);
-    return delay;
+const redisUrl = process.env.REDIS_URL;
+let redisConfig: any;
+
+if (redisUrl) {
+  try {
+    const parsed = new URL(redisUrl);
+    redisConfig = {
+      host: parsed.hostname,
+      port: parseInt(parsed.port),
+      password: parsed.password,
+      username: parsed.username,
+      maxRetriesPerRequest: null,
+      retryStrategy: (times: number) => Math.min(times * 100, 3000)
+    };
+  } catch (e) {
+    logger.error('❌ Failed to parse REDIS_URL, falling back to components');
+    redisConfig = {
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      password: process.env.REDIS_PASSWORD,
+      maxRetriesPerRequest: null,
+      retryStrategy: (times: number) => Math.min(times * 100, 3000)
+    };
   }
-};
+} else {
+  redisConfig = {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379'),
+    password: process.env.REDIS_PASSWORD,
+    maxRetriesPerRequest: null,
+    retryStrategy: (times: number) => Math.min(times * 100, 3000)
+  };
+}
+
 const redisClient = new Redis(redisConfig);
 
 redisClient.on('error', (err) => {

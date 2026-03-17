@@ -13,7 +13,6 @@ export function getPriceGuardRegex(symbol: string, code: string): RegExp {
   // We require the symbol/code to be either:
   // - A multi-char code (NGN, USD)
   // - A special symbol (₦, $, £)
-  // - A single char only if followed immediately by a digit (e.g. N50)
   
   return new RegExp(
     `(${escapedSymbol}|${safeCode})\\s*?(\\d[\\d,.]*\\d|\\d)` + // Prefix: Symbol/Code + Number
