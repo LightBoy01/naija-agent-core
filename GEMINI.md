@@ -8,9 +8,15 @@
 - **Credit Awareness:** Gemini is now balance-aware (Context Injection) and responds to balance queries.
 
 ## Recent Changes
+- **Phase 8.2 Iron Shield (Mar 2026):**
+    - **Async SMS Bridge:** Decoupled SMS ingestion from processing. API now queues jobs; Worker handles parsing (Regex/LLM) asynchronously to prevent webhook timeouts.
+    - **PIN Interceptor:** Implemented a deterministic Regex check (`/^\d{4}$/`) in `messaging.ts` to handle PINs instantly, preventing AI hallucinations and "I understand" loops.
+    - **Log Redaction:** Implemented strict header redaction (`x-api-key`, `x-bridge-secret`, `x-hub-signature-256`) in the API to prevent credential leakage.
+    - **Ambiguity Defense:** Updated the fallback message to be context-aware ("Oga, I no too catch that one") and explicitly instructed the AI to ask for clarification on random inputs.
+    - **Master Bot Context:** Fixed a bug where the Master Bot would ask for a PIN to answer knowledge questions. It now prioritizes the injected `[WISDOM BASE]` over external tools.
 - **Phase 7 Security & Stability Audit (Mar 2026):** 
-    - **Robust Price Guard:** Replaced the fragile regex with a comprehensive parser for "5k", "NGN", and "m" formats, preventing price hallucinations and false positives (e.g., "5km").
-    - **Security Synchronization:** Enforced PIN protection for `web_search`, `activate_tenant`, and `get_network_stats` in `tool-handlers.ts`, closing the "Logic Leak" between definitions and execution.
+    - **Robust Price Guard:** Replaced the fragile regex with a comprehensive parser for "5k", "NGN", and "m" formats.
+    - **Security Synchronization:** Enforced PIN protection for `web_search`, `activate_tenant`, and `get_network_stats`.
     - **Onboarding Privacy:** Implemented SHA-256 hashing for the `adminPin` during the temporary onboarding state to prevent plain-text leakage in Firestore.
     - **SMS Bridge Hardening:** Fixed a critical deduplication bug in the bridge by implementing a `deque`-based sliding window, preventing duplicate bank alert forwarding.
     - **Cart Recovery Correction:** Fixed a field mismatch (`verifiedAt` vs `timestamp`) to ensure accurate payment detection before nudging abandoned carts.

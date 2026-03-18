@@ -201,5 +201,9 @@
 - [x] **Timezone Intelligence (Phase 8.1):**
     - [x] **Schema:** Added `timezone` to Organization schema.
     - [x] **Scheduler:** `daily-reports` and `reminders` now respect local business time.
-    - [x] **Business Hours Guard:** Prevent proactive messages outside 8am-8pm local time.
-    - [x] **Visual Ledger:** Currency-aware dashboard charts and tables.
+- [x] **Phase 8.2: Iron Shield (Security & Arch) ✅**
+    - [x] **Async SMS Bridge:** Refactored SMS ingestion to use Queue -> Worker (Background processing).
+    - [x] **Log Security:** Implemented global redaction for API keys and Signatures in logs.
+    - [x] **PIN Interceptor:** Implemented deterministic Regex check to bypass AI for PIN auth.
+    - [x] **Ambiguity Defense:** Updated fallback messages to be context-aware.
+    - [x] **Master Bot Knowledge:** Seeded Roadmap/Strategy docs and fixed prompt injection logic.

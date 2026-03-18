@@ -548,19 +548,23 @@
 
 ### **Actions Taken:**
 *   **Security (API Logging):**
-    *   **Redaction Layer:** Implemented a global `onRequest` hook in `apps/api/src/index.ts` to automatically redact sensitive headers (`x-api-key`, `x-bridge-secret`) before logging.
+    *   **Redaction Layer:** Implemented a global `onRequest` hook in `apps/api/src/index.ts` to automatically redact sensitive headers (`x-api-key`, `x-bridge-secret`, `x-hub-signature-256`) before logging.
     *   **Cleanup:** Removed unsafe `console.log` dumps of raw request headers.
 *   **Architecture (Async SMS Bridge):**
     *   **Logic Shift:** Refactored the `/bridge/sms` endpoint to queue jobs immediately instead of processing synchronously.
-    *   **Worker Handler:** Created `apps/worker/src/handlers/bridge.ts` to handle the heavy lifting (Regex + LLM parsing) in the background.
+    *   **Worker Handler:** Created `apps/worker/src/handlers/bridge.ts` to handle the heavy lifting (Regex + Gemini Flash-Lite fallback) in the background.
     *   **Benefit:** Eliminates webhook timeouts during high traffic.
 *   **Logic (Onboarding Permissions):**
     *   **Permission Fix:** Updated `handleOnboarding` to explicitly use the **Master (Sovereign) Token** for infrastructure actions (`addPhoneNumber`), resolving permission errors for new tenants.
-    *   **Logic Gap Patch:** Added a fail-safe "Self-Verify" block for existing bots to re-authenticate if they receive the OTP directly.
-*   **Observability (Standardized Logging):**
-    *   **Pino Integration:** Replaced all `console.log` calls in the Worker application with a structured `pino` logger (`apps/worker/src/utils/logger.ts`).
-    *   **Benefit:** Logs are now machine-readable and include context (Org ID, Job ID) for easier debugging in production.
+*   **UX Hardening (Ambiguity Defense):**
+    *   **PIN Interceptor:** Implemented a deterministic regex check (`/^\d{4}$/`) in `messaging.ts` to handle PINs instantly, bypassing AI hallucinations.
+    *   **Smart Fallback:** Updated the default fallback message to be context-aware ("Oga, I no too catch that one") instead of generic.
+*   **Master Bot Intelligence:**
+    *   **Knowledge Seeding:** Injected Strategy, Roadmap, and Red Team reports into the Master Bot's context.
+    *   **Prompt Fix:** Explicitly instructed the bot to prioritize injected context over external tools, preventing unnecessary PIN lockouts.
 
 ### **Verification:**
 *   **Build:** 100% successful build across all packages and apps.
-*   **Logic Test:** Simulated the end-to-end "Remote Relay" onboarding workflow with a standalone script (`scripts/test-onboarding-logic.ts`), confirming the Master Bot correctly handles the registration for new tenants.
+*   **Security Check:** Confirmed sensitive headers are masked in logs.
+*   **Logic Test:** Verified PIN Interceptor stops the "I understand" loop.
+
