@@ -7,10 +7,13 @@ import {
   setOrgOnboarding, 
   completeOnboarding, 
   getPendingSetups,
+  createTenant,
   Organization
 } from '@naija-agent/firebase';
 import { Redis } from 'ioredis';
 import { formatCurrency } from '../utils/currency.js';
+import { logger } from '../utils/logger.js';
+import crypto from 'crypto';
 
 export async function handleOnboarding(
   job: Job<JobData>,
@@ -24,15 +27,107 @@ export async function handleOnboarding(
   const isAdmin = org.config?.adminPhone === from;
   const currency = org.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
 
-  // 1. SOVEREIGN LEAD CAPTURE
-  const isReferral = text.includes('I_want_AI_for_my_business_');
-  if (org.config?.isMaster && isReferral) {
-      const referralMsg = `Oga Boss! I see say you wan get your own Digital Apprentice to help you sell more! 🚀\n\nI ready to help you set am up sharp-sharp (e no go take more than 5 minutes).\n\nTo start, wetin be the *Name of your Business*? (e.g. Bims Gadgets)`;
-      await tenantWhatsAppService.sendText(from, referralMsg);
-      return { success: true };
+  // 1. SOVEREIGN LEAD CAPTURE (PROSPECT FLOW)
+  // Logic for users messaging the Master Bot to start a new business
+  if (org.config?.isMaster && !isAdmin) {
+      const prospectKey = `prospect:${from}`;
+      const rawState = await redisClient.get(prospectKey);
+      let state = rawState ? JSON.parse(rawState) : null;
+      
+      const isReferral = text.includes('I_want_AI_for_my_business_');
+
+      if (isReferral || state) {
+          logger.info({ from, state }, '🛠️ [PROSPECT FLOW] Processing step');
+          
+          let nextStep = state?.step || 'START';
+          let nextData = state?.data || {};
+          let reply = "";
+
+          if (isReferral) {
+             nextStep = 'NAME';
+             reply = `Oga Boss! Welcome to the Naija Agent Empire! 🚀\n\nI see say you wan get your own Digital Apprentice to help you sell more.\n\nTo start, wetin be the *Name of your Business*? (e.g. Bims Gadgets)`;
+          } else if (text.toLowerCase() === '#cancel') {
+             await redisClient.del(prospectKey);
+             await tenantWhatsAppService.sendText(from, "🛑 Signup cancelled. Message me anytime to start again!");
+             return { success: true };
+          } else if (nextStep === 'NAME') {
+             if (text.length < 3) {
+                reply = "Abeg, type a proper business name.";
+             } else {
+                nextData.name = text;
+                nextStep = 'BOT_PHONE';
+                reply = `Nice name! *${nextData.name}* is going to be big! 🌟\n\nNow, tell me the *Phone Number* of the SIM card you put inside your bot phone.\n\n(e.g. 08012345678)`;
+             }
+          } else if (nextStep === 'BOT_PHONE') {
+             const botPhone = text.replace(/\s+/g, '');
+             if (botPhone.length < 10 || isNaN(parseInt(botPhone))) {
+                reply = "Abeg enter a valid phone number (11 digits).";
+             } else {
+                // --- CREATE TENANT & TRIGGER META ---
+                reply = `Creating your Empire account for *${nextData.name}*... ⏳`;
+                await tenantWhatsAppService.sendText(from, reply);
+
+                try {
+                   // 1. Create Tenant Document
+                   const newOrgId = `org_${crypto.randomBytes(4).toString('hex')}`;
+                   await createTenant({
+                      id: newOrgId,
+                      name: nextData.name,
+                      whatsappPhoneId: 'PENDING',
+                      adminPhone: from,
+                      systemPrompt: `You are the AI Assistant for ${nextData.name}.`,
+                      timezone: 'Africa/Lagos'
+                   });
+
+                   // 2. Trigger Meta (Master Token)
+                   const wabaId = process.env.WHATSAPP_WABA_ID;
+                   const masterToken = process.env.WHATSAPP_API_TOKEN;
+                   
+                   if (!wabaId || !masterToken) throw new Error('System Config Error: Missing WABA ID/Token');
+                   
+                   const sovereignService = new WhatsAppService(masterToken, '');
+                   const { phoneId } = await sovereignService.addPhoneNumber(wabaId, botPhone, nextData.name);
+
+                   // 3. Update Tenant with Pending Setup
+                   const { getDb } = await import('@naija-agent/firebase');
+                   await (await getDb()).collection('organizations').doc(newOrgId).update({
+                       status: 'AWAITING_OTP',
+                       pendingSetup: {
+                           phoneId,
+                           accessToken: masterToken,
+                           wabaId,
+                           initiatedAt: new Date().toISOString()
+                       }
+                   });
+
+                   // 4. Trigger OTP SMS
+                   const activationService = new WhatsAppService(masterToken, phoneId);
+                   await activationService.requestCode('SMS');
+
+                   // 5. Cleanup Prospect State
+                   await redisClient.del(prospectKey);
+
+                   reply = `✅ *Account Created!* \n\nI have asked Meta to send a *6-digit SMS code* to ${botPhone}.\n\n👉 *Type the code here immediately to activate your bot!*`;
+
+                } catch (e: any) {
+                   logger.error({ error: e.message }, '❌ [PROSPECT FLOW] Failed');
+                   reply = `❌ *Setup Failed:* ${e.message}\n\nPlease check the number and try again.`;
+                }
+             }
+          }
+
+          if (reply && !reply.includes('Account Created')) {
+             await redisClient.set(prospectKey, JSON.stringify({ step: nextStep, data: nextData }));
+             await redisClient.expire(prospectKey, 3600); // 1 hour TTL
+             await tenantWhatsAppService.sendText(from, reply);
+          } else if (reply) {
+             await tenantWhatsAppService.sendText(from, reply);
+          }
+          return { success: true };
+      }
   }
 
-  // 2. AUTOMATIC OTP RELAY (Auto-Ignition Phase 7.8)
+  // 2. AUTOMATIC OTP RELAY (Master Context - Triggered by Boss sending code to Master)
   const isSixDigits = /^\d{6}$/.test(text);
   if (org.config?.isMaster && isSixDigits) {
       const setups = await getPendingSetups();
@@ -45,7 +140,7 @@ export async function handleOnboarding(
              return { success: true };
           }
 
-          console.log(`🚀 [AUTO-IGNITION] Attempting Meta Registration for: ${target.id}`);
+          logger.info({ orgId: target.id }, '🚀 [AUTO-IGNITION] Attempting Meta Registration');
           await tenantWhatsAppService.sendText(from, `Got it! Activating your bot *${target.name}* now... ⏳`);
           
           try {
@@ -70,14 +165,14 @@ export async function handleOnboarding(
                 pendingSetup: null 
              });
 
-             console.log(`✅ [AUTO-IGNITION] Success for ${target.id}`);
+             logger.info({ orgId: target.id }, '✅ [AUTO-IGNITION] Success');
              
              if (process.env.MASTER_ADMIN_PHONE) {
                 await tenantWhatsAppService.sendText(process.env.MASTER_ADMIN_PHONE, `⚡ *AUTO-IGNITION SUCCESS*\n\nBusiness: ${target.name}\nBoss: ${from}\nStatus: LIVE 🚀`);
              }
 
           } catch (err: any) {
-             console.error(`❌ [AUTO-IGNITION] Failed for ${target.id}:`, err.message);
+             logger.error({ orgId: target.id, error: err.message }, '❌ [AUTO-IGNITION] Failed');
              await tenantWhatsAppService.sendText(from, `❌ *Activation Failed:* ${err.message}\n\nOga, please check if the code is correct or if it has expired.`);
              
              if (process.env.MASTER_ADMIN_PHONE) {
@@ -135,7 +230,7 @@ export async function handleOnboarding(
   const currentData = onboarding?.data || (org.onboardingData as OnboardingData) || {};
 
   if (text === '#setup' || (currentStep !== 'COMPLETE' && currentStep !== 'NONE')) {
-      console.log(`🛠️ [ONBOARDING] Boss of ${orgId} is in step: ${currentStep || 'START'}`);
+      logger.info({ orgId, step: currentStep || 'START' }, '🛠️ [ONBOARDING] Progressing step');
       
       let nextStep: OnboardingConfig['step'] = currentStep === 'NONE' ? 'START' : currentStep;
       let nextData: OnboardingData = { ...currentData };
@@ -163,7 +258,7 @@ export async function handleOnboarding(
             const result = await model.generateContent(extractionPrompt);
             const extracted = JSON.parse(result.response.text().replace(/```json|```/g, '').trim());
             
-            console.log(`🧠 [GREEDY EXTRACTION] Found:`, extracted);
+            logger.info({ orgId, extracted }, '🧠 [GREEDY EXTRACTION] AI Extraction Result');
 
             // --- LOCALE-AWARE VALIDATION ---
             const currency = org.currency || { code: 'NGN' };
@@ -189,7 +284,7 @@ export async function handleOnboarding(
             if (extracted.accountName) nextData.accountName = extracted.accountName;
 
          } catch (e) {
-            console.warn(`⚠️ [EXTRACTION FAILED]`, e);
+            logger.warn({ orgId, error: e }, '⚠️ [EXTRACTION FAILED]');
          }
       }
 
@@ -209,7 +304,10 @@ export async function handleOnboarding(
              'BANK_NAME': 'PIN',
              'BANK_ACCOUNT': 'BANK_NAME',
              'BANK_ACCOUNT_NAME': 'BANK_ACCOUNT',
-             'TONE': 'BANK_ACCOUNT_NAME'
+             'TONE': 'BANK_ACCOUNT_NAME',
+             'CUSTOM_TONE': 'TONE',
+             'REVIEW': 'TONE',
+             'BOT_PHONE': 'REVIEW'
           };
           
           if (backMap[nextStep]) {
@@ -223,6 +321,7 @@ export async function handleOnboarding(
              else if (prevStep === 'BANK_NAME') prevVal = nextData.bankName || "Not set";
              else if (prevStep === 'BANK_ACCOUNT') prevVal = nextData.accountNumber || "Not set";
              else if (prevStep === 'BANK_ACCOUNT_NAME') prevVal = nextData.accountName || "Not set";
+             else if (prevStep === 'TONE') prevVal = "Tone Selection";
 
              reply = `⏪ *Back to previous step.*\n\n(Current Data for this step: ${prevVal})\n\nPlease enter the value again or type the new one.`;
           } else {
@@ -297,24 +396,143 @@ export async function handleOnboarding(
       } else if (nextStep === 'BANK_ACCOUNT_NAME') {
           if (!nextData.accountName) nextData.accountName = text;
           nextStep = 'TONE';
-          reply = "Bank details set! 💰\n\n*Step 4 (Final):* How should I talk to your customers?\n\n1. *Professional* (Official & Polite)\n2. *Street-Smart* (Mix of English & Pidgin)\n\nType 1 or 2.";
+          reply = "Bank details set! 💰\n\n*Step 4 (Final):* How should I talk to your customers?\n\n1. *Professional* (Official & Polite)\n2. *Street-Smart* (Mix of English & Pidgin)\n3. *Custom* (You tell me!)\n\nType 1, 2, or 3.";
       } else if (nextStep === 'TONE') {
-          if (text !== '1' && text !== '2') {
-              reply = "Please type *1* for Professional or *2* for Street-Smart.";
+          if (['1', '2', '3'].includes(text)) {
+              if (text === '3') {
+                  nextStep = 'CUSTOM_TONE';
+                  reply = "Okay! Describe how you want me to talk. \n\n*Example:* 'You are a calm, luxury assistant for a jewelry brand. Speak elegantly.'";
+              } else {
+                  const tone = text === '1' ? 'Professional' : 'Street-Smart';
+                  const prompt = tone === 'Professional' 
+                    ? `You are the Professional Assistant for ${nextData.name}. You are polite, efficient, and speak clear English.` 
+                    : `You are the Street-Smart Apprentice for ${nextData.name}. You speak a sharp mix of English and Nigerian Pidgin. You are WITTY, LOYAL, and respect the hustle. You call the Boss 'Oga' or 'Madam'. Use vibes like "No shaking," "Sharp-sharp," and "I dey for you," but keep your work professional.`;
+                  
+                  nextData.systemPrompt = prompt;
+                  nextStep = 'REVIEW';
+                  reply = `📝 *REVIEW YOUR DETAILS*\n\nName: ${nextData.name}\nBank: ${nextData.bankName}\nAccount: ${nextData.accountNumber}\nName: ${nextData.accountName}\nTone: ${tone}\n\n*Type YES to finish, or BACK to edit.*`;
+              }
           } else {
-              const tone = text === '1' ? 'Professional' : 'Street-Smart';
-              const prompt = tone === 'Professional' 
-                ? `You are the Professional Assistant for ${nextData.name}. You are polite, efficient, and speak clear English.` 
-                : `You are the Street-Smart Apprentice for ${nextData.name}. You speak a sharp mix of English and Nigerian Pidgin. You are WITTY, LOYAL, and respect the hustle. You call the Boss 'Oga' or 'Madam'. Use vibes like "No shaking," "Sharp-sharp," and "I dey for you," but keep your work professional.`;
-              
-              nextData.systemPrompt = prompt;
-              
-              await completeOnboarding(orgId, nextData);
-              
-              const giftAmount = formatCurrency(1000, currency.locale, currency.code);
-              const examplePrice = formatCurrency(100, currency.locale, currency.code);
-              reply = `🎉 *SETUP COMPLETE!*\n\nI am now the ${tone} Apprentice for *${nextData.name}*.\n\n🎁 *Oga Boss, I have gifted you ${giftAmount} in AI credits* so you can see how I work! \n\n*Safety Check:* I have automatically UNLOCKED your session for the next 2 hours. You can start training me right now without typing your PIN!\n\n*Next Step: Training* 🧠\nMy shop is currently empty. To start selling, I need to know your prices.\n\n👉 *Pro-Tip:* You fit just **snap a photo of your Price List** and send am to me. I go extract all the items sharp-sharp!\n\n*Or type:* "The price of Pure Water is ${examplePrice}"`;
-              nextStep = 'COMPLETE';
+              reply = "Please type *1*, *2*, or *3*.";
+          }
+      } else if (nextStep === 'CUSTOM_TONE') {
+          nextData.systemPrompt = `You are the AI Assistant for ${nextData.name}. ${text}`;
+          nextStep = 'REVIEW';
+          reply = `📝 *REVIEW YOUR DETAILS*\n\nName: ${nextData.name}\nBank: ${nextData.bankName}\nAccount: ${nextData.accountNumber}\nName: ${nextData.accountName}\nTone: Custom\n\n*Type YES to finish, or BACK to edit.*`;
+      } else if (nextStep === 'REVIEW') {
+          if (text.toUpperCase() === 'YES') {
+              // INSTEAD OF COMPLETING, WE ASK FOR PHONE
+              nextStep = 'BOT_PHONE';
+              reply = `✅ Details Confirmed!\n\n*One Final Step to go LIVE:*\n\nWhat is the **Phone Number** of the SIM card you put in the bot phone?\n\n(e.g. 08012345678)`;
+          } else {
+              reply = "Okay. Type *#back* to edit the last step, or *#reset* to start over.";
+          }
+      } else if (nextStep === 'BOT_PHONE') {
+          // --- SOVEREIGN AUTO-IGNITION ---
+          const botPhone = text.replace(/\s+/g, '');
+          // Basic validation
+          if (botPhone.length < 10) {
+             reply = "Abeg enter a valid phone number.";
+             return { success: true };
+          }
+
+          reply = `Generated WABA Request for *${botPhone}*... ⏳`;
+          await tenantWhatsAppService.sendText(from, reply);
+
+          try {
+             // 1. Save Preliminary Data (So we have a record even if Meta fails)
+             await completeOnboarding(orgId, { ...nextData, botPhone: botPhone }); // Save Name, Bank, etc.
+             
+             // 2. Trigger Meta (Using Sovereign/Master Token)
+             const wabaId = process.env.WHATSAPP_WABA_ID; 
+             const masterToken = process.env.WHATSAPP_API_TOKEN;
+             if (!wabaId) throw new Error('System Error: Sovereign WABA ID missing.');
+             if (!masterToken) throw new Error('System Error: Sovereign API Token missing.');
+
+             const sovereignService = new WhatsAppService(masterToken, ''); 
+             const { phoneId } = await sovereignService.addPhoneNumber(wabaId, botPhone, nextData.name || 'New Business');
+             
+             // 3. Update Org with Pending Setup
+             const { getDb } = await import('@naija-agent/firebase');
+             await (await getDb()).collection('organizations').doc(orgId).update({
+                 whatsappPhoneId: 'PENDING', // Mark as pending
+                 status: 'AWAITING_OTP',
+                 pendingSetup: {
+                     phoneId,
+                     accessToken: masterToken,
+                     wabaId,
+                     initiatedAt: new Date().toISOString()
+                 }
+             });
+
+             // 4. Trigger OTP
+             const activationService = new WhatsAppService(masterToken, phoneId);
+             await activationService.requestCode('SMS');
+
+             nextStep = 'OTP_WAIT';
+             reply = `✅ *Meta Accepted!* \n\nI have asked them to send a *6-digit SMS code* to ${botPhone}.\n\n👉 *Type the code here immediately!*`;
+
+          } catch (e: any) {
+             logger.error({ orgId, error: e.message }, '❌ [AUTO-ONBOARDING] Failed');
+             reply = `❌ *Setup Failed:* ${e.message}\n\nPlease check if the SIM is active and try again (Type the number again).`;
+             // Stay on BOT_PHONE step to retry
+          }
+      } else if (nextStep === 'OTP_WAIT') {
+          // --- TENANT OTP ACTIVATION ---
+          // This allows the TENANT (using their own phone, which is also the Admin Phone) to verify
+          if (/^\d{6}$/.test(text)) {
+             const { getDb, activateTenant } = await import('@naija-agent/firebase');
+             const orgDoc = await (await getDb()).collection('organizations').doc(orgId).get();
+             const orgData = orgDoc.data();
+             const setup = orgData?.pendingSetup;
+
+             if (setup && setup.phoneId && setup.accessToken) {
+                logger.info({ orgId }, '🚀 [TENANT-IGNITION] Attempting Meta Registration');
+                await tenantWhatsAppService.sendText(from, `Verifying code *${text}*... ⏳`);
+
+                try {
+                   const activationService = new WhatsAppService(setup.accessToken, setup.phoneId);
+                   
+                   // 1. Register with Meta
+                   await activationService.registerNumber(text);
+                   
+                   // 2. Subscribe WABA
+                   if (setup.wabaId) {
+                      await activationService.subscribeWaba(setup.wabaId);
+                   }
+
+                   // 3. Activate
+                   await activateTenant(orgId, setup.phoneId, setup.accessToken);
+
+                   // 4. Cleanup
+                   await (await getDb()).collection('organizations').doc(orgId).update({ 
+                      pendingSetup: null,
+                      onboardingStep: 'COMPLETE'
+                   });
+
+                   logger.info({ orgId }, '✅ [TENANT-IGNITION] Success');
+                   
+                   reply = `⚡ *ACTIVATION SUCCESSFUL!* 🚀\n\nYour bot is now LIVE! \n\nCustomers can message this number to start buying.\n\nType *#status* to check your health.`;
+                   nextStep = 'COMPLETE';
+
+                   if (process.env.MASTER_ADMIN_PHONE) {
+                      const masterToken = process.env.WHATSAPP_API_TOKEN;
+                      const masterPhoneId = process.env.WHATSAPP_PHONE_ID;
+                      if (masterToken && masterPhoneId) {
+                         const masterService = new WhatsAppService(masterToken, masterPhoneId);
+                         await masterService.sendText(process.env.MASTER_ADMIN_PHONE, `⚡ *AUTO-IGNITION SUCCESS (Self-Verify)*\n\nBusiness: ${org.name}\nBoss: ${from}\nStatus: LIVE 🚀`);
+                      }
+                   }
+
+                } catch (err: any) {
+                   logger.error({ orgId, error: err.message }, '❌ [TENANT-IGNITION] Failed');
+                   reply = `❌ *Verification Failed:* ${err.message}\n\nPlease check if the code is correct.`;
+                }
+             } else {
+                reply = "⚠️ System Error: Setup details lost. Please type *#reset* to start over.";
+             }
+          } else {
+             reply = "Waiting for 6-digit code... (Check the Bot SIM)";
           }
       }
 

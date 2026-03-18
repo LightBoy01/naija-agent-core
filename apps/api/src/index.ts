@@ -8,7 +8,8 @@ const logger = pino({
   level: process.env.LOG_LEVEL || 'info'
 });
 
-console.log('🚀 [VERSION 1.0.2] API Service Starting...');
+logger.info('🚀 [VERSION 1.1.0] API Service Starting... (Standardized Logging)');
+
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import crypto from 'crypto';
@@ -34,6 +35,7 @@ import {
   getNetworkStats
 } from '@naija-agent/firebase';
 import { getProvider } from '@naija-agent/payments';
+import { formatCurrency } from './utils/currency.js';
 
 dotenv.config();
 
@@ -56,53 +58,18 @@ async function getCachedOrgBySecret(secret: string): Promise<any | null> {
   return org;
 }
 
-/**
- * Extracts amount from typical Nigerian bank SMS formats
- * e.g. "Amt: NGN 5,000.00", "Cr: 10,000", "Credit: 2,500.50"
- */
-function extractAmountFromSMS(body: string): number | null {
-  const cleanBody = body.replace(/,/g, ''); // Remove commas for easier matching
-  
-  // 🛡️ [FRAUD GUARD]: Explicitly reject Debit alerts
-  if (/\b(?:Debit|Dr|Withdrawal|Sent|Paid)\b/i.test(cleanBody)) {
-     console.warn(`🛑 [SMS BRIDGE] Rejected potential Debit alert: "${body.substring(0, 50)}..."`);
-     return null;
-  }
-
-  const patterns = [
-    /(?:Amt|Amount|Cr|Credit|Received|Value|Inflow)[:\s]+(?:NGN|N|#)?\s*([\d.]+)/i,
-    /([\d.]+)\s*has\s*been\s*credited/i,
-    /Acct:\s*\d+\s*Type:Cr\s*Amt:\s*([\d.]+)/i, // Specialized for Access/Zenith
-    /Trans\s*Amt:\s*NGN\s*([\d.]+)/i, // Specialized for GTB
-    /Inflow:\s*NGN\s*([\d.]+)/i, // Specialized for Kuda/OPay
-    /successfully\s*credited\s*with\s*NGN\s*([\d.]+)/i
-  ];
-
-  for (const pattern of patterns) {
-    const match = cleanBody.match(pattern);
-    if (match && match[1]) {
-      const amount = parseFloat(match[1]);
-      if (!isNaN(amount) && amount > 0) {
-         return amount;
-      }
-    }
-  }
-  return null;
-}
-
 // Ensure required environment variables are present
 if (!process.env.WHATSAPP_APP_SECRET) {
-  console.error('CRITICAL: WHATSAPP_APP_SECRET is not defined in environment variables.');
+  logger.error('CRITICAL: WHATSAPP_APP_SECRET is not defined in environment variables.');
   process.exit(1);
 }
 
-// [FORCE REDEPLOY] This comment is here to trigger a build so new ENV variables are picked up.
 const fastify = Fastify({ 
   logger: logger
 });
 
 fastify.setErrorHandler((error, request, reply) => {
-  console.error('🔥 [CRITICAL ERROR]:', error);
+  logger.error({ err: error.message, stack: error.stack }, '🔥 [CRITICAL ERROR]');
   reply.status(500).send({ error: 'Internal Server Error', details: error.message });
 });
 
@@ -117,14 +84,18 @@ fastify.register(fastifyRawBody, {
 
 // GLOBAL DEBUG: Log EVERY request before any processing
 fastify.addHook('onRequest', async (request, reply) => {
-  console.log(`\n🔵 [INCOMING] ${request.method} ${request.url}`);
-  console.log(`   Headers:`, JSON.stringify(request.headers, null, 2));
+  const safeHeaders = { ...request.headers };
+  // Redact sensitive headers
+  ['x-api-key', 'x-bridge-secret', 'x-cron-secret', 'authorization'].forEach(key => {
+    if (safeHeaders[key]) safeHeaders[key] = '***REDACTED***';
+  });
+  logger.info({ method: request.method, url: request.url, headers: safeHeaders }, '🔵 [INCOMING REQUEST]');
 });
 
 fastify.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
   if (body instanceof Buffer) {
     const bodyStr = body.toString('utf8');
-    console.log('📦 [DEBUG] Raw Body Received:', bodyStr.substring(0, 100) + '...');
+    logger.debug({ body: bodyStr.substring(0, 100) + '...' }, '📦 [DEBUG] Raw Body Received');
     (req as any).rawBody = bodyStr;
     try {
       const json = JSON.parse(bodyStr);
@@ -134,7 +105,7 @@ fastify.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, bo
       done(err, undefined);
     }
   } else {
-    console.log('⚠️ [DEBUG] Body is not a Buffer!');
+    logger.warn('⚠️ [DEBUG] Body is not a Buffer!');
     done(null, undefined);
   }
 });
@@ -193,8 +164,7 @@ function verifySignature(payload: string, signature: string, secret: string): bo
   if (!signature) return false;
   const hmac = crypto.createHmac('sha256', secret);
   const calculated = 'sha256=' + hmac.update(payload).digest('hex');
-  console.log('🛡️ [DEBUG] Signature Received:', signature);
-  console.log('🛡️ [DEBUG] Signature Calculated:', calculated);
+  logger.debug({ received: signature, calculated }, '🛡️ [DEBUG] Signature Verification');
   const digest = Buffer.from(calculated, 'utf8');
   const checksum = Buffer.from(signature, 'utf8');
   return digest.length === checksum.length && crypto.timingSafeEqual(digest, checksum);
@@ -225,6 +195,7 @@ fastify.get('/webhook', async (request, reply) => {
     reply.status(403).send('Forbidden');
   }
 });
+
 // 3. Webhook Ingestion (POST)
 fastify.post('/webhook/paystack', async (request, reply) => {
   const signature = request.headers['x-paystack-signature'] as string;
@@ -237,7 +208,7 @@ fastify.post('/webhook/paystack', async (request, reply) => {
   const paystack = getProvider('paystack', process.env.PAYSTACK_SECRET_KEY) as any;
   
   if (!paystack.verifyWebhookSignature(rawBody, signature)) {
-    console.warn('❌ Invalid Paystack Webhook Signature!');
+    logger.warn('❌ Invalid Paystack Webhook Signature!');
     return reply.status(403).send('Invalid Signature');
   }
 
@@ -250,25 +221,30 @@ fastify.post('/webhook/paystack', async (request, reply) => {
   const orgId = metadata?.orgId;
 
   if (!orgId) {
-    console.warn(`⚠️ Received Paystack top-up without orgId metadata. Ref: ${reference}`);
+    logger.warn({ reference }, '⚠️ Received Paystack top-up without orgId metadata.');
     return reply.status(200).send('OK'); // Acknowledge anyway
   }
 
   try {
-    const amountNaira = amount / 100; // Paystack sends amount in Kobo
-    const result = await topupTenant(orgId, amountNaira, reference);
+    const amountVal = amount / 100; // Paystack sends amount in Kobo/Cents
+    const result = await topupTenant(orgId, amountVal, reference);
 
     if (result) {
-      console.log(`✅ [PAYSTACK] Processed ₦${amountNaira.toLocaleString()} for ${orgId}`);
-      
       const org = await getOrgById(orgId);
+      const currencySymbol = org?.currency?.symbol || '₦';
+      const formattedAmount = `${currencySymbol}${amountVal.toLocaleString()}`;
+      const formattedBalance = `${currencySymbol}${(result.newBalance / 100).toLocaleString()}`;
+      
+      logger.info({ orgId, amount: amountVal, reference }, `✅ [PAYSTACK] Processed top-up.`);
+      
       if (org?.config?.adminPhone) {
         let notificationMsg = "";
+        const greeting = org.region === 'NG' ? 'Oga' : 'Hello';
         
         if (metadata?.purpose === 'refill') {
-           notificationMsg = `✅ *AI Credit Refill Successful!*\n\nOga, your account has been credited with *₦${amountNaira.toLocaleString()}* (Ref: ${reference}).\n\nYour new balance is *₦${(result.newBalance / 100).toLocaleString()}*.`;
+           notificationMsg = `✅ *AI Credit Refill Successful!*\n\n${greeting}, your account has been credited with *${formattedAmount}* (Ref: ${reference}).\n\nYour new balance is *${formattedBalance}*.`;
         } else {
-           notificationMsg = `💰 *NEW SALE CONFIRMED (Paystack)!*\n\nOga, a customer has just paid *₦${amountNaira.toLocaleString()}*.\n\nOrder Ref: ${reference}\nNew Bot Balance: ₦${(result.newBalance / 100).toLocaleString()}.`;
+           notificationMsg = `💰 *NEW SALE CONFIRMED (Paystack)!*\n\n${greeting}, a customer has just paid *${formattedAmount}*.\n\nOrder Ref: ${reference}\nNew Bot Balance: ${formattedBalance}.`;
         }
 
         const notificationJob: JobData = {
@@ -285,9 +261,9 @@ fastify.post('/webhook/paystack', async (request, reply) => {
     }
   } catch (e: any) {
     if (e.message === 'DUPLICATE_REFERENCE') {
-      console.log(`⏭️ [PAYSTACK] Duplicate top-up ignored for Ref: ${reference}`);
+      logger.info({ reference }, '⏭️ [PAYSTACK] Duplicate top-up ignored.');
     } else {
-      console.error('❌ Paystack processing error:', e);
+      logger.error({ reference, error: e.message }, '❌ Paystack processing error');
     }
   }
 
@@ -299,19 +275,16 @@ fastify.post('/webhook/monnify', async (request, reply) => {
   const signature = request.headers['monnify-signature'] as string;
   const rawBody = request.rawBody as string;
 
-  // We need to find the org to get their secret key, but webhooks might not have orgId in metadata easily readable without parsing.
-  // Monnify webhooks usually have a fixed structure.
   const payload = request.body as any;
   const reference = payload.eventData?.paymentReference;
   
-  // Try to find orgId from reference (Standard: refill_ORGID_TIMESTAMP)
   let orgId: string | undefined = undefined;
   if (reference && reference.startsWith('refill_')) {
      orgId = reference.split('_')[1];
   }
 
   if (!orgId) {
-    console.warn(`⚠️ Received Monnify webhook without recognizable orgId in reference: ${reference}`);
+    logger.warn({ reference }, '⚠️ Received Monnify webhook without recognizable orgId in reference.');
     return reply.status(200).send('OK');
   }
 
@@ -325,7 +298,7 @@ fastify.post('/webhook/monnify', async (request, reply) => {
   const monnify = getProvider('monnify', monnifyKey) as any;
   
   if (!monnify.verifyWebhookSignature(rawBody, signature)) {
-    console.warn('❌ Invalid Monnify Webhook Signature!');
+    logger.warn('❌ Invalid Monnify Webhook Signature!');
     return reply.status(403).send('Invalid Signature');
   }
 
@@ -339,7 +312,7 @@ fastify.post('/webhook/monnify', async (request, reply) => {
     const result = await topupTenant(orgId, amountPaid, reference);
 
     if (result) {
-      console.log(`✅ [MONNIFY] Processed ₦${amountPaid.toLocaleString()} for ${orgId}`);
+      logger.info({ orgId, amount: amountPaid, reference }, `✅ [MONNIFY] Processed top-up.`);
       
       if (org?.config?.adminPhone) {
         const notificationMsg = `✅ *AI Credit Refill Successful (Monnify)!*\n\nOga, your account has been credited with *₦${amountPaid.toLocaleString()}*.\n\nYour new balance is *₦${(result.newBalance / 100).toLocaleString()}*.`;
@@ -357,22 +330,21 @@ fastify.post('/webhook/monnify', async (request, reply) => {
       }
     }
   } catch (e: any) {
-    if (e.message !== 'DUPLICATE_REFERENCE') console.error('❌ Monnify processing error:', e);
+    if (e.message !== 'DUPLICATE_REFERENCE') logger.error({ reference, error: e.message }, '❌ Monnify processing error');
   }
 
   return reply.status(200).send('OK');
 });
 
-// 3. Webhook Ingestion (POST)
+// 3c. Webhook Ingestion (WhatsApp)
 fastify.post('/webhook', async (request, reply) => {
-  console.log('📝 [DEBUG] Webhook Hit!');
+  logger.debug('📝 [DEBUG] Webhook Hit!');
   const signature = request.headers['x-hub-signature-256'] as string;
   const rawBody = request.rawBody as string;
 
-  // Multi-Tenancy: Extract phoneId BEFORE verification to lookup secret
   let appSecret = process.env.WHATSAPP_APP_SECRET;
   if (!appSecret) {
-    fastify.log.error('CRITICAL: WHATSAPP_APP_SECRET is undefined during webhook processing.');
+    logger.error('CRITICAL: WHATSAPP_APP_SECRET is undefined during webhook processing.');
     return reply.status(500).send('Internal Server Error');
   }
   let phoneId: string | undefined = undefined;
@@ -384,26 +356,23 @@ fastify.post('/webhook', async (request, reply) => {
      if (phoneId) {
         const org = await getOrgByPhoneId(phoneId);
         if (org?.config?.appSecret) {
-           console.log(`🛡️ [DEBUG] Using Custom App Secret for Phone ID: ${phoneId}`);
+           logger.debug({ phoneId }, `🛡️ [DEBUG] Using Custom App Secret`);
            appSecret = org.config.appSecret;
         }
      }
   } catch (e) {
-     fastify.log.warn('Could not parse raw body for dynamic secret lookup');
+     logger.warn('Could not parse raw body for dynamic secret lookup');
   }
 
-  // Security: Verify Signature using the dynamic secret
   if (!verifySignature(rawBody, signature, appSecret)) {
-    const expected = crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex');
-    fastify.log.warn(`❌ Invalid Webhook Signature! Received: ${signature}, Expected: sha256=${expected}`);
+    logger.warn({ signature }, `❌ Invalid Webhook Signature!`);
     return reply.status(403).send('Invalid Signature');
   }
 
-  // Parse Body (Already parsed by fastify if successful above, using request.body)
   const result = WhatsAppWebhookSchema.safeParse(request.body);
   if (!result.success) {
-    fastify.log.error(result.error, 'Invalid Webhook Payload');
-    return reply.status(200).send('OK'); // Return 200 to acknowledge anyway
+    logger.error({ err: result.error }, 'Invalid Webhook Payload');
+    return reply.status(200).send('OK'); 
   }
 
   const entry = result.data.entry[0];
@@ -411,67 +380,55 @@ fastify.post('/webhook', async (request, reply) => {
   const value = change.value;
 
   if (!value.messages || value.messages.length === 0) {
-    return reply.status(200).send('OK'); // Status update, ignore
+    return reply.status(200).send('OK'); 
   }
 
   const message = value.messages[0];
   const businessPhoneId = value.metadata.phone_number_id;
   const from = message.from;
 
-  // --- Multi-Tenant Identity Prioritization (Phase 8.1) ---
-  // Priority 1: Check if the SENDER is a Boss of an org (Shared SIM logic)
   const fromNormalized = parseAndFormatPhone(from) || from;
   const { findOrgByAdminPhone } = await import('@naija-agent/firebase');
   let org = await findOrgByAdminPhone(fromNormalized);
   
   if (!org) {
-    // Priority 2: Fallback to Org linked by SIM Phone ID (Standard logic)
     org = await getOrgByPhoneId(businessPhoneId);
   }
   
   if (!org) {
-    fastify.log.warn(`Unknown Business Phone ID: ${businessPhoneId}`);
+    logger.warn({ businessPhoneId }, `Unknown Business Phone ID`);
     return reply.status(200).send('OK');
   }
 
-  // Idempotency: Check if we processed this message_id for this tenant
   const processedKey = `processed:${org.id}:${message.id}`;
   const isProcessed = await redisConnection.exists(processedKey);
   if (isProcessed) {
-    fastify.log.info(`Duplicate message ${message.id} for org ${org.id}, skipping.`);
+    logger.info({ messageId: message.id, orgId: org.id }, `Duplicate message, skipping.`);
     return reply.status(200).send('OK');
   }
 
-  // Mark as processed (Expire in 1 hour)
   await redisConnection.setex(processedKey, 3600, '1');
 
-  // --- Phase 4b: Compliance (Opt-In/Opt-Out) ---
   const textBody = message.type === 'text' ? message.text?.body?.trim().toUpperCase() : '';
   
-  // 1. Check for STOP Commands
   if (textBody && ['STOP', 'UNSUBSCRIBE', 'CANCEL', 'END'].includes(textBody)) {
-    console.log(`🚫 User ${from} opted OUT.`);
+    logger.info({ from, orgId: org.id }, `🚫 User opted OUT.`);
     await setOptOut(org.id, from, true);
-    // Ideally queue a confirmation message here: "You have been unsubscribed."
     return reply.status(200).send('OK');
   }
 
-  // 2. Check for START Commands
   if (textBody && ['START', 'SUBSCRIBE', 'UNSTOP'].includes(textBody)) {
-    console.log(`✅ User ${from} opted IN.`);
+    logger.info({ from, orgId: org.id }, `✅ User opted IN.`);
     await setOptOut(org.id, from, false);
-    // Ideally queue a confirmation message here: "Welcome back!"
     return reply.status(200).send('OK');
   }
 
-  // 3. Check Status (The Gatekeeper)
   const isOptedOut = await checkOptOut(org.id, from);
   if (isOptedOut) {
-    console.log(`Skipping message from opted-out user ${from}`);
+    logger.info({ from }, `Skipping message from opted-out user`);
     return reply.status(200).send('OK');
   }
 
-  // Construct Job Data
   const jobData: JobData = {
     type: message.type === 'audio' ? 'audio' : message.type === 'image' ? 'image' : (message.type === 'document' ? 'document' : 'text'),
     orgId: org.id,
@@ -491,22 +448,17 @@ fastify.post('/webhook', async (request, reply) => {
     },
   };
 
-  // Push to Queue (Circuit Breaker)
   try {
     await whatsappQueue.add('process-message', jobData, {
       removeOnComplete: true,
-      removeOnFail: 100, // Keep last 100 failed jobs for debugging
-      attempts: 3, // Retry up to 3 times
-      backoff: {
-        type: 'exponential',
-        delay: 1000, // 1s, 2s, 4s
-      },
+      removeOnFail: 100, 
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 1000 },
     });
-    fastify.log.info(`Queued job for ${from}`);
+    logger.info({ from, orgId: org.id }, `Queued messaging job.`);
     return reply.status(200).send('OK');
   } catch (err: any) {
-    fastify.log.error(`🚨 [REDIS_FAIL] Failed to queue message from ${from}: ${err.message}`);
-    // Return 503 so WhatsApp retries later
+    logger.error({ from, error: err.message }, `🚨 [REDIS_FAIL] Failed to queue message`);
     return reply.status(503).send('Service Unavailable - Queue Error');
   }
 });
@@ -523,7 +475,7 @@ fastify.post('/send', async (request, reply) => {
     text: z.string().optional(),
     templateName: z.string().optional(),
     languageCode: z.string().default('en_US'),
-    phoneId: z.string().optional(), // Optional, defaults to env or first org
+    phoneId: z.string().optional(), 
   });
 
   const result = schema.safeParse(request.body);
@@ -537,7 +489,6 @@ fastify.post('/send', async (request, reply) => {
     return reply.status(400).send('Either text or templateName is required');
   }
 
-  // Use provided phoneId or fallback to the one in env (if single tenant)
   const effectivePhoneId = phoneId || process.env.WHATSAPP_PHONE_ID;
 
   if (!effectivePhoneId) {
@@ -547,8 +498,8 @@ fastify.post('/send', async (request, reply) => {
   const jobData: JobData = {
     type: templateName ? 'template' : 'text',
     phoneId: effectivePhoneId,
-    orgId: 'system', // System job
-    from: to, // In outbound context, 'from' is the recipient
+    orgId: 'system', 
+    from: to, 
     messageId: `OUT-${Date.now()}`,
     timestamp: Date.now(),
     content: {
@@ -565,7 +516,7 @@ fastify.post('/send', async (request, reply) => {
   return { success: true, jobId: jobData.timestamp };
 });
 
-// 5. SMS Bridge (POST) - AUTO-MATCHING ENGINE
+// 5. SMS Bridge (POST) - ASYNC INGESTION
 fastify.post('/bridge/sms', async (request, reply) => {
   const bridgeSecret = request.headers['x-bridge-secret'] as string;
   if (!bridgeSecret) return reply.status(401).send('Missing Bridge Secret');
@@ -585,7 +536,6 @@ fastify.post('/bridge/sms', async (request, reply) => {
   }
 
   const { from, body, timestamp } = result.data;
-  const phoneId = org.whatsappPhoneId;
 
   // Idempotency: Check if this SMS was already processed
   const rawIdSource = `${timestamp}_${from}_${body}`;
@@ -594,7 +544,7 @@ fastify.post('/bridge/sms', async (request, reply) => {
   const alertDoc = await db.collection('organizations').doc(org.id).collection('sms_alerts').doc(alertId).get();
   
   if (alertDoc.exists) {
-    console.log(`⏭️ [SMS BRIDGE] Already processed alert ${alertId}. Skipping.`);
+    logger.info({ alertId, orgId: org.id }, `⏭️ [SMS BRIDGE] Already processed alert. Skipping.`);
     return { success: true, alertId, note: 'already_processed' };
   }
 
@@ -606,99 +556,32 @@ fastify.post('/bridge/sms', async (request, reply) => {
     receivedAt: new Date(),
   });
 
-  // --- Matching Logic ---
-  let amount = extractAmountFromSMS(body);
-  
-  // 🎯 LLM FALLBACK: If regex fails, use Gemini to parse the bank SMS
-  if (amount === null && process.env.GEMINI_API_KEY) {
-     console.log(`🔍 [SMS BRIDGE] Regex failed for ${org.id}. Calling Gemini...`);
-     try {
-       const genAI = new (await import('@google/generative-ai')).GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-       const model = genAI.getGenerativeModel({ model: "gemini-flash-lite-latest" });       const prompt = `Extract the transaction amount as a number only from this Nigerian bank SMS. 
-       If no amount is found, return "NULL". 
-       SMS: "${body}"`;
-       
-       const aiResult = await model.generateContent(prompt);
-       const aiText = aiResult.response.text().trim();
-       if (aiText !== "NULL") {
-          const parsed = parseFloat(aiText.replace(/[^0-9.]/g, ''));
-          if (!isNaN(parsed)) {
-             amount = parsed;
-             console.log(`✅ [SMS BRIDGE] Gemini extracted ₦${amount} for ${org.id}`);
-          }
-       }
-     } catch (e: any) {
-        console.error(`❌ [SMS BRIDGE] Gemini fallback failed:`, e.message);
-     }
-  }
-
-  if (amount !== null) {
-    const { findPendingTransaction, confirmTransaction, topupTenant } = await import('@naija-agent/firebase');
-
-    // --- REFILL CHECK: Does the SMS body contain the Sovereign's Account Number? ---
-    const sovereignAccount = org.config?.sovereignBankDetails?.accountNumber;
-    const isRefill = sovereignAccount && body.includes(sovereignAccount);
-
-    if (isRefill) {
-       console.log(`💳 [REFILL MATCH] SMS ${alertId} linked to Sovereign account. Crediting Org ${org.id}`);
-       const result = await topupTenant(org.id, amount, alertId);
-       
-       if (result && org.config?.adminPhone) {
-          // Notify Boss via Master Bot (System job)
-          const notificationJob: JobData = {
-            type: 'text',
-            orgId: 'system',
-            phoneId: org.whatsappPhoneId,
-            from: org.config.adminPhone,
-            messageId: `BR-${Date.now()}`,
-            timestamp: Date.now(),
-            content: {
-              text: `✅ *AI Credit Refill Confirmed (SMS Bridge)*\n\nOga, your payment of *₦${amount.toLocaleString()}* has been received via bank alert.\n\nYour bot has been credited! New balance: *₦${(result.newBalance / 100).toLocaleString()}*.`
-            }
-          };
-          await whatsappQueue.add('process-message', notificationJob, { removeOnComplete: true });
-       }
-    } else {
-       // --- STANDARD SALE MATCHING ---
-       const pendingTx = await findPendingTransaction(org.id, amount);
-       if (pendingTx) {
-         console.log(`✅ [SALE MATCH] Linking SMS ${alertId} to Tx ${pendingTx.id}`);
-         await confirmTransaction(pendingTx.id, alertId);
-
-         // 1. Notify Customer via WhatsApp
-         const customerJob: JobData = {
-           type: 'text',
-           orgId: org.id,
-           phoneId: phoneId,
-           from: pendingTx.from,
-           messageId: `SALE-${Date.now()}`,
-           timestamp: Date.now(),
-           content: {
-             text: `✅ *Payment Confirmed!*\n\nWe have received your payment of *₦${amount.toLocaleString()}*. Your order is now being processed. Thank you!`
-           }
-         };
-         await whatsappQueue.add('process-message', customerJob, { removeOnComplete: true });
-
-         // 2. Notify Boss via WhatsApp (Immediate Sale Alert)
-         if (org.config?.adminPhone) {
-            const bossJob: JobData = {
-              type: 'text',
-              orgId: 'system',
-              phoneId: phoneId,
-              from: org.config.adminPhone,
-              messageId: `BOSS-SALE-${Date.now()}`,
-              timestamp: Date.now(),
-              content: {
-                text: `💰 *SALE CONFIRMED (Bank Alert)!*\n\nOga, a customer (*${pendingTx.from}*) has just paid *₦${amount.toLocaleString()}*.\n\nOrder Ref: ${pendingTx.id}\nI have informed the customer already!`
-              }
-            };
-            await whatsappQueue.add('process-message', bossJob, { removeOnComplete: true });
-         }
-       }
+  // Construct SMS Bridge Job for Asynchronous Processing
+  const bridgeJob: JobData = {
+    type: 'text',
+    orgId: org.id,
+    phoneId: org.whatsappPhoneId,
+    from: from, // SMS Sender
+    messageId: alertId,
+    timestamp: timestamp, // SMS Timestamp
+    content: {
+      text: body // SMS Body
     }
-  }
+  };
 
-  return { success: true, alertId };
+  try {
+    await whatsappQueue.add('process-bridge-sms', bridgeJob, {
+      removeOnComplete: true,
+      removeOnFail: 100,
+      attempts: 5,
+      backoff: { type: 'exponential', delay: 2000 },
+    });
+    logger.info({ alertId, orgId: org.id }, `📡 [SMS BRIDGE] Queued alert for async processing.`);
+    return { success: true, alertId, queued: true };
+  } catch (err: any) {
+    logger.error({ alertId, error: err.message }, `🚨 [REDIS_FAIL] Failed to queue SMS alert`);
+    return reply.status(503).send('Queue Error');
+  }
 });
 
 // 6. SMS Bridge Heartbeat (POST)
@@ -709,27 +592,24 @@ fastify.post('/bridge/heartbeat', async (request, reply) => {
   const org = await getCachedOrgBySecret(bridgeSecret);
   if (!org) return reply.status(403).send('Invalid Bridge Secret');
 
-  // Store heartbeat in Redis (Expire in 24h)
   const heartbeatKey = `bridge_heartbeat:${org.id}`;
   await redisConnection.set(heartbeatKey, Date.now().toString());
 
-  console.log(`💓 [HEARTBEAT] Bridge for ${org.name} is alive.`);
+  logger.info({ orgId: org.id }, `💓 [HEARTBEAT] Bridge is alive.`);
   return { success: true };
 });
 
-// 4. Proactive Cron (GET) - Triggered by Railway Scheduler
+// 7. Proactive Cron (GET)
 fastify.get('/cron/daily-reports', async (request, reply) => {
   const cronSecret = request.headers['x-cron-secret'];
   
   if (cronSecret !== process.env.CRON_SECRET) {
-    console.warn('❌ Unauthorized CRON attempt!');
+    logger.warn('❌ Unauthorized CRON attempt!');
     return reply.status(401).send('Unauthorized');
   }
 
-  // 🛡️ [PHASE 5.20]: Stability Refactor
-  // Instead of doing the work in the API, we just trigger the per-org worker jobs.
   const orgs = await getActiveOrganizations();
-  console.log(`📡 [CRON] Triggering morning pulse for ${orgs.length} orgs.`);
+  logger.info({ count: orgs.length }, `📡 [CRON] Triggering daily reports.`);
 
   for (const org of orgs) {
     if (!org.config?.adminPhone) continue;
@@ -748,97 +628,63 @@ fastify.get('/cron/daily-reports', async (request, reply) => {
     );
   }
 
-  // --- SOVEREIGN EMPIRE REPORT (PHASE 5.19) ---
   if (process.env.MASTER_ADMIN_PHONE) {
-      // For the Master report, we'll keep it simple in the API or move it to a special worker job.
-      // Since it's global stats, we'll just queue a 'master-report' and let the worker fetch them.
       await whatsappQueue.add('master-report', {}, { removeOnComplete: true });
   }
 
   return reply.send({ status: 'success', triggered: orgs.length });
 });
 
-// 5. Cart Recovery Cron (GET)
 fastify.get('/cron/cart-recovery', async (request, reply) => {
   const cronSecret = request.headers['x-cron-secret'];
-  
-  if (cronSecret !== process.env.CRON_SECRET) {
-    console.warn('❌ Unauthorized CRON attempt!');
-    return reply.status(401).send('Unauthorized');
-  }
+  if (cronSecret !== process.env.CRON_SECRET) return reply.status(401).send('Unauthorized');
 
   const recoveryJob: JobData = {
-    type: 'text', // Dummy type
-    orgId: 'system',
-    phoneId: '',
-    from: 'system',
-    messageId: `REC-${Date.now()}`,
-    timestamp: Date.now(),
-    content: {}
+    type: 'text', orgId: 'system', phoneId: '', from: 'system',
+    messageId: `REC-${Date.now()}`, timestamp: Date.now(), content: {}
   };
 
   await whatsappQueue.add('hourly-cart-recovery', recoveryJob, { removeOnComplete: true });
-  console.log('📡 [CRON] Triggered hourly cart recovery job.');
-  
+  logger.info('📡 [CRON] Triggered hourly cart recovery.');
   return reply.send({ status: 'success' });
 });
 
-// 6. Appointment Reminders Cron (GET)
 fastify.get('/cron/reminders', async (request, reply) => {
   const cronSecret = request.headers['x-cron-secret'];
-  
-  if (cronSecret !== process.env.CRON_SECRET) {
-    console.warn('❌ Unauthorized CRON attempt!');
-    return reply.status(401).send('Unauthorized');
-  }
+  if (cronSecret !== process.env.CRON_SECRET) return reply.status(401).send('Unauthorized');
 
   const jobData: JobData = {
-    type: 'text',
-    orgId: 'system',
-    phoneId: '',
-    from: 'system',
-    messageId: `REM-${Date.now()}`,
-    timestamp: Date.now(),
-    content: {}
+    type: 'text', orgId: 'system', phoneId: '', from: 'system',
+    messageId: `REM-${Date.now()}`, timestamp: Date.now(), content: {}
   };
 
   await whatsappQueue.add('hourly-reminder-scan', jobData, { removeOnComplete: true });
-  console.log('📡 [CRON] Triggered hourly appointment reminder scan.');
-  
+  logger.info('📡 [CRON] Triggered hourly appointment reminder scan.');
   return reply.send({ status: 'success' });
 });
 
-// 7. Inventory Cleanup/Alerts Cron (GET)
 fastify.get('/cron/inventory-alerts', async (request, reply) => {
   const cronSecret = request.headers['x-cron-secret'];
-  
-  if (cronSecret !== process.env.CRON_SECRET) {
-    console.warn('❌ Unauthorized CRON attempt!');
-    return reply.status(401).send('Unauthorized');
-  }
+  if (cronSecret !== process.env.CRON_SECRET) return reply.status(401).send('Unauthorized');
 
   const jobData: JobData = {
-    type: 'text',
-    orgId: 'system',
-    phoneId: '',
-    from: 'system',
-    messageId: `INV-${Date.now()}`,
-    timestamp: Date.now(),
-    content: {}
+    type: 'text', orgId: 'system', phoneId: '', from: 'system',
+    messageId: `INV-${Date.now()}`, timestamp: Date.now(), content: {}
   };
 
   await whatsappQueue.add('hourly-inventory-cleanup', jobData, { removeOnComplete: true });
-  console.log('📡 [CRON] Triggered hourly inventory cleanup/alert job.');
-  
+  logger.info('📡 [CRON] Triggered hourly inventory cleanup/alert.');
   return reply.send({ status: 'success' });
 });
 
 // Start Server
 const start = async () => {
   try {
-    await fastify.listen({ port: parseInt(process.env.PORT || '3000'), host: '0.0.0.0' });
-  } catch (err) {
-    fastify.log.error(err);
+    const port = parseInt(process.env.PORT || '3000');
+    await fastify.listen({ port, host: '0.0.0.0' });
+    logger.info({ port }, '🚀 [API] Server Listening');
+  } catch (err: any) {
+    logger.error({ err: err.message }, 'Failed to start API server');
     process.exit(1);
   }
 };

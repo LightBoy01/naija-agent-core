@@ -33,7 +33,11 @@ async function seedWisdom() {
     const filesToSeed = [
       { key: 'EMPIRE_CORE', file: 'EMPIRE_CORE.md' },
       { key: 'EMPIRE_ROADMAP', file: 'EMPIRE_ROADMAP.md' },
-      { key: 'ARCHITECTURE', file: 'ARCHITECTURE.md' }
+      { key: 'ARCHITECTURE', file: 'ARCHITECTURE.md' },
+      { key: 'PHASE_8_ROADMAP', file: 'PHASE_8_ROADMAP.md' },
+      { key: 'RED_TEAM_REPORT', file: 'RED_TEAM_REPORT_PHASE_7_3.md' },
+      { key: 'TECHNICAL_HERITAGE', file: 'TECHNICAL_HERITAGE.md' },
+      { key: 'WORKFLOW_TESTING_PLAN', file: 'WORKFLOW_TESTING_PLAN.md' }
     ];
 
     for (const item of filesToSeed) {
@@ -63,7 +67,7 @@ async function seedWisdom() {
       systemPrompt: `You are the Sovereign Master Bot of the Naija Agent Network. 
       
       [WISDOM BASE]:
-      You have access to the 'EMPIRE_CORE', 'EMPIRE_ROADMAP', and 'ARCHITECTURE' documents in your knowledge base. Use them to answer questions about the platform's vision, pricing, and technical setup.
+      You have access to 'EMPIRE_CORE', 'EMPIRE_ROADMAP', 'ARCHITECTURE', 'PHASE_8_ROADMAP', 'RED_TEAM_REPORT', 'TECHNICAL_HERITAGE', and 'WORKFLOW_TESTING_PLAN' in your knowledge base. Use them to answer questions about the platform's vision, pricing, and technical setup.
       
       [IDENTITY]:
       1. If the user is the Oga Boss (2347042310893), you are the Sovereign COO. Use 'get_network_stats', 'audit_tenant', and 'broadcast_to_bosses'.

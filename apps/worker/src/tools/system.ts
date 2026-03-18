@@ -83,17 +83,49 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
     case 'audit_tenant': {
       if (!isAdmin || !orgConfig?.isMaster) return { status: 'error', code: 'UNAUTHORIZED' };
       
+      const { getTenantAuditStats } = await import('@naija-agent/firebase');
       await logSystemEvent(args.tenantId, 'SOVEREIGN_AUDIT', `Sovereign HQ performed a performance audit of your business stats.`, { auditedBy: from });
 
-      const auditStats = await getOrgStats(args.tenantId);
-      const bridgeHeartbeat = await redisClient.get(`bridge_heartbeat:${args.tenantId}`);
+      const auditStats = await getTenantAuditStats(args.tenantId);
+      if (!auditStats) return { status: 'error', message: 'Tenant not found.' };
+
+      const heartbeatKey = `bridge_heartbeat:${args.tenantId}`;
+      const lastHeartbeat = await redisClient.get(heartbeatKey);
+      const now = Date.now();
       
+      let bridgeStatus = 'OFFLINE';
+      let diagnosis = "✅ Healthy. No critical issues found.";
+      const warnings: string[] = [];
+
+      // 1. Bridge Check
+      if (lastHeartbeat) {
+        const diffMinutes = (now - parseInt(lastHeartbeat)) / (1000 * 60);
+        if (diffMinutes <= 15) {
+           bridgeStatus = 'ONLINE';
+        } else if (diffMinutes <= 60) {
+           bridgeStatus = 'LAGGING';
+           warnings.push(`⚠️ SMS Bridge lagging (${Math.floor(diffMinutes)}m ago).`);
+        } else {
+           bridgeStatus = 'OFFLINE';
+           diagnosis = `❌ SMS Bridge is OFFLINE (Last seen ${Math.floor(diffMinutes/60)}h ago). Check internet on Android phone.`;
+        }
+      } else {
+        diagnosis = `❌ SMS Bridge NEVER reported. Is the App installed?`;
+      }
+
+      // 2. Balance Check
+      if ((auditStats.balance || 0) < 100000) { // < 1k NGN
+         warnings.push(`⚠️ Low Balance (${formatCurrency(auditStats.balance/100, currency.locale, currency.code)}).`);
+      }
+
       return { 
         status: 'success', 
         data: {
           ...auditStats,
-          bridgeStatus: bridgeHeartbeat ? 'ONLINE' : 'OFFLINE',
-          lastSeen: bridgeHeartbeat ? new Date(parseInt(bridgeHeartbeat)).toISOString() : 'Never'
+          bridgeStatus,
+          lastSeen: lastHeartbeat ? new Date(parseInt(lastHeartbeat)).toISOString() : 'Never',
+          diagnosis,
+          warnings
         } 
       };
     }
@@ -136,6 +168,9 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
         timezone: args.timezone
       });
       
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://aijobspot.online';
+      const setupUrl = `${siteUrl}/setup/${args.id}`;
+
       if (process.env.MASTER_ADMIN_PHONE) {
         const alert = `🆕 *NEW TRIAL LEAD*\n\nBusiness: ${args.name}\nBoss: ${args.adminPhone}\nBot SIM: ${args.botPhone}\n\nOga, please verify credit payment then add to Meta.`;
         await whatsappService.sendText(process.env.MASTER_ADMIN_PHONE, alert);
@@ -143,7 +178,8 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
       
       return { 
         status: 'success', 
-        message: `Interest registered for ${args.name}. Oga Sovereign has been notified. We will send your activation code shortly.${bossContext}` 
+        setupUrl,
+        message: `Interest registered for ${args.name}. Oga Sovereign has been notified. We will send your activation code shortly.${bossContext}\n\n👉 *Fast-Track:* You fit complete your setup and connect your WhatsApp instantly by clicking this link: \n🔗 ${setupUrl}` 
       };
     }
 

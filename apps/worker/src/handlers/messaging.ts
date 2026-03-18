@@ -19,6 +19,7 @@ import { handleToolCall } from '../tool-handlers.js';
 import { AUTH_REQUIRED_TOOLS as PIN_PROTECTED_TOOLS } from '../tools/definitions.js';
 import { getPriceGuardRegex, formatCurrency, parsePrice } from '../utils/currency.js';
 import { formatInTimeZone } from 'date-fns-tz';
+import { logger } from '../utils/logger.js';
 
 export interface MessagingDependencies {
   org: Organization;
@@ -44,19 +45,52 @@ export async function handleMessage(
   } = deps;
 
   const isManager = isAdmin || isStaff;
+
+  // 🛡️ [PIN INTERCEPTOR]: Deterministic Unlock (Phase 7.3)
+  if (isManager && type === 'text' && content.text && /^\d{4}$/.test(content.text.trim())) {
+      const pinAttempt = content.text.trim();
+      const { setAdminAuth } = await import('@naija-agent/firebase');
+      const bcrypt = await import('bcrypt');
+
+      let isAuthenticated = false;
+
+      if (isAdmin) {
+          const storedHash = org.config?.adminPin;
+          if (storedHash) {
+              const match = await bcrypt.compare(pinAttempt, storedHash);
+              if (match) {
+                  await setAdminAuth(orgId, from);
+                  isAuthenticated = true;
+              }
+          } else if (pinAttempt === '1234') { 
+              // Legacy/Default Fallback
+              await setAdminAuth(orgId, from);
+              isAuthenticated = true;
+          }
+      } 
+      // Staff PIN logic could go here if implemented
+
+      if (isAuthenticated) {
+          await tenantWhatsAppService.sendText(from, `✅ *PIN Accepted!* \n\nYou have unlocked **Admin Mode** for 2 hours. \n\n_System access granted._`);
+      } else {
+          await tenantWhatsAppService.sendText(from, `❌ *Incorrect PIN.* \n\nPlease try again.`);
+      }
+      return { success: true };
+  }
+
   const currency = {
     code: org.currency?.code || 'NGN',
     symbol: org.currency?.symbol || '₦',
     locale: org.currency?.locale || 'en-NG'
   };
-
+...
   // 🛡️ [PHASE 8]: Timezone Awareness
   const orgTimeZone = org.timezone || 'Africa/Lagos';
   let currentLocalTime;
   try {
      currentLocalTime = formatInTimeZone(new Date(), orgTimeZone, 'yyyy-MM-dd HH:mm:ss');
   } catch (tzError) {
-     console.warn(`⚠️ Invalid timezone '${orgTimeZone}' for org ${orgId}. Defaulting to UTC.`);
+     logger.warn({ orgTimeZone, orgId }, `⚠️ Invalid timezone for org. Defaulting to UTC.`);
      currentLocalTime = new Date().toISOString();
   }
 
@@ -68,6 +102,11 @@ export async function handleMessage(
   3. PRONOUNS: Check recent history to see what "it" or "that" refers to.
   4. SLANG/PIDGIN: If you don't understand a specific local term, politely ask: "Madam/Oga, abeg wetin be [term]?"
   5. CONFIRMATION: For high-value actions, summarize what you understood before acting.
+  6. HUMAN HANDOFF: If the user says "I want to speak to a human", "Support", or is clearly frustrated, use 'request_human_handoff'.
+  7. UNKNOWN/RANDOM INPUT: If the user sends gibberish, random letters, or something unrelated to business:
+     - Do NOT hallucinate a response.
+     - Politely ask them to rephrase.
+     - Offer a quick menu: "I can help you check prices, track orders, or book appointments."
   `;
 
   // 1. Training Confirmation Logic (Phase 8.2)
@@ -100,7 +139,7 @@ export async function handleMessage(
   
   // 🛡️ [SECURITY]: Public customers cannot talk in the Command Center Group
   if (isCommandCenter && !isAdmin && !isStaff) {
-      console.warn(`🛡️ [SECURITY] Blocked public user ${from} from interacting in Command Center for ${orgId}`);
+      logger.warn({ from, orgId }, `🛡️ [SECURITY] Blocked public user from interacting in Command Center`);
       return { success: true, reason: 'COMMAND_CENTER_RESTRICTED' };
   }
 
@@ -110,6 +149,10 @@ export async function handleMessage(
           systemPrompt = `You are the Sovereign Master Bot of the Naija Agent Network. You are talking to the Oga Boss (The Creator).
           Your role is to manage the entire Empire. Use 'get_network_stats', 'audit_tenant', and 'broadcast_to_bosses' to assist the Oga Boss.
           Be extremely loyal, sharp, and concise. The Empire is in your hands.
+          
+          [WISDOM BASE]:
+          ${knowledgeContext || 'No documents loaded.'}
+
           ${GLOBAL_PROTOCOL}`;
       } else {
           systemPrompt = `You are the Official Onboarding Specialist for Naija Agent. 
@@ -117,6 +160,12 @@ export async function handleMessage(
           Explain that we provide "Digital Apprentices" (AI Bots) that handle sales, verify bank alerts, and manage shops for Nigerian businesses.
           Encourage them to start a FREE trial by telling you their business name. 
           Use 'register_trial_interest' once they are ready. 
+          
+          [SETUP ASSISTANCE]:
+          - If the user is struggling with the setup website or Meta verification, ask them to send a SCREENSHOT of the error.
+          - Analyze any image they send to diagnose the issue.
+          - If you cannot solve it, use 'request_human_handoff' to alert the technical team.
+
           Be helpful, professional, and street-smart. Do NOT mention "Sovereign", "Empire", or internal network stats.
           ${GLOBAL_PROTOCOL}`;
       }
@@ -222,9 +271,9 @@ export async function handleMessage(
          const { uploadMedia } = await import('@naija-agent/storage');
          const fileName = `${Date.now()}_${content.imageId.substring(0, 8)}.jpg`;
          permanentUrl = await uploadMedia(orgId, fileName, buffer, mimeType || 'image/jpeg');
-         console.log(`🖼️ [STORAGE] Persistent URL generated for Boss/Staff of ${orgId}: ${permanentUrl}`);
+         logger.info({ orgId, permanentUrl }, `🖼️ [STORAGE] Persistent URL generated`);
        } catch (e: any) {
-         console.error(`❌ [STORAGE] Upload failed for ${orgId}:`, e.message);
+         logger.error({ orgId, error: e.message }, `❌ [STORAGE] Upload failed`);
        }
     }
 
@@ -321,7 +370,7 @@ export async function handleMessage(
         // --- SECURITY GATEKEEPER: PRE-TOOL CALL ---
         const isProtected = PIN_PROTECTED_TOOLS.includes(call.name);
         if (isProtected && (!isAdmin || !isAuth)) {
-           console.warn(`🛡️ [AUTH BLOCKED] Tool ${call.name} blocked for ${from} (Unauthorized/Locked)`);
+           logger.warn({ tool: call.name, from }, `🛡️ [AUTH BLOCKED] Tool blocked (Unauthorized/Locked)`);
            functionResponses.push({ functionResponse: { name: call.name, response: { status: 'error', code: 'AUTH_REQUIRED', message: 'Oga, please type your 4-digit PIN to proceed.' } } });
            continue;
         }
@@ -349,8 +398,18 @@ export async function handleMessage(
       }
     }
   } catch (geminiError: any) {
-    console.error(`❌ [GEMINI_ERROR] Job:${job.id} Org:${orgId}:`, geminiError.message);
+    logger.error({ jobId: job.id, orgId, error: geminiError.message }, `❌ [GEMINI_ERROR]`);
     responseText = "Oga, my head dey spin small (AI Error). Abeg try again in one minute.";
+
+    // --- SOVEREIGN SNITCH: AI CRITICAL FAILURE ---
+    if (process.env.MASTER_ADMIN_PHONE) {
+       try {
+         const snitchMsg = `🚨 *AI BRAIN FAILURE*\n\nOrg: ${orgId}\nError: ${geminiError.message}\n\nI have told the user to wait.`;
+         await tenantWhatsAppService.sendText(process.env.MASTER_ADMIN_PHONE, snitchMsg);
+       } catch (e: any) {
+         logger.error({ error: e.message }, `Snitch failed`);
+       }
+    }
   }
 
   // 7. Finalize & Reply
@@ -427,7 +486,7 @@ export async function handleMessage(
               }
 
               if (!isConfirmedValid) {
-                  console.warn(`🛡️ [PRICE GUARD] Hallucination detected! Redacting: ${match[0]}`);
+                  logger.warn({ redacted: match[0], orgId }, `🛡️ [PRICE GUARD] Hallucination detected! Redacting.`);
                   finalMessage = finalMessage.replace(match[0], `${currency.symbol}[Verification Pending]`);
                   await logSystemEvent(orgId, 'PRICE_GUARD_REDACTION', `Redacted hallucinated price: ${match[0]}`, { originalMessage: responseText });
               }
@@ -483,13 +542,13 @@ export async function handleMessage(
              }
           }
         } catch (imgError: any) {
-          console.warn(`⚠️ Visual reply failed for ${call.name}:`, imgError.message);
+          logger.warn({ tool: call.name, error: imgError.message }, '⚠️ Visual reply failed');
         }
       }
   }
 
   if (!finalMessage || finalMessage.trim().length === 0) {
-    finalMessage = "I understand. How else fit I help you today?";
+    finalMessage = "Oga, I no too catch that one. Abeg try talk am again or tell me wetin you want buy.";
   }
 
   // --- POST-PROCESSING: STAGING SUMMARY (Phase 8.2) ---

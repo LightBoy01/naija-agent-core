@@ -11,7 +11,8 @@ import {
   verifyAdminPin, 
   setAdminAuth, 
   getActivitiesByCustomer, 
-  getRecentActivities 
+  getRecentActivities,
+  getChatHistory // Added
 } from '@naija-agent/firebase';
 import { Queue } from 'bullmq';
 import { parseAndFormatPhone, formatPhoneForDisplay } from '../utils/phone.js';
@@ -20,6 +21,7 @@ export async function handleAdminTools(name: string, args: any, ctx: HandlerCont
   const { orgId, from, isStaff, isAdmin, whatsappService, redisClient, orgConfig, customerName, currency } = ctx;
 
   switch (name) {
+    // ... (cases remain same until get_recent_activities)
     case 'authorize_staff': {
       const normalizedPhone = parseAndFormatPhone(args.phone, currency.locale?.split('-')[1] as any || 'NG');
       if (!normalizedPhone) return { status: 'error', message: 'Invalid phone number format.' };
@@ -195,13 +197,28 @@ export async function handleAdminTools(name: string, args: any, ctx: HandlerCont
       }
     }
 
-    case 'escalate_to_boss': {
-      if (isAdmin) return { status: 'error', message: 'You are the Boss! Why escalate to yourself?' };
-      if (!orgConfig?.adminPhone) return { status: 'error', message: 'No admin phone configured for escalation.' };
+    case 'request_human_handoff': {
+      if (isAdmin && !orgConfig?.isMaster) {
+         return { status: 'error', message: 'Oga, you are the Boss! Why you dey report to yourself?' };
+      }
+
+      const targetPhone = orgConfig?.commandCenterGroupId || orgConfig?.adminPhone;
+      if (!targetPhone) return { status: 'error', message: 'Support contact not configured.' };
+
+      const isMaster = orgConfig?.isMaster;
+      const role = isAdmin ? 'BOSS' : (isStaff ? 'STAFF' : 'CUSTOMER');
       
-      const alertMessage = `📣 [ESCALATION NEEDED]\nOga, I need help with Customer *${customerName || 'Unknown'}* (${from}).\nReason: ${args.reason}`;
-      await whatsappService.sendText(orgConfig.adminPhone, alertMessage);
-      return { status: 'success', message: "I've informed the Boss. They will get back to you soon. How else can I help?" };
+      const alertMessage = isMaster 
+         ? `🆘 *SOVEREIGN SUPPORT REQUEST*\n\nUser: ${from} (${role})\nLink: https://wa.me/${from}\nReason: ${args.reason}\n\nAction Required.`
+         : `📣 [HUMAN REQUEST]\n\nCustomer: *${customerName || 'Unknown'}* (${from})\nLink: https://wa.me/${from}\nReason: ${args.reason}\n\nPlease take over!`;
+
+      await whatsappService.sendText(targetPhone, alertMessage);
+      
+      const reply = isMaster
+         ? "I have alerted the Sovereign Support Team. They will contact you shortly."
+         : "I've informed a human staff member. They will join this chat soon.";
+
+      return { status: 'success', message: reply };
     }
 
     case 'get_customer_info': {
@@ -219,6 +236,33 @@ export async function handleAdminTools(name: string, args: any, ctx: HandlerCont
       const recentActivities = await getRecentActivities(orgId, args.limit || 10);
       if (recentActivities.length === 0) return { status: 'success', message: "Your activity log is empty for now." };
       return { status: 'success', data: recentActivities };
+    }
+
+    case 'review_customer_chat': {
+      if (!isStaff && !isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
+      
+      const normalizedPhone = parseAndFormatPhone(args.phone, currency.locale?.split('-')[1] as any || 'NG');
+      if (!normalizedPhone) return { status: 'error', message: 'Invalid phone number format.' };
+
+      // Reconstruct Chat ID: {orgId}_{phone}
+      const targetChatId = `${orgId}_${normalizedPhone}`;
+      const history = await getChatHistory(targetChatId, 20); // Last 20 messages
+
+      if (history.length === 0) {
+        return { status: 'success', message: `No chat history found for customer ${formatPhoneForDisplay(normalizedPhone)}.` };
+      }
+
+      const formattedLog = history.map(msg => {
+         const time = msg.timestamp ? new Date((msg.timestamp as any).toMillis()).toLocaleTimeString() : 'Unknown Time';
+         const sender = msg.role === 'user' ? '👤 Customer' : '🤖 Bot';
+         const content = msg.type === 'text' ? (msg.content as any).text : `[${msg.type.toUpperCase()}]`;
+         return `[${time}] ${sender}: ${content}`;
+      }).join('\n');
+
+      return { 
+         status: 'success', 
+         message: `📜 *CHAT LOG: ${formatPhoneForDisplay(normalizedPhone)}*\n(Last 20 messages)\n\n${formattedLog}\n\nOga, analyze this log to see what happened.` 
+      };
     }
 
     default:

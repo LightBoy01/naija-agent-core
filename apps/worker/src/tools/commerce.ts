@@ -24,13 +24,15 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
   switch (name) {
     case 'get_payment_instructions':
       if (args.purpose === 'refill') {
-        const details = orgConfig?.sovereignBankDetails;
-        if (!details) return { status: 'error', message: 'Sovereign bank details not configured. Please contact support.' };
-        return { status: 'success', purpose: 'refill', details };
+        const bank = orgConfig?.sovereignBankDetails;
+        if (!bank) return { status: 'error', message: 'Sovereign bank details not configured. Please contact support.' };
+        const refillMsg = `🏦 *SOVEREIGN REFILL INSTRUCTIONS*\n\n1. Transfer the amount to:\n   - Bank: ${bank.bankName}\n   - Account: ${bank.accountNumber}\n   - Name: ${bank.accountName}\n\n2. Snap the receipt and send it here.\n3. I will credit your AI wallet instantly!`;
+        return { status: 'success', purpose: 'refill', message: refillMsg, details: bank };
       } else {
-        const details = orgConfig?.bankDetails;
-        if (!details) return { status: 'error', message: 'Business bank details not configured. Please ask the Boss.' };
-        return { status: 'success', purpose: 'sale', details };
+        const bank = orgConfig?.bankDetails;
+        if (!bank) return { status: 'error', message: 'Business bank details not configured. Please ask the Boss.' };
+        const saleMsg = `🏦 *PAYMENT INSTRUCTIONS*\n\nOga, abeg pay into this account:\n   - Bank: ${bank.bankName}\n   - Account: ${bank.accountNumber}\n   - Name: ${bank.accountName}\n\nOnce you pay, send the receipt here and I will start packaging your order!`;
+        return { status: 'success', purpose: 'sale', message: saleMsg, details: bank };
       }
 
     case 'generate_order_summary': {
@@ -104,20 +106,38 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
       const minAmount = 2000;
       if (args.amount < minAmount) return { status: 'error', message: `Minimum refill amount is ${formatCurrency(minAmount, currency.locale, currency.code)}.` };
       
-      if (!paymentProvider) return { status: 'error', message: 'Online payments not configured. Please use bank transfer instead.' };
-
       const email = `${orgId}@naijaagent.core`; 
-      const link = await paymentProvider.createPaymentLink(orgId, email, args.amount);
       const formattedAmount = formatCurrency(args.amount, currency.locale, currency.code);
-      
+      const bank = orgConfig?.sovereignBankDetails;
+
+      let link = null;
+      if (paymentProvider) {
+        try {
+          link = await paymentProvider.createPaymentLink(orgId, email, args.amount);
+        } catch (e: any) {
+          console.error('❌ [REFILL] Paystack link generation failed:', e.message);
+        }
+      }
+
       if (link) {
         return { 
           status: 'success', 
           link, 
-          message: `Oga, here is your secure Paystack link to buy ${formattedAmount} credit. Once you pay, I will credit your bot instantly!\n\n🔗 ${link}`
+          bank,
+          message: `Oga, here is your secure Paystack link to buy ${formattedAmount} credit. Once you pay, I will credit your bot instantly!\n\n🔗 ${link}\n\n*Bank Fallback:* If the link no work, abeg transfer to ${bank?.bankName || 'Sovereign Bank'} (${bank?.accountNumber || 'N/A'}).`
         };
       }
-      return { status: 'error', message: 'Failed to generate payment link. Please try again.' };
+
+      if (bank) {
+        return {
+          status: 'success',
+          purpose: 'refill_fallback',
+          bank,
+          message: `Oga, Paystack is currently down. Abeg use direct bank transfer for your ${formattedAmount} refill:\n\n🏦 *Bank:* ${bank.bankName}\n🔢 *Account:* ${bank.accountNumber}\n👤 *Name:* ${bank.accountName}\n\nSend me the receipt once you're done!`
+        };
+      }
+
+      return { status: 'error', message: 'Failed to generate payment options. Please contact Sovereign Support.' };
     }
 
     case 'verify_transaction': {
