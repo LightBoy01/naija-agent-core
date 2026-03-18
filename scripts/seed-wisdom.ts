@@ -31,13 +31,13 @@ async function seedWisdom() {
   try {
     const docsDir = path.join(__dirname, '../docs');
     const filesToSeed = [
-      { key: 'EMPIRE_CORE', file: 'EMPIRE_CORE.md' },
-      { key: 'EMPIRE_ROADMAP', file: 'EMPIRE_ROADMAP.md' },
-      { key: 'ARCHITECTURE', file: 'ARCHITECTURE.md' },
-      { key: 'PHASE_8_ROADMAP', file: 'PHASE_8_ROADMAP.md' },
-      { key: 'RED_TEAM_REPORT', file: 'RED_TEAM_REPORT_PHASE_7_3.md' },
-      { key: 'TECHNICAL_HERITAGE', file: 'TECHNICAL_HERITAGE.md' },
-      { key: 'WORKFLOW_TESTING_PLAN', file: 'WORKFLOW_TESTING_PLAN.md' }
+      { key: 'EMPIRE_CORE', file: 'core/EMPIRE_CORE.md' },
+      { key: 'EMPIRE_ROADMAP', file: 'core/EMPIRE_ROADMAP.md' },
+      { key: 'ARCHITECTURE', file: 'core/ARCHITECTURE.md' },
+      { key: 'PHASE_8_ROADMAP', file: 'plans/PHASE_8_ROADMAP.md' },
+      { key: 'RED_TEAM_REPORT', file: 'reports/RED_TEAM_REPORT_PHASE_7_3.md' },
+      { key: 'TECHNICAL_HERITAGE', file: 'core/TECHNICAL_HERITAGE.md' },
+      { key: 'WORKFLOW_TESTING_PLAN', file: 'guides/WORKFLOW_TESTING_PLAN.md' }
     ];
 
     for (const item of filesToSeed) {

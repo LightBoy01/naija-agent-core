@@ -86,7 +86,7 @@ fastify.register(fastifyRawBody, {
 fastify.addHook('onRequest', async (request, reply) => {
   const safeHeaders = { ...request.headers };
   // Redact sensitive headers
-  ['x-api-key', 'x-bridge-secret', 'x-cron-secret', 'authorization'].forEach(key => {
+  ['x-api-key', 'x-bridge-secret', 'x-cron-secret', 'authorization', 'x-hub-signature-256', 'x-paystack-signature'].forEach(key => {
     if (safeHeaders[key]) safeHeaders[key] = '***REDACTED***';
   });
   logger.info({ method: request.method, url: request.url, headers: safeHeaders }, '🔵 [INCOMING REQUEST]');
