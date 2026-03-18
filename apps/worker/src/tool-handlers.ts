@@ -45,7 +45,8 @@ export async function handleToolCall(
   if ([
     'authorize_staff', 'deactivate_staff', 'assign_task_to_staff', 'manage_activity', 
     'get_staff_tasks', 'set_bot_status', 'get_business_report', 'send_broadcast', 
-    'verify_admin_pin', 'escalate_to_boss', 'get_customer_info', 'get_recent_activities'
+    'verify_admin_pin', 'request_human_handoff', 'get_customer_info', 'get_recent_activities',
+    'review_customer_chat'
   ].includes(name)) {
     return await handleAdminTools(name, args, ctx);
   }

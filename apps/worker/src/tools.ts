@@ -233,6 +233,18 @@ export function getTenantTools(
     });
 
     allFunctionDeclarations.push({
+      name: "review_customer_chat",
+      description: "Retrieves the recent chat history (last 20 messages) with a specific customer to diagnose issues. (Manager Only)",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          phone: { type: SchemaType.STRING, description: `The customer's phone number (e.g. ${phoneExample}0000000)` }
+        },
+        required: ["phone"]
+      }
+    });
+
+    allFunctionDeclarations.push({
       name: "add_to_cart",
       description: "Adds a specific product to the customer's shopping cart. (Customer & Manager)",
       parameters: {
@@ -542,18 +554,16 @@ export function getTenantTools(
     );
   }
 
-  // 4. Escalation (Customer Only)
-  if (!isManager) {
-    allFunctionDeclarations.push({
-      name: "escalate_to_boss",
-      description: "Pings the business owner for assistance.",
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: { reason: { type: SchemaType.STRING, description: "Reason" } },
-        required: ["reason"]
-      } as any
-    });
-  }
+  // 4. Escalation & Support (All Users)
+  allFunctionDeclarations.push({
+    name: "request_human_handoff",
+    description: "Requests human assistance. For customers -> notifies the Boss. For Bosses (on Master Bot) -> notifies Sovereign Support.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: { reason: { type: SchemaType.STRING, description: "Reason for needing a human." } },
+      required: ["reason"]
+    }
+  });
 
   return [{ functionDeclarations: allFunctionDeclarations }];
 }

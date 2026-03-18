@@ -11,6 +11,7 @@ import {
 import { formatInTimeZone } from 'date-fns-tz';
 import { PaymentProvider } from '@naija-agent/payments';
 import { formatCurrency } from '../utils/currency.js';
+import { logger } from '../utils/logger.js';
 
 export async function handleDailyReport(
   job: Job<JobData>, 
@@ -21,13 +22,13 @@ export async function handleDailyReport(
   
   const org = await getOrgById(orgId);
   if (!org || !org.config?.adminPhone) {
-     console.warn(`[DAILY REPORT] Org ${orgId} not found or missing adminPhone. Skipping.`);
+     logger.warn({ orgId }, `[DAILY REPORT] Org not found or missing adminPhone. Skipping.`);
      return { success: true };
   }
 
   // 1. Staggered Jitter (Melt-down protection)
   const jitterMs = Math.floor(Math.random() * 600 * 1000); // 0-10 minutes jitter
-  console.log(`[DAILY REPORT] Staggering report for ${org.name} by ${Math.floor(jitterMs/1000)}s`);
+  logger.info({ orgId, jitterSeconds: Math.floor(jitterMs/1000) }, `[DAILY REPORT] Staggering report`);
   await new Promise(r => setTimeout(r, jitterMs));
 
   // 🛡️ [PHASE 5.10]: Normalize to Organization TimeZone
@@ -101,9 +102,9 @@ export async function handleDailyReport(
 
     await tenantWhatsAppService.sendText(org.config.adminPhone, reportMessage);
     await logSystemEvent(org.id, 'PROACTIVE_REPORT', `Sent morning summary for ${dateStr}`);
-    console.log(`✅ [DAILY REPORT] Sent to Boss of ${org.name} (${org.config.adminPhone})`);
+    logger.info({ orgId, adminPhone: org.config.adminPhone }, `✅ [DAILY REPORT] Sent to Boss.`);
   } catch (e: any) {
-    console.error(`❌ [DAILY REPORT] Failed for ${org.id}:`, e.message);
+    logger.error({ orgId, error: e.message }, `❌ [DAILY REPORT] Failed.`);
     throw e; // Retry
   }
   return { success: true };
@@ -116,7 +117,7 @@ export async function handleMasterReport(): Promise<{ success: boolean }> {
   const masterPhoneId = process.env.WHATSAPP_PHONE_ID;
 
   if (!masterPhone || !masterToken || !masterPhoneId) {
-    console.warn('⚠️ [MASTER REPORT] Missing Master Admin credentials in env. Skipping.');
+    logger.warn('⚠️ [MASTER REPORT] Missing Master Admin credentials in env. Skipping.');
     return { success: true };
   }
 
@@ -158,9 +159,9 @@ export async function handleMasterReport(): Promise<{ success: boolean }> {
     const masterWhatsAppService = new WhatsAppService(masterToken, masterPhoneId);
     await masterWhatsAppService.sendText(masterPhone, empireMessage);
     
-    console.log(`✅ [MASTER REPORT] Sent Sovereign pulse with Delta tracking.`);
+    logger.info(`✅ [MASTER REPORT] Sent Sovereign pulse with Delta tracking.`);
   } catch (e: any) {
-    console.error(`❌ [MASTER REPORT] Failed:`, e.message);
+    logger.error({ error: e.message }, `❌ [MASTER REPORT] Failed.`);
     throw e;
   }
   return { success: true };

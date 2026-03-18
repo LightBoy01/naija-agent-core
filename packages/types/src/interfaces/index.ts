@@ -25,7 +25,7 @@ export interface JobData {
 
 // Organization Onboarding State
 export interface OnboardingConfig {
-    step: 'START' | 'NAME' | 'PIN' | 'BANK_NAME' | 'BANK_ACCOUNT' | 'BANK_ACCOUNT_NAME' | 'TONE' | 'COMPLETE' | 'NONE';
+    step: 'START' | 'NAME' | 'PIN' | 'BANK_NAME' | 'BANK_ACCOUNT' | 'BANK_ACCOUNT_NAME' | 'TONE' | 'CUSTOM_TONE' | 'REVIEW' | 'BOT_PHONE' | 'OTP_WAIT' | 'COMPLETE' | 'NONE';
     data: OnboardingData;
 }
 

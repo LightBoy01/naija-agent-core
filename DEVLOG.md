@@ -539,3 +539,28 @@
 
 ### **Verification:**
 *   **Build:** 100% successful build across all packages and apps after resolving strict TypeScript errors in the Dashboard charting library.
+
+## Session 38: The Iron Shield Upgrade (2026-03-18)
+**Status:** 🛡️ **Phase 8.2 (Security & Architecture) Completed**
+
+### **Context:**
+*   **The Goal:** Address critical security vulnerabilities (API logging) and architectural bottlenecks (Synchronous SMS Logic) identified during the recent audit.
+
+### **Actions Taken:**
+*   **Security (API Logging):**
+    *   **Redaction Layer:** Implemented a global `onRequest` hook in `apps/api/src/index.ts` to automatically redact sensitive headers (`x-api-key`, `x-bridge-secret`) before logging.
+    *   **Cleanup:** Removed unsafe `console.log` dumps of raw request headers.
+*   **Architecture (Async SMS Bridge):**
+    *   **Logic Shift:** Refactored the `/bridge/sms` endpoint to queue jobs immediately instead of processing synchronously.
+    *   **Worker Handler:** Created `apps/worker/src/handlers/bridge.ts` to handle the heavy lifting (Regex + LLM parsing) in the background.
+    *   **Benefit:** Eliminates webhook timeouts during high traffic.
+*   **Logic (Onboarding Permissions):**
+    *   **Permission Fix:** Updated `handleOnboarding` to explicitly use the **Master (Sovereign) Token** for infrastructure actions (`addPhoneNumber`), resolving permission errors for new tenants.
+    *   **Logic Gap Patch:** Added a fail-safe "Self-Verify" block for existing bots to re-authenticate if they receive the OTP directly.
+*   **Observability (Standardized Logging):**
+    *   **Pino Integration:** Replaced all `console.log` calls in the Worker application with a structured `pino` logger (`apps/worker/src/utils/logger.ts`).
+    *   **Benefit:** Logs are now machine-readable and include context (Org ID, Job ID) for easier debugging in production.
+
+### **Verification:**
+*   **Build:** 100% successful build across all packages and apps.
+*   **Logic Test:** Simulated the end-to-end "Remote Relay" onboarding workflow with a standalone script (`scripts/test-onboarding-logic.ts`), confirming the Master Bot correctly handles the registration for new tenants.

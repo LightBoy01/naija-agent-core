@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { z } from 'zod';
 import crypto from 'crypto';
+import { parsePhoneNumber } from 'libphonenumber-js';
 
 const WhatsAppSendResponseSchema = z.object({
   messaging_product: z.literal('whatsapp'),
@@ -257,6 +258,45 @@ export class WhatsAppService {
       const metaError = error.response?.data?.error?.message || error.message;
       console.error(`❌ Code Request Failed (${this.phoneId}):`, metaError);
       throw new Error(`Meta Code Request Error: ${metaError}`);
+    }
+  }
+
+  /**
+   * Programmatically adds a phone number to a WABA.
+   * This allows "Sovereign Automation" (adding a number without the UI).
+   * Note: The Display Name may trigger a review.
+   */
+  async addPhoneNumber(wabaId: string, phoneNumber: string, displayName: string): Promise<{ phoneId: string }> {
+    try {
+      const parsed = parsePhoneNumber(phoneNumber, 'NG');
+      if (!parsed) throw new Error('Invalid phone number format');
+
+      const cc = parsed.countryCallingCode;
+      const national = parsed.nationalNumber;
+
+      const response = await axios.post(
+        `${this.baseUrl}/${wabaId}/phone_numbers`,
+        {
+          cc: cc,
+          phone_number: national,
+          display_name: displayName,
+          verified_name: displayName // Request verified name immediately
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.apiToken}`,
+            'Content-Type': 'application/json',
+          },
+          params: this.getAuthParams(),
+        }
+      );
+
+      console.log(`✅ Phone Number Added Successfully! ID: ${response.data.id}`);
+      return { phoneId: response.data.id };
+    } catch (error: any) {
+      const metaError = error.response?.data?.error?.message || error.message;
+      console.error(`❌ Add Phone Number Failed:`, metaError);
+      throw new Error(`Meta Add Number Error: ${metaError}`);
     }
   }
 }

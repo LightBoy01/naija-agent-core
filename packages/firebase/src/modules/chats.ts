@@ -65,29 +65,37 @@ export async function checkOptOut(orgId: string, userPhone: string): Promise<boo
 
 export async function getAbandonedCarts(maxAgeMinutes: number = 120, minAgeMinutes: number = 30) {
   const now = Date.now();
-  const minAge = new Date(now - minAgeMinutes * 60 * 1000);
-  const maxAge = new Date(now - maxAgeMinutes * 60 * 1000);
+  const minAgeTime = now - (minAgeMinutes * 60 * 1000);
+  const maxAgeTime = now - (maxAgeMinutes * 60 * 1000);
+  
+  // Convert timestamps for Firestore query
+  const minDate = new Date(minAgeTime); 
+  const maxDate = new Date(maxAgeTime); 
 
-  const snapshot = await chatsRef
+  // Query: Carts active between minAge (e.g. 30m ago) and maxAge (e.g. 2h ago)
+  // Logic: Updated <= 30 mins ago AND >= 2 hours ago
+  const snapshot = await db.collection('chats')
     .where('isCartActive', '==', true)
-    .where('lastCartUpdateAt', '<=', Timestamp.fromDate(minAge))
-    .where('lastCartUpdateAt', '>=', Timestamp.fromDate(maxAge))
+    .where('lastCartUpdateAt', '<=', Timestamp.fromDate(minDate))
+    .where('lastCartUpdateAt', '>=', Timestamp.fromDate(maxDate))
     .get();
 
-  const abandoned: any[] = [];
+  const abandoned: { orgId: string, userPhone: string, chatId: string }[] = [];
 
-  for (const chatDoc of snapshot.docs) {
-    const chatData = chatDoc.data();
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    const lastNudge = data.lastNudgeAt ? (data.lastNudgeAt as Timestamp).toMillis() : 0;
     
-    if (chatData.lastNudgeAt) {
-       const lastNudge = (chatData.lastNudgeAt as Timestamp).toDate().getTime();
-       if (now - lastNudge < 12 * 60 * 60 * 1000) continue;
+    // Nudge Cooldown: Don't nudge if nudged in last 24 hours
+    if (now - lastNudge > 24 * 60 * 60 * 1000) {
+       abandoned.push({
+         orgId: data.organizationId,
+         userPhone: data.whatsappUserId,
+         chatId: doc.id
+       });
     }
+  });
 
-    const orgId = chatData.organizationId;
-    const userPhone = chatData.whatsappUserId;
-    abandoned.push({ orgId, userPhone, chatId: chatDoc.id });
-  }
   return abandoned;
 }
 

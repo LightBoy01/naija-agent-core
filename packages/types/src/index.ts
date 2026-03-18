@@ -123,6 +123,7 @@ export const OnboardingDataSchema = z.object({
   accountName: z.string().optional(),
   systemPrompt: z.string().optional(),
   timezone: z.string().optional(),
+  botPhone: z.string().optional(),
 });
 
 export type OnboardingData = z.infer<typeof OnboardingDataSchema>;

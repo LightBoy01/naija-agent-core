@@ -1,4 +1,4 @@
-import { Worker, Job } from 'bullmq';
+import { Worker, Job, Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import dotenv from 'dotenv';
 import pino from 'pino';
@@ -7,6 +7,7 @@ import { WhatsAppService } from './services/whatsapp.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getProvider, PaymentProvider } from '@naija-agent/payments';
 import { getTenantTools } from './tools.js';
+import { logger } from './utils/logger.js';
 import { 
   getOrgById, 
   deductBalance,
@@ -21,13 +22,13 @@ import { handleDailyReport, handleMasterReport } from './handlers/reporting.js';
 import { handleOnboarding } from './handlers/onboarding.js';
 import { handleBridgeHealth, handleSystemOutbound, handleTemplateSend, handleRequestOtp } from './handlers/system.js';
 import { handleCartRecovery, handleReminderScan, handleInventoryCleanup, handleScheduledReminder } from './handlers/reminders.js';
+import { handleSmsBridge } from './handlers/bridge.js';
 import { handleMessage, MessagingDependencies } from './handlers/messaging.js';
 import { formatCurrency } from './utils/currency.js';
 import { CountryCode } from 'libphonenumber-js';
 
 dotenv.config();
 
-const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 logger.info('🚀 [VERSION 1.1.0] Worker Service Starting... (Refactored)');
 
 // --- Required Environment Variables ---
@@ -93,6 +94,7 @@ const defaultWhatsAppService = new WhatsAppService(
 );
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const whatsappQueue = new Queue('whatsapp-queue', { connection: redisConfig });
 
 // --- Main Worker ---
 const worker = new Worker<JobData>(
@@ -112,7 +114,8 @@ const worker = new Worker<JobData>(
         case 'hourly-inventory-cleanup': return await handleInventoryCleanup(job);
         case 'send-template': return await handleTemplateSend(job);
         case 'request-otp': return await handleRequestOtp(job);
-        case 'scheduled-reminder': return await handleScheduledReminder(job, defaultWhatsAppService); // NEW
+        case 'scheduled-reminder': return await handleScheduledReminder(job, defaultWhatsAppService);
+        case 'process-bridge-sms': return await handleSmsBridge(job, whatsappQueue, genAI, defaultWhatsAppService);
       }
     } catch (e: any) {
       logger.error({ jobId: job.id, error: e.message }, 'Special job failed');

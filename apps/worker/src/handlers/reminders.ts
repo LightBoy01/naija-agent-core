@@ -12,6 +12,7 @@ import {
 } from '@naija-agent/firebase';
 import { Product, SystemConfig } from '@naija-agent/types';
 import { formatInTimeZone } from 'date-fns-tz';
+import { logger } from '../utils/logger.js';
 
 /**
  * HOURLY: Scans for abandoned carts and sends gentle reminders.
@@ -43,8 +44,8 @@ export async function handleCartRecovery(job: Job) {
       await markCartNudged(session.chatId);
       
       results.nudged++;
-    } catch (e) {
-      console.error(`Failed to nudge cart ${session.chatId}:`, e);
+    } catch (e: any) {
+      logger.error({ chatId: session.chatId, error: e.message }, 'Failed to nudge cart');
       results.errors++;
     }
   }
@@ -66,7 +67,6 @@ export async function handleReminderScan(job: Job) {
       // 🛡️ [PHASE 8]: Business Hours Guard (Only send reminders between 8 AM and 8 PM local time)
       const currentLocalHour = parseInt(formatInTimeZone(new Date(), orgTimeZone, 'H'));
       if (currentLocalHour < 8 || currentLocalHour >= 20) {
-        // console.log(`[REMINDERS] Skipping ${org.id} - Outside business hours (${currentLocalHour}:00)`);
         continue;
       }
 
@@ -93,8 +93,8 @@ export async function handleReminderScan(job: Job) {
         results.sent++;
       }
 
-    } catch (e) {
-      console.error(`Failed appointment scan for ${org.id}:`, e);
+    } catch (e: any) {
+      logger.error({ orgId: org.id, error: e.message }, 'Failed appointment scan');
       results.errors++;
     }
   }
@@ -136,8 +136,8 @@ export async function handleInventoryCleanup(job: Job) {
       await waService.sendText(org.config.adminPhone, alert);
       results.alerts++;
 
-    } catch (e) {
-      console.error(`Failed low stock scan for ${org.id}:`, e);
+    } catch (e: any) {
+      logger.error({ orgId: org.id, error: e.message }, 'Failed low stock scan');
       results.errors++;
     }
   }
@@ -158,7 +158,7 @@ export async function handleScheduledReminder(job: Job, defaultWhatsAppService: 
     // --- BALANCE CHECK & DEDUCTION (PHASE 8 HARDENING) ---
     const cost = org.costPerReply || SystemConfig.COSTS.REPLY_KOBO;
     if (org.balance < cost) {
-       console.warn(`⚠️ [SCHEDULER] Skipping reminder for ${orgId}: Low balance.`);
+       logger.warn({ orgId }, '⚠️ [SCHEDULER] Skipping reminder: Low balance.');
        return { success: false, reason: 'Low balance' };
     }
 
@@ -174,7 +174,7 @@ export async function handleScheduledReminder(job: Job, defaultWhatsAppService: 
     
     return { success: true, message: 'Reminder sent' };
   } catch (e: any) {
-    console.error(`Failed to send scheduled reminder for ${orgId}:`, e.message);
+    logger.error({ orgId, error: e.message }, 'Failed to send scheduled reminder');
     throw e; // Retry
   }
 }

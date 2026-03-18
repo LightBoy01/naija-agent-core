@@ -159,8 +159,20 @@ export async function getNetworkHealthInsight(orgId: string, dateStr: string): P
 }
 
 /**
- * Fetches sales and activity summary for a specific date (YYYY-MM-DD).
+ * Fetches basic stats for a specific organization (Used by Audit Tool)
  */
+export async function getTenantAuditStats(orgId: string) {
+  const orgDoc = await orgsRef.doc(orgId).get();
+  if (!orgDoc.exists) return null;
+  const data = orgDoc.data();
+  
+  return {
+    balance: data?.balance || 0,
+    isActive: data?.isActive,
+    messageCount: data?.trialMessageCount || 0,
+    lastSeen: data?.updatedAt ? (data.updatedAt as Timestamp).toDate().toISOString() : null
+  };
+}
 export async function getOrgDailyStats(orgId: string, dateStr: string): Promise<{ salesKobo: number, expensesKobo: number, pendingActivities: number, newCustomers: number }> {
   const snapRef = orgsRef.doc(orgId).collection('daily_snapshots').doc(dateStr);
   const doc = await snapRef.get();

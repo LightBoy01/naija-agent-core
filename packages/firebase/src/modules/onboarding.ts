@@ -159,8 +159,44 @@ export async function completeOnboarding(orgId: string, finalConfig: OnboardingD
 }
 
 /**
- * Spawns a new tenant organization (Onboarding)
+ * Completes onboarding from the hybrid web flow.
  */
+export async function completeHybridOnboarding(orgId: string, data: OnboardingData & { meta: { accessToken: string, phoneId: string, wabaId?: string } }): Promise<void> {
+  const bonusKobo = 100000;
+  
+  let hashedPin = data.adminPin || '1234';
+  const isBcrypt = /^\$2[aby]\$.{56}$/.test(hashedPin);
+  if (!isBcrypt) {
+    hashedPin = await bcrypt.hash(hashedPin, 10);
+  }
+
+  await db.runTransaction(async (transaction) => {
+    const orgRef = orgsRef.doc(orgId);
+    const doc = await transaction.get(orgRef);
+
+    if (!doc.exists) throw new Error(`Organization ${orgId} not found`);
+
+    transaction.update(orgRef, {
+      name: data.name,
+      onboardingStep: 'COMPLETE',
+      status: 'ACTIVE',
+      isActive: true,
+      balance: bonusKobo,
+      whatsappPhoneId: data.meta.phoneId,
+      'config.whatsappToken': data.meta.accessToken,
+      'config.wabaId': data.meta.wabaId,
+      'config.adminPin': hashedPin,
+      'config.bankDetails': {
+        bankName: data.bankName,
+        accountNumber: data.accountNumber,
+        accountName: data.accountName
+      },
+      updatedAt: FieldValue.serverTimestamp()
+    });
+  });
+
+  await incrementNetworkStats({ clientDelta: 1, koboDelta: bonusKobo });
+}
 export async function createTenant(data: {
   id: string;
   name: string;

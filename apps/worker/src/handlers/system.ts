@@ -11,11 +11,12 @@ import {
   releaseExpiredReservations
 } from '@naija-agent/firebase';
 import { Redis } from 'ioredis';
+import { logger } from '../utils/logger.js';
 
 export async function handleInventoryCleanup(
   job: Job<JobData>
 ): Promise<{ success: boolean }> {
-  console.log(`📦 [INVENTORY CLEANUP] Starting global stock release scan...`);
+  logger.info(`📦 [INVENTORY CLEANUP] Starting global stock release scan...`);
   const orgs = await getActiveOrganizations();
   let totalReleased = 0;
 
@@ -24,14 +25,14 @@ export async function handleInventoryCleanup(
       const released = await releaseExpiredReservations(org.id);
       if (released > 0) {
         totalReleased += released;
-        console.log(`✅ [INVENTORY] Released ${released} expired locks for ${org.name}`);
+        logger.info({ orgId: org.id, released }, `✅ [INVENTORY] Released expired locks`);
         await logSystemEvent(org.id, 'INVENTORY_CLEANUP', `Released ${released} expired stock reservations.`);
       }
     } catch (e: any) {
-      console.error(`❌ [INVENTORY] Cleanup failed for ${org.id}:`, e.message);
+      logger.error({ orgId: org.id, error: e.message }, `❌ [INVENTORY] Cleanup failed.`);
     }
   }
-  console.log(`📦 [INVENTORY CLEANUP] Scan complete. Total items released back to stock: ${totalReleased}`);
+  logger.info({ totalReleased }, `📦 [INVENTORY CLEANUP] Scan complete.`);
   return { success: true };
 }
 
@@ -56,7 +57,7 @@ export async function handleBridgeHealth(
 
     // 🛡️ [RED TEAM]: Implement grace period from config
     if (diffMinutes > SystemConfig.LIMITS.BRIDGE_OFFLINE_GRACE_MINUTES && !hasRecentlyAlerted) {
-       console.warn(`🚨 [GUARDIAN] Bridge for ${org.name} is OFFLINE for ${Math.floor(diffMinutes)} mins.`);
+       logger.warn({ orgId, diffMinutes: Math.floor(diffMinutes) }, `🚨 [GUARDIAN] Bridge is OFFLINE.`);
        
        const offlineMsg = `🚨 *Bridge Offline Alert*\n\nOga, your SMS Bridge for *${org.name}* hasn't sent a heartbeat for over ${SystemConfig.LIMITS.BRIDGE_OFFLINE_GRACE_MINUTES} minutes.\n\nI cannot verify bank transfers automatically until it's back online! Please check your bridge device.`;
        
@@ -73,7 +74,7 @@ export async function handleBridgeHealth(
        await redisClient.setex(lastAlertKey, 86400, '1');
     } else if (diffMinutes <= SystemConfig.LIMITS.BRIDGE_OFFLINE_GRACE_MINUTES) {
        if (hasRecentlyAlerted) {
-          console.log(`✅ [GUARDIAN] Bridge for ${org.name} is back ONLINE.`);
+          logger.info({ orgId }, `✅ [GUARDIAN] Bridge is back ONLINE.`);
           await logSystemEvent(org.id, 'BRIDGE_RESTORED', 'Bridge heartbeat detected after outage.');
           await redisClient.del(lastAlertKey);
        }
@@ -99,7 +100,7 @@ export async function handleReminderScan(
   for (const window of windows) {
     const upcoming = await getUpcomingBookingsForReminders(orgId, window.min, window.max, window.type);
     if (upcoming.length > 0) {
-      console.log(`[NUDGE] Found ${upcoming.length} upcoming ${window.type} bookings for ${org.name}.`);
+      logger.info({ orgId, count: upcoming.length, type: window.type }, `[NUDGE] Found upcoming bookings.`);
 
       const tenantWhatsAppService = new WhatsAppService(
         org.config?.whatsappToken || process.env.WHATSAPP_API_TOKEN || '',
@@ -122,7 +123,7 @@ export async function handleReminderScan(
           
           await new Promise(r => setTimeout(r, 2000)); 
         } catch (e: any) {
-          console.error(`❌ [NUDGE] Failed for booking ${booking.id}:`, e.message);
+          logger.error({ bookingId: booking.id, error: e.message }, `❌ [NUDGE] Failed.`);
         }
       }
     }
@@ -157,7 +158,7 @@ export async function handleTemplateSend(
     }
   }
 
-  console.log(`Sending template '${content.templateName}' to ${from} using phoneId ${phoneId}`);
+  logger.info({ to: from, template: content.templateName, phoneId }, `Sending template`);
   await tenantWhatsAppService.sendTemplate(from, content.templateName, content.languageCode || 'en_US');
   return { success: true };
 }
@@ -189,10 +190,10 @@ export async function handleRequestOtp(
   // 2. Trigger Meta OTP request
   const tenantService = new WhatsAppService(accessToken, phoneId, process.env.WHATSAPP_APP_SECRET);
   try {
-    console.log(`📡 [RELAY] Requesting Meta code for ${tenantId}...`);
+    logger.info({ tenantId }, `📡 [RELAY] Requesting Meta code...`);
     await tenantService.requestCode('SMS');
   } catch (metaErr: any) {
-    console.error(`❌ [RELAY] Meta Code Request Failed for ${tenantId}:`, metaErr.message);
+    logger.error({ tenantId, error: metaErr.message }, `❌ [RELAY] Meta Code Request Failed.`);
     // Don't throw yet, still notify the Boss that we tried
   }
 
@@ -206,7 +207,7 @@ export async function handleRequestOtp(
 
     const relayMsg = `📢 *ACTIVATION READY*\n\nOga Boss is ready to move your bot to the cloud. Are you holding the phone for SIM *${org.config?.botPhone || 'N/A'}*?\n\nI have just sent your 6-digit activation code via WhatsApp message or SMS. \n\n*Action:* Simply type the 6-digit code here!`;
     await activationService.sendText(org.config.adminPhone, relayMsg);
-    console.log(`✅ [RELAY] Initiated for ${org.name}. Message sent to ${org.config.adminPhone}`);
+    logger.info({ orgId: org.id, adminPhone: org.config.adminPhone }, `✅ [RELAY] Initiated for Org.`);
   }
 
   return { success: true };
@@ -216,7 +217,7 @@ export async function handleSystemOutbound(
   job: Job<JobData>
 ): Promise<{ success: boolean }> {
   const { from, content, phoneId } = job.data;
-  console.log(`📡 [SYSTEM OUTBOUND] Sending to ${from} using phoneId ${phoneId}`);
+  logger.info({ to: from, phoneId }, `📡 [SYSTEM OUTBOUND] Sending message`);
   
   const masterWhatsAppService = new WhatsAppService(
     process.env.WHATSAPP_API_TOKEN || '',
