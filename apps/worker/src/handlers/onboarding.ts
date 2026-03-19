@@ -242,7 +242,7 @@ export async function handleOnboarding(
             const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
             const model = genAI.getGenerativeModel({ model: SystemConfig.MODELS.FALLBACK_L2 }); // Flash-Lite for speed
             
-            const extractionPrompt = \`\${ONBOARDING_PROMPTS.GREEDY_EXTRACTION}: "\${text}"\`;
+            const extractionPrompt = `${ONBOARDING_PROMPTS.GREEDY_EXTRACTION}: "${text}"`;
             
             const result = await model.generateContent(extractionPrompt);
             const extracted = JSON.parse(result.response.text().replace(/```json|```/g, '').trim());
