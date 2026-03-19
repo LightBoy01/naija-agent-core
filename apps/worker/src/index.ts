@@ -154,13 +154,18 @@ const worker = new Worker<JobData>(
     const onboarding = await getOrgOnboarding(orgId);
     
     // --- MULTI-TENANT SERVICES ---
-    const tenantWhatsAppService = currentOrg.config?.whatsappToken 
-      ? new WhatsAppService(
-          currentOrg.config.whatsappToken, 
-          currentOrg.whatsappPhoneId || '',
-          currentOrg.config.appSecret
-        ) 
-      : defaultWhatsAppService;
+    // 🛡️ [PHASE 8.4]: Dynamic Sender ID (Fix for "Risky" behavior)
+    // Always prefer the phoneId that received the message (job.data.phoneId)
+    // If org has custom token, use it. Otherwise use master token.
+    const senderPhoneId = job.data.phoneId || currentOrg.whatsappPhoneId || process.env.WHATSAPP_PHONE_ID || '';
+    const senderToken = currentOrg.config?.whatsappToken || process.env.WHATSAPP_API_TOKEN || '';
+    const senderSecret = currentOrg.config?.appSecret || process.env.WHATSAPP_APP_SECRET;
+
+    const tenantWhatsAppService = new WhatsAppService(
+      senderToken,
+      senderPhoneId,
+      senderSecret
+    );
 
     const tenantPaymentProvider = currentOrg.config?.payment
       ? getProvider(currentOrg.config.payment.provider, currentOrg.config.payment.secretKey)

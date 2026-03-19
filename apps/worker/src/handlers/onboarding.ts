@@ -1,5 +1,5 @@
 import { Job } from 'bullmq';
-import { JobData, OnboardingConfig, OnboardingData, SystemConfig } from '@naija-agent/types';
+import { JobData, OnboardingConfig, OnboardingData, SystemConfig, ONBOARDING_PROMPTS } from '@naija-agent/types';
 import { WhatsAppService } from '../services/whatsapp.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { 
@@ -242,18 +242,7 @@ export async function handleOnboarding(
             const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
             const model = genAI.getGenerativeModel({ model: SystemConfig.MODELS.FALLBACK_L2 }); // Flash-Lite for speed
             
-            const extractionPrompt = `
-            Extract onboarding data from this user message: "${text}"
-            
-            Return JSON ONLY with these fields (use null if missing or not explicitly stated):
-            - businessName (string)
-            - adminPin (string, exactly 4 digits)
-            - bankName (string)
-            - accountNumber (string, exactly 10 digits)
-            - accountName (string)
-            
-            Do NOT guess. If the user says "I don't know", return null.
-            `;
+            const extractionPrompt = \`\${ONBOARDING_PROMPTS.GREEDY_EXTRACTION}: "\${text}"\`;
             
             const result = await model.generateContent(extractionPrompt);
             const extracted = JSON.parse(result.response.text().replace(/```json|```/g, '').trim());
@@ -405,8 +394,8 @@ export async function handleOnboarding(
               } else {
                   const tone = text === '1' ? 'Professional' : 'Street-Smart';
                   const prompt = tone === 'Professional' 
-                    ? `You are the Professional Assistant for ${nextData.name}. You are polite, efficient, and speak clear English.` 
-                    : `You are the Street-Smart Apprentice for ${nextData.name}. You speak a sharp mix of English and Nigerian Pidgin. You are WITTY, LOYAL, and respect the hustle. You call the Boss 'Oga' or 'Madam'. Use vibes like "No shaking," "Sharp-sharp," and "I dey for you," but keep your work professional.`;
+                    ? ONBOARDING_PROMPTS.PROFESSIONAL(nextData.name || 'Business')
+                    : ONBOARDING_PROMPTS.STREET_SMART(nextData.name || 'Business');
                   
                   nextData.systemPrompt = prompt;
                   nextStep = 'REVIEW';

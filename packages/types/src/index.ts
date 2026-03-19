@@ -1,6 +1,7 @@
 import { z } from 'zod';
 export * from './interfaces/index.js';
 export * from './config/index.js';
+export * from './config/prompts.js';
 export * from './utils/phone.js';
 
 // --- WhatsApp Webhook Schemas (Meta) ---\n
