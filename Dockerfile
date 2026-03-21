@@ -42,7 +42,7 @@ COPY --from=builder /app/apps/worker/dist ./apps/worker/dist
 COPY --from=builder /app/apps/worker-life/dist ./apps/worker-life/dist
 
 # Install ONLY production dependencies (no devDeps, no TS needed for bundled CJS)
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 # SAFETY CHECK
 RUN ls -la apps/api/dist/index.js && ls -la apps/worker/dist/index.js && ls -la apps/worker-life/dist/index.js
