@@ -18,3 +18,12 @@ name = "@naija-agent/worker"
 [services.deploy]
   startCommand = "npm run start:worker"
   restartPolicyType = "ON_FAILURE"
+
+[[services]]
+name = "@naija-agent/worker-life"
+[services.build]
+  builder = "dockerfile"
+  dockerfilePath = "Dockerfile"
+[services.deploy]
+  startCommand = "npm run start:worker-life"
+  restartPolicyType = "ON_FAILURE"

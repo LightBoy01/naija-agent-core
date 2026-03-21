@@ -14,6 +14,7 @@ COPY packages/storage/package.json packages/storage/
 COPY packages/logistics/package.json packages/logistics/
 COPY apps/api/package.json apps/api/
 COPY apps/worker/package.json apps/worker/
+COPY apps/worker-life/package.json apps/worker-life/
 
 # Pre-create dist folders to satisfy monorepo links before build
 RUN mkdir -p packages/firebase/dist packages/types/dist packages/payments/dist packages/storage/dist packages/logistics/dist
@@ -38,11 +39,12 @@ ENV NODE_ENV=production
 COPY --from=builder /app/package.json /app/package-lock.json ./
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/worker/dist ./apps/worker/dist
+COPY --from=builder /app/apps/worker-life/dist ./apps/worker-life/dist
 
 # Install ONLY production dependencies (no devDeps, no TS needed for bundled CJS)
 RUN npm ci --omit=dev
 
 # SAFETY CHECK
-RUN ls -la apps/api/dist/index.js && ls -la apps/worker/dist/index.js
+RUN ls -la apps/api/dist/index.js && ls -la apps/worker/dist/index.js && ls -la apps/worker-life/dist/index.js
 
 CMD ["npm", "run", "start:api"]
