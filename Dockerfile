@@ -21,7 +21,7 @@ RUN mkdir -p packages/firebase/dist packages/types/dist packages/payments/dist p
 RUN touch packages/firebase/dist/index.js packages/types/dist/index.js packages/payments/dist/index.js packages/storage/dist/index.js packages/logistics/dist/index.js
 
 # Install dependencies
-RUN npm ci
+RUN npm install
 
 # Copy the rest of the source code
 COPY . .
