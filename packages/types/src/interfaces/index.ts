@@ -83,3 +83,27 @@ export interface Chat {
     createdAt?: FirestoreTimestamp;
     updatedAt?: FirestoreTimestamp;
 }
+
+// --- AELIXXR (Life OS) Schemas ---
+
+export interface AcademicProfile {
+    level: 'SS3' | 'UNDERGRAD' | 'GRADUATE' | 'NYSC';
+    school?: string; 
+    course?: string; 
+    jambScore?: number;
+    matricNumber?: string; // Encrypted/Private
+    interests: string[]; 
+    timeline: {
+        nextExam?: FirestoreTimestamp; 
+        nextPayment?: FirestoreTimestamp; 
+    };
+    walletBalance: number; // Linked to Zynux Shared Wallet
+}
+
+export interface LifeUserProfile {
+    phone: string;
+    name?: string;
+    academicProfile?: AcademicProfile;
+    createdAt: FirestoreTimestamp;
+    updatedAt: FirestoreTimestamp;
+}

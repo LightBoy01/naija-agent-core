@@ -8,11 +8,14 @@ import {
   getActiveOrganizations,
   getUpcomingBookingsForReminders,
   markReminderSent,
-  deductBalance
+  deductBalance,
+  releaseStock,
+  getDb
 } from '@naija-agent/firebase';
 import { Product, SystemConfig } from '@naija-agent/types';
 import { formatInTimeZone } from 'date-fns-tz';
 import { logger } from '../utils/logger.js';
+import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 
 /**
  * HOURLY: Scans for abandoned carts and sends gentle reminders.
@@ -102,12 +105,70 @@ export async function handleReminderScan(job: Job) {
 }
 
 /**
- * DAILY: Checks inventory levels and alerts the Boss if stock is low.
+ * HOURLY: 
+ * 1. Clean up expired stock reservations (15 mins).
+ * 2. Checks inventory levels and alerts the Boss if stock is low.
  */
 export async function handleInventoryCleanup(job: Job) {
   const activeOrgs = await getActiveOrganizations();
-  const results = { alerts: 0, errors: 0 };
+  const results = { alerts: 0, released: 0, errors: 0 };
+  const db = getDb();
 
+  // --- 1. STOCK RELEASE (GLOBAL) ---
+  try {
+     const EXPIRATION_MINUTES = 15;
+     const expirationTime = Date.now() - (EXPIRATION_MINUTES * 60 * 1000);
+     
+     // Find all expired active carts
+     const expiredCartsSnapshot = await db.collection('chats')
+       .where('isCartActive', '==', true)
+       .where('lastCartUpdateAt', '<=', Timestamp.fromMillis(expirationTime))
+       .get();
+
+     logger.info({ count: expiredCartsSnapshot.size }, `🧹 [CLEANUP] Found expired carts to release.`);
+
+     for (const chatDoc of expiredCartsSnapshot.docs) {
+        const chatId = chatDoc.id;
+        const orgId = chatDoc.data().organizationId;
+        const cartRef = chatDoc.ref.collection('cart');
+        const cartSnapshot = await cartRef.get();
+
+        if (!cartSnapshot.empty) {
+           const itemsToRelease: { productId: string, quantity: number }[] = [];
+           const batch = db.batch();
+
+           cartSnapshot.forEach(itemDoc => {
+              const data = itemDoc.data();
+              if (data.productId && data.quantity) {
+                 itemsToRelease.push({ productId: data.productId, quantity: data.quantity });
+              }
+              batch.delete(itemDoc.ref);
+           });
+
+           // Release Stock back to pool
+           if (itemsToRelease.length > 0) {
+              await releaseStock(orgId, itemsToRelease);
+              results.released += itemsToRelease.length;
+           }
+
+           // Close the cart
+           batch.update(chatDoc.ref, { 
+              isCartActive: false, 
+              lastCartUpdateAt: FieldValue.serverTimestamp() 
+           });
+           
+           await batch.commit();
+        } else {
+           // Empty cart but marked active? Fix it.
+           await chatDoc.ref.update({ isCartActive: false });
+        }
+     }
+  } catch (err: any) {
+     logger.error({ error: err.message }, '❌ [CLEANUP] Failed to release stock');
+     results.errors++;
+  }
+
+  // --- 2. LOW STOCK ALERTS (PER ORG) ---
   for (const org of activeOrgs) {
     try {
       const orgTimeZone = org.timezone || SystemConfig.DEFAULTS.TIMEZONE;

@@ -34,6 +34,14 @@
         { "fieldPath": "customerPhone", "order": "ASCENDING" },
         { "fieldPath": "updatedAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "chats",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isCartActive", "order": "ASCENDING" },
+        { "fieldPath": "lastCartUpdateAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

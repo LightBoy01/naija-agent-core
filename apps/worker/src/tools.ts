@@ -94,6 +94,15 @@ export function getTenantTools(
   });
 
   allFunctionDeclarations.push({
+    name: "generate_checkout_invoice",
+    description: "Generates a final invoice for the items in the cart, including a payment link (if available) or bank transfer details. Call this when the user is ready to pay.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {}
+    }
+  });
+
+  allFunctionDeclarations.push({
     name: "check_order_status",
     description: "Checks the status of your most recent order. (All Users)",
     parameters: {

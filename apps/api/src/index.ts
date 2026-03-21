@@ -84,12 +84,47 @@ fastify.register(fastifyRawBody, {
 
 // GLOBAL DEBUG: Log EVERY request before any processing
 fastify.addHook('onRequest', async (request, reply) => {
-  const safeHeaders = { ...request.headers };
-  // Redact sensitive headers
-  ['x-api-key', 'x-bridge-secret', 'x-cron-secret', 'authorization', 'x-hub-signature-256', 'x-paystack-signature'].forEach(key => {
-    if (safeHeaders[key]) safeHeaders[key] = '***REDACTED***';
-  });
-  logger.info({ method: request.method, url: request.url, headers: safeHeaders }, '🔵 [INCOMING REQUEST]');
+  const SENSITIVE_KEYS = [
+    'x-api-key', 'x-bridge-secret', 'x-cron-secret', 'authorization', 
+    'x-hub-signature-256', 'x-paystack-signature', 'monnify-signature',
+    'pin', 'password', 'token', 'secret', 'key', 'access_token', 'refresh_token'
+  ];
+
+  const deepRedact = (obj: any, depth = 0): any => {
+    if (depth > 3 || !obj || typeof obj !== 'object') return obj;
+    
+    if (Array.isArray(obj)) {
+      return obj.map(item => deepRedact(item, depth + 1));
+    }
+
+    const newObj: any = {};
+    for (const k in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, k)) {
+        const lowerK = k.toLowerCase();
+        const isSensitive = SENSITIVE_KEYS.some(sk => lowerK.includes(sk));
+        
+        if (isSensitive) {
+          newObj[k] = '***REDACTED***';
+        } else {
+          newObj[k] = deepRedact(obj[k], depth + 1);
+        }
+      }
+    }
+    return newObj;
+  };
+
+  const safeHeaders = deepRedact({ ...request.headers });
+  const safeQuery = deepRedact({ ...(request.query as object) });
+  
+  // Note: Body is not parsed yet at 'onRequest', so we can't redact it here.
+  // We rely on the content type parser hook for body logging.
+
+  logger.info({ 
+    method: request.method, 
+    url: request.url, 
+    headers: safeHeaders,
+    query: safeQuery
+  }, '🔵 [INCOMING REQUEST]');
 });
 
 fastify.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
@@ -156,6 +191,7 @@ redisConnection.on('connect', () => {
 });
 
 const whatsappQueue = new Queue('whatsapp-queue', { connection: redisConfig });
+const lifeQueue = new Queue('life-queue', { connection: redisConfig });
 
 // --- Helpers ---
 
@@ -449,13 +485,39 @@ fastify.post('/webhook', async (request, reply) => {
   };
 
   try {
-    await whatsappQueue.add('process-message', jobData, {
-      removeOnComplete: true,
-      removeOnFail: 100, 
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 1000 },
-    });
-    logger.info({ from, orgId: org.id }, `Queued messaging job.`);
+    // --- DUAL IDENTITY ROUTING (VYNUX LAYER) ---
+    // If the message came to the Life Bot Phone ID, route to Life Queue (Aelixxr)
+    // Otherwise, route to Business Queue (Zynux)
+    const isLifeBot = process.env.AELIXXR_PHONE_ID && businessPhoneId === process.env.AELIXXR_PHONE_ID;
+    
+    if (isLifeBot) {
+        jobData.type = 'life-chat'; // Explicitly mark as Life Chat
+        // For Life Queue, we might process 'text' type jobs differently than the main worker.
+        // But passing the full jobData allows the Life Worker to decide.
+        // NOTE: The Life Worker expects job.name 'life-chat' for chat interactions.
+        // We map the incoming WhatsApp message to a 'life-chat' job.
+        
+        await lifeQueue.add('life-chat', {
+            orgId: org.id, // Pass Org ID for billing
+            userPhone: from,
+            message: jobData.content.text || '', // Life bot is text-first for now
+            // Future: Pass full jobData for image/audio support
+        }, {
+            removeOnComplete: true,
+            attempts: 3
+        });
+        logger.info({ from, target: 'AELIXXR' }, `🌿 Routed to Life Queue.`);
+    } else {
+        // Default: Business Logic (Zynux)
+        await whatsappQueue.add('process-message', jobData, {
+            removeOnComplete: true,
+            removeOnFail: 100, 
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 1000 },
+        });
+        logger.info({ from, target: 'ZYNUX' }, `💼 Routed to Business Queue.`);
+    }
+
     return reply.status(200).send('OK');
   } catch (err: any) {
     logger.error({ from, error: err.message }, `🚨 [REDIS_FAIL] Failed to queue message`);
@@ -537,24 +599,9 @@ fastify.post('/bridge/sms', async (request, reply) => {
 
   const { from, body, timestamp } = result.data;
 
-  // Idempotency: Check if this SMS was already processed
+  // Generate deterministic ID for worker idempotency
   const rawIdSource = `${timestamp}_${from}_${body}`;
   const alertId = crypto.createHash('sha256').update(rawIdSource).digest('hex').substring(0, 16);
-  const db = (await import('@naija-agent/firebase')).getDb();
-  const alertDoc = await db.collection('organizations').doc(org.id).collection('sms_alerts').doc(alertId).get();
-  
-  if (alertDoc.exists) {
-    logger.info({ alertId, orgId: org.id }, `⏭️ [SMS BRIDGE] Already processed alert. Skipping.`);
-    return { success: true, alertId, note: 'already_processed' };
-  }
-
-  // Log the SMS as a confirmed alert signal
-  await db.collection('organizations').doc(org.id).collection('sms_alerts').doc(alertId).set({
-    from,
-    body,
-    timestamp: new Date(timestamp),
-    receivedAt: new Date(),
-  });
 
   // Construct SMS Bridge Job for Asynchronous Processing
   const bridgeJob: JobData = {

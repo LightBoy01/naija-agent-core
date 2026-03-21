@@ -12,7 +12,7 @@ async function build(appName, entryPath, outPath) {
   // CommonJS is more stable for bundling legacy dynamic requires 
   // found in bullmq and firebase-admin.
   const external = [
-    'bcrypt',
+    'bcrypt', 'bullmq',
     'path', 'fs', 'os', 'crypto', 'child_process', 'http', 'https',
     'zlib', 'events', 'util', 'stream', 'url', 'net', 'tls', 'dns', 'perf_hooks'
   ];
@@ -74,6 +74,9 @@ async function main() {
   
   // Build Worker to .js
   await build('apps/worker', 'apps/worker/src/index.ts', 'apps/worker/dist/index.js');
+
+  // Build Life OS Worker to .js
+  await build('apps/worker-life', 'apps/worker-life/src/index.ts', 'apps/worker-life/dist/index.js');
   
   console.log("\n🎉 All apps bundled successfully!");
 }

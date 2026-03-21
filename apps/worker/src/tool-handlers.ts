@@ -36,7 +36,7 @@ export async function handleToolCall(
     'get_payment_instructions', 'generate_order_summary', 'check_order_status', 
     'generate_refill_link', 'verify_transaction', 'get_shipping_rates', 
     'track_shipment', 'add_to_cart', 'view_cart', 'remove_from_cart', 
-    'clear_cart', 'book_slot'
+    'clear_cart', 'book_slot', 'generate_checkout_invoice'
   ].includes(name)) {
     return await handleCommerceTools(name, args, ctx);
   }

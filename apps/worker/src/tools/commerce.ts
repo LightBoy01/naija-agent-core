@@ -372,6 +372,47 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
       return { status: 'success', message: 'Cart cleared.' };
     }
 
+    case 'generate_checkout_invoice': {
+      const cart = await getCart(orgId, from);
+      if (cart.items.length === 0) return { status: 'error', message: 'Your cart is empty. Please add items first.' };
+
+      const totalNaira = cart.totalKobo / 100;
+      const formattedTotal = formatCurrency(totalNaira, currency.locale, currency.code);
+      const invoiceId = `INV-${Date.now().toString().slice(-6)}`;
+      const itemList = cart.items.map(i => `- ${i.name} (x${i.quantity}): ${formatCurrency(i.price, currency.locale, currency.code)}`).join('\n');
+
+      let paymentSection = "";
+      let paymentLink = null;
+
+      // 1. Try Payment Gateway (Paystack/Monnify)
+      if (paymentProvider) {
+        try {
+           const email = `${from.replace('+', '')}@naija-agent.user`; // Pseudo-email for guest checkout
+           paymentLink = await paymentProvider.createPaymentLink(orgId, email, totalNaira);
+           paymentSection = `💳 *PAY WITH CARD/TRANSFER:*\n👉 [Click to Pay Securely](${paymentLink})`;
+        } catch (e: any) {
+           console.error('Payment Link Error:', e.message);
+        }
+      }
+
+      // 2. Fallback to Bank Transfer
+      if (!paymentLink) {
+         const bank = orgConfig?.bankDetails;
+         if (!bank) return { status: 'error', message: 'Bank details not set. Please ask the Boss.' };
+         paymentSection = `🏦 *BANK TRANSFER:*\n\nBank: ${bank.bankName}\nAccount: ${bank.accountNumber}\nName: ${bank.accountName}\n\n*Ref:* ${invoiceId}`;
+      }
+
+      const invoiceMsg = `🧾 *INVOICE: ${invoiceId}*\n\n` +
+        `🛒 *Items:*\n${itemList}\n\n` +
+        `💰 *TOTAL TO PAY: ${formattedTotal}*\n\n` +
+        `------------------------------\n` +
+        `${paymentSection}\n` +
+        `------------------------------\n` +
+        `⏳ *Stock Reserved for 15 minutes.*`;
+
+      return { status: 'success', invoice: invoiceMsg, paymentLink, total: totalNaira, invoiceId };
+    }
+
     case 'book_slot': {
       const bookingId = `BKG-${Date.now()}`;
       try {

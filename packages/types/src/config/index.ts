@@ -9,6 +9,12 @@ export const SystemConfig = {
         CART_NUDGE_KOBO: 1000, // 10.00 NGN
         TRIAL_BONUS_KOBO: 100000, // 1,000.00 NGN
         STARTING_BONUS_KOBO: 50000, // 500.00 NGN
+
+        // --- AELIXXR (Life OS) Costs ---
+        LIFE_CHAT_FREE_TIER: 0,       // Chit-chat is free
+        MARKET_PRICE_LOOKUP: 2000,    // 20.00 NGN (Silent Deduct)
+        NAFDAC_VERIFICATION: 5000,    // 50.00 NGN (Ask Confirm)
+        JAPA_CONSULTATION: 10000,     // 100.00 NGN (Ask Confirm)
     },
     // Timeouts & Limits
     LIMITS: {
@@ -22,9 +28,22 @@ export const SystemConfig = {
     },
     // Models
     MODELS: {
-        DEFAULT: 'gemini-3.1-flash-lite-preview',
-        FALLBACK_L2: 'gemini-flash-lite-latest',
-        FALLBACK_L3: 'gemini-2.5-flash',
+        // --- ZYNUX (Business) ---
+        ZYNUX_PRIMARY: 'gemini-3.1-flash',
+        ZYNUX_FALLBACK: 'gemini-2.5-flash',
+
+        // --- AELIXXR (Life) ---
+        AELIXXR_PRIMARY: 'gemini-3.1-pro',
+        AELIXXR_FALLBACK: 'gemini-2.5-pro',
+
+        // --- ROUTER (Gateway) ---
+        ROUTER_PRIMARY: 'gemini-3.1-flash-lite',
+        ROUTER_FALLBACK: 'gemini-2.5-flash-lite',
+        
+        // Legacy keys to prevent immediate breakage (deprecated)
+        DEFAULT: 'gemini-3.1-flash',
+        FALLBACK_L2: 'gemini-2.5-flash',
+        FALLBACK_L3: 'gemini-2.0-flash',
     },
     // Defaults
     DEFAULTS: {

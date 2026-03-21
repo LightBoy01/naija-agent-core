@@ -118,27 +118,40 @@ export async function addToCart(
 
   try {
     return await db.runTransaction(async (t) => {
+      // 1. Read Product and Cart Item
       const productDoc = await t.get(productRef);
       if (!productDoc.exists) return { success: false, message: 'PRODUCT_NOT_FOUND' };
       
       const productData = productDoc.data();
-      const currentStock = productData?.stock ?? 9999; 
+      const currentStock = productData?.stock ?? 0;
+      const currentReserved = productData?.reserved ?? 0;
+      const available = currentStock - currentReserved;
 
-      if (currentStock < quantity) {
-        return { success: false, message: `INSUFFICIENT_STOCK: Only ${currentStock} left.` };
+      // 🛡️ [STOCK LOCK]: Check against available (stock - reserved)
+      if (available < quantity) {
+        return { success: false, message: `INSUFFICIENT_STOCK: Only ${available} available.` };
       }
 
       const cartDoc = await t.get(cartItemRef);
       const currentCartQty = cartDoc.exists ? cartDoc.data()?.quantity || 0 : 0;
 
+      // 2. Reserve Stock on Product
+      t.update(productRef, {
+        reserved: FieldValue.increment(quantity),
+        updatedAt: FieldValue.serverTimestamp()
+      });
+
+      // 3. Add to Cart with Reservation Timestamp
       t.set(cartItemRef, {
         productId,
         name: productData?.name,
         price: productData?.price, 
         quantity: currentCartQty + quantity,
-        addedAt: FieldValue.serverTimestamp()
+        addedAt: FieldValue.serverTimestamp(),
+        reservedAt: FieldValue.serverTimestamp() // Track for cleanup
       }, { merge: true });
 
+      // 4. Update Chat State
       t.update(chatsRef.doc(chatId), {
         isCartActive: true,
         lastCartUpdateAt: FieldValue.serverTimestamp()

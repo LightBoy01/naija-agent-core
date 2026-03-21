@@ -117,3 +117,20 @@ This log tracks recurring technical friction points and their established soluti
 *   **Issue:** A valid 4-digit PIN (`0101`) was rejected by the system during verification.
 *   **Root Cause:** Hidden whitespace or formatting characters in the WhatsApp text input caused the `bcrypt.compare` to fail against the clean hash.
 *   **Solution:** Implement mandatory `.trim()` on all PIN inputs before hashing and before verification.
+
+## 🚀 Deployment & Routing
+
+### 1. Master Bot Silent (Routing & Subscription Mismatch)
+*   **Issue:** The new Master Bot number was silent despite successful deployment and correct code logic.
+*   **Root Cause:** 
+    1.  **Wrong WABA ID:** The `.env` file contained the old Test WABA ID, while the new number belonged to a new WABA.
+    2.  **Missing Subscription:** The new WABA was not subscribed to the "NaijaAgent core" App. Meta requires an explicit `POST /{WABA_ID}/subscribed_apps` call to enable webhooks.
+*   **Solution:**
+    1.  **Database Update:** Updated `naija-agent-master` org with the correct `whatsappPhoneId` and `wabaId`.
+    2.  **Subscription:** Ran a script to call the Meta Graph API and link the App to the WABA.
+    3.  **Verification:** Created `verify-routing.ts` to confirm the API resolves the new Phone ID to the correct Organization.
+
+### 2. Redis Connection Refused (Local)
+*   **Issue:** `Error: connect ECONNREFUSED 127.0.0.1:6379` during health checks or local runtime.
+*   **Root Cause:** The local `redis-server` process was not running or had crashed.
+*   **Solution:** Start Redis in daemon mode: `redis-server --daemonize yes`. Verify with `redis-cli ping`.

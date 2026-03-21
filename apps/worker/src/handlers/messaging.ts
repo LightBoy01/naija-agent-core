@@ -225,8 +225,8 @@ export async function handleMessage(
     ${GLOBAL_PROTOCOL}`;
   }
 
-  // 3. Model Setup
-  const tenantModelName = org.config?.model || SystemConfig.MODELS.DEFAULT;
+  // 3. Model Setup - Use Zynux (Business) Primary Model
+  const tenantModelName = org.config?.model || SystemConfig.MODELS.ZYNUX_PRIMARY;
   const model = genAI.getGenerativeModel({ 
     model: tenantModelName,
     tools: tenantTools.length > 0 ? tenantTools : undefined
@@ -353,8 +353,9 @@ export async function handleMessage(
       try {
           return await chatSession.sendMessage(parts);
       } catch (err: any) {
-          if (err.message.includes('429')) {
-              const fallbackModel = genAI.getGenerativeModel({ model: SystemConfig.MODELS.FALLBACK_L2 });
+          if (err.message.includes('429') || err.message.includes('503')) {
+              logger.warn({ orgId, error: err.message }, '⚠️ Primary Model Failed. Switching to Zynux Fallback.');
+              const fallbackModel = genAI.getGenerativeModel({ model: SystemConfig.MODELS.ZYNUX_FALLBACK });
               return await fallbackModel.startChat({ history: chatHistory }).sendMessage(parts);
           }
           throw err;

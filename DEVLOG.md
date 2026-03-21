@@ -568,3 +568,26 @@
 *   **Security Check:** Confirmed sensitive headers are masked in logs.
 *   **Logic Test:** Verified PIN Interceptor stops the "I understand" loop.
 
+## Session 39: Commerce Engine & Async Bridge (2026-03-20)
+**Status:** 🛡️ **Phase 8.3 Completed**
+
+### **Context:**
+*   **The Goal:** Fix the synchronous webhook bottleneck, harden API logging, and implement a robust "Conversational Commerce" flow with stock reservation.
+
+### **Actions Taken:**
+*   **Async SMS Bridge (Phase 8.2):**
+    *   Refactored `/bridge/sms` in `apps/api` to queue jobs immediately (Async Ingestion).
+    *   Moved heavy Regex/Gemini logic to `apps/worker` via `handleSmsBridge`.
+    *   Eliminated potential webhook timeouts.
+*   **Security Hardening:**
+    *   Implemented deep redaction for sensitive keys (including `x-paystack-signature`, `pin`) in API logs.
+*   **Commerce Engine (Phase 8.3):**
+    *   **Stock Lock:** Implemented "Soft Reservation" in `addToCart` (`stock - reserved >= quantity`).
+    *   **Cleanup:** Updated `hourly-inventory-cleanup` to auto-release stock from carts inactive for >15 mins.
+    *   **Checkout Tool:** Implemented `generate_checkout_invoice` to generate professional invoices with Paystack links or bank details.
+    *   **Indexing:** Added missing Firestore composite index for efficient cleanup queries.
+
+### **Verification:**
+*   **Build:** Successful build.
+*   **Infrastructure:** Redis connection issues resolved. Health check passed.
+*   **Code Review:** Confirmed type safety and logic correctness.
