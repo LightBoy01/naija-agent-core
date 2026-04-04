@@ -12,17 +12,18 @@ import {
   setAdminAuth, 
   getActivitiesByCustomer, 
   getRecentActivities,
-  getChatHistory // Added
+  getChatHistory
 } from '@naija-agent/firebase';
 import { Queue } from 'bullmq';
 import { parseAndFormatPhone, formatPhoneForDisplay } from '../utils/phone.js';
+import { logger } from '../utils/logger.js';
 
 export async function handleAdminTools(name: string, args: any, ctx: HandlerContext): Promise<any> {
-  const { orgId, from, isStaff, isAdmin, whatsappService, redisClient, orgConfig, customerName, currency } = ctx;
+  const { orgId, from, isStaff, isAdmin, whatsappService, redisClient, orgConfig, customerName, currency, isAuth } = ctx;
 
   switch (name) {
-    // ... (cases remain same until get_recent_activities)
     case 'authorize_staff': {
+      if (!isAuth) return { status: 'error', code: 'AUTH_REQUIRED', message: 'This action is LOCKED. Oga, please type your 4-digit PIN to proceed.' };
       const normalizedPhone = parseAndFormatPhone(args.phone, currency.locale?.split('-')[1] as any || 'NG');
       if (!normalizedPhone) return { status: 'error', message: 'Invalid phone number format.' };
       
@@ -31,6 +32,7 @@ export async function handleAdminTools(name: string, args: any, ctx: HandlerCont
     }
 
     case 'deactivate_staff': {
+      if (!isAuth) return { status: 'error', code: 'AUTH_REQUIRED', message: 'This action is LOCKED. Oga, please type your 4-digit PIN to proceed.' };
       const normalizedPhone = parseAndFormatPhone(args.phone, currency.locale?.split('-')[1] as any || 'NG');
       if (!normalizedPhone) return { status: 'error', message: 'Invalid phone number format.' };
 
@@ -40,6 +42,8 @@ export async function handleAdminTools(name: string, args: any, ctx: HandlerCont
 
     case 'assign_task_to_staff': {
       if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
+      if (!isAuth) return { status: 'error', code: 'AUTH_REQUIRED', message: 'This action is LOCKED. Oga, please type your 4-digit PIN to proceed.' };
+
       const normalizedPhone = parseAndFormatPhone(args.staffPhone, currency.locale?.split('-')[1] as any || 'NG');
       if (!normalizedPhone) return { status: 'error', message: 'Invalid staff phone number.' };
 
@@ -59,6 +63,8 @@ export async function handleAdminTools(name: string, args: any, ctx: HandlerCont
     }
 
     case 'manage_activity': {
+      if (!isAuth) return { status: 'error', code: 'AUTH_REQUIRED', message: 'This action is LOCKED. Oga, please type your 4-digit PIN to proceed.' };
+
       await updateActivity(orgId, args.id, args.type, { 
         status: args.status, 
         summary: args.summary, 
@@ -110,16 +116,19 @@ export async function handleAdminTools(name: string, args: any, ctx: HandlerCont
     }
 
     case 'set_bot_status':
+      if (!isAuth) return { status: 'error', code: 'AUTH_REQUIRED', message: 'This action is LOCKED. Oga, please type your 4-digit PIN to proceed.' };
       await setOrgActive(orgId, args.active);
       return { status: 'success', message: `Bot service is now ${args.active ? 'ONLINE' : 'OFFLINE (Maintenance Mode)'}.` };
 
     case 'get_business_report': {
+      if (!isAuth) return { status: 'error', code: 'AUTH_REQUIRED', message: 'This action is LOCKED. Oga, please type your 4-digit PIN to proceed.' };
       const snapshots = await getWeeklySummary(orgId);
       return { status: 'success', data: snapshots, message: 'Here is the report. Please analyze it and provide recommendations.' };
     }
 
     case 'send_broadcast': {
       if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
+      if (!isAuth) return { status: 'error', code: 'AUTH_REQUIRED', message: 'This action is LOCKED. Oga, please type your 4-digit PIN to proceed.' };
       
       const chats = await (await getDb()).collection('chats')
         .where('organizationId', '==', orgId)
@@ -128,6 +137,8 @@ export async function handleAdminTools(name: string, args: any, ctx: HandlerCont
         .get();
 
       let broadcastCount = 0;
+      
+      // Fix: Use environment variables for reliable connection
       const bQueue = new Queue('whatsapp-queue', { 
         connection: {
           host: process.env.REDIS_HOST || 'localhost',
@@ -136,12 +147,18 @@ export async function handleAdminTools(name: string, args: any, ctx: HandlerCont
         }
       });
 
+      // Fix: Context-Aware Broadcast Sovereignty
+      // Only the Master Org can send 'system' broadcasts (free, network-wide)
+      // All other tenants MUST send as themselves (billed, rate-limited)
+      const isMasterOrg = orgId === process.env.MASTER_ORG_ID;
+      const targetOrgId = isMasterOrg ? 'system' : orgId;
+
       for (const chatDoc of chats.docs) {
         const chatData = chatDoc.data();
         if (chatData.whatsappUserId && !chatData.isOptedOut) {
           await bQueue.add('process-message', {
             type: 'text',
-            orgId: 'system',
+            orgId: targetOrgId, // Respect Sovereignty
             phoneId: ctx.whatsappPhoneId,
             from: chatData.whatsappUserId,
             timestamp: Date.now(),
@@ -198,6 +215,12 @@ export async function handleAdminTools(name: string, args: any, ctx: HandlerCont
     }
 
     case 'request_human_handoff': {
+      // Fix: Strict Server-Side Validation for Sovereign Spoofing
+      if (args.isMaster && orgId !== process.env.MASTER_ORG_ID) {
+         logger.warn({ from, orgId }, '🚨 Potential Sovereign Spoofing Attempt in Human Handoff');
+         return { error: 'Unauthorized Master Request' };
+      }
+
       if (isAdmin && !orgConfig?.isMaster) {
          return { status: 'error', message: 'Oga, you are the Boss! Why you dey report to yourself?' };
       }
@@ -223,6 +246,13 @@ export async function handleAdminTools(name: string, args: any, ctx: HandlerCont
 
     case 'get_customer_info': {
       if (!isStaff && !isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
+      // Note: Added to AUTH_REQUIRED_TOOLS, but here we double check or rely on tool-handlers gatekeeper.
+      // Ideally, the gatekeeper in tool-handlers.ts handles the rejection before reaching here.
+      // But for robustness, we can add it here too or trust the gatekeeper.
+      // Given the instruction to wrap "sensitive tools", and this was added to the list, 
+      // the gatekeeper SHOULD handle it. However, adding it explicitly doesn't hurt.
+      if (!isAuth) return { status: 'error', code: 'AUTH_REQUIRED', message: 'This action is LOCKED. Oga, please type your 4-digit PIN to proceed.' };
+
       const normalizedPhone = parseAndFormatPhone(args.phone, currency.locale?.split('-')[1] as any || 'NG');
       if (!normalizedPhone) return { status: 'error', message: 'Invalid phone number format.' };
 

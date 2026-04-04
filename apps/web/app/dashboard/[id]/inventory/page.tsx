@@ -18,6 +18,8 @@ export default async function InventoryPage({ params }: { params: Promise<{ id: 
 
   if (!org) return <div>Organization not found.</div>;
 
+  const currency = org.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
+
   return (
     <main className="min-h-screen bg-zinc-50 font-sans p-6">
       <div className="max-w-6xl mx-auto">
@@ -38,7 +40,7 @@ export default async function InventoryPage({ params }: { params: Promise<{ id: 
           </div>
           
           <div className="flex items-center gap-3">
-             <NewProductForm orgId={id} />
+             <NewProductForm orgId={id} symbol={currency.symbol} />
              <div className="bg-white px-4 py-2 rounded-2xl border border-zinc-100 shadow-sm">
                 <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block">Total Products</span>
                 <span className="text-lg font-bold text-zinc-900">{products.length}</span>
@@ -59,7 +61,7 @@ export default async function InventoryPage({ params }: { params: Promise<{ id: 
             </div>
           </div>
 
-          <InventoryTable orgId={id} products={products} />
+          <InventoryTable orgId={id} products={products} currency={currency} />
         </section>
 
         <footer className="mt-12 text-center">

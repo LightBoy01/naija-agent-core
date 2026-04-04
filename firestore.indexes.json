@@ -42,6 +42,14 @@
         { "fieldPath": "isCartActive", "order": "ASCENDING" },
         { "fieldPath": "lastCartUpdateAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "heartbeats",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

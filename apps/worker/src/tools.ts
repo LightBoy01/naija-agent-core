@@ -2,6 +2,7 @@ import { SchemaType, Tool, FunctionDeclaration } from '@google/generative-ai';
 import { AUTH_REQUIRED_TOOLS } from './tools/definitions.js';
 import { CountryCode } from 'libphonenumber-js';
 import { getPhoneExample } from './utils/phone.js';
+import { SectorPack } from '@naija-agent/types';
 
 /**
  * Defines which tools require 4-digit PIN authentication (Boss Only).
@@ -14,11 +15,23 @@ export function getTenantTools(
   isMaster: boolean, 
   hasPayment: boolean,
   orgCurrency: { code: string, symbol: string, locale: string } = { code: 'NGN', symbol: '₦', locale: 'en-NG' },
-  orgRegion: CountryCode = 'NG'
+  orgRegion: CountryCode = 'NG',
+  sectorPack?: SectorPack
 ): Tool[] {
   const allFunctionDeclarations: FunctionDeclaration[] = [];
   const isManager = isAdmin || isStaff;
   const phoneExample = getPhoneExample(orgRegion);
+
+  // --- SECTOR SPECIFIC TOOLS ---
+  if (sectorPack && sectorPack.tools) {
+    for (const tool of sectorPack.tools) {
+      if ('functionDeclarations' in tool && tool.functionDeclarations) {
+        allFunctionDeclarations.push(...tool.functionDeclarations);
+      }
+    }
+  }
+
+  // --- BASE TOOLS (Universal) ---
 
   // 1. Transaction Verification & Payments (All users)
   allFunctionDeclarations.push({
@@ -80,109 +93,102 @@ export function getTenantTools(
     }
   });
 
-  allFunctionDeclarations.push({
-    name: "generate_order_summary",    description: "Generates a professional order summary for the customer including items and total. (All Users)",
-    parameters: {
-      type: SchemaType.OBJECT,
-      properties: {
-        items: { type: SchemaType.STRING, description: "List of items and their individual prices" },
-        total: { type: SchemaType.NUMBER, description: `Total amount in ${orgCurrency.code}` },
-        orderId: { type: SchemaType.STRING, description: "A unique order reference (e.g. ORD-101)" }
-      },
-      required: ["items", "total", "orderId"]
-    }
-  });
+  // --- LEGACY COMMERCE TOOLS (BACKWARD COMPATIBILITY) ---
+  // Only add these if NO sector pack is provided OR if the sector pack is explicitly 'commerce'
+  // Ideally, 'pack_commerce' should provide these, so we shouldn't duplicate them.
+  // However, to avoid breaking the current deployment instantly, we will include them ONLY if sectorPack is undefined.
+  // Once we fully migrate configs, we can remove this block.
+  
+  if (!sectorPack) {
+      allFunctionDeclarations.push({
+        name: "generate_order_summary",    description: "Generates a professional order summary for the customer including items and total. (All Users)",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            items: { type: SchemaType.STRING, description: "List of items and their individual prices" },
+            total: { type: SchemaType.NUMBER, description: `Total amount in ${orgCurrency.code}` },
+            orderId: { type: SchemaType.STRING, description: "A unique order reference (e.g. ORD-101)" }
+          },
+          required: ["items", "total", "orderId"]
+        }
+      });
 
-  allFunctionDeclarations.push({
-    name: "generate_checkout_invoice",
-    description: "Generates a final invoice for the items in the cart, including a payment link (if available) or bank transfer details. Call this when the user is ready to pay.",
-    parameters: {
-      type: SchemaType.OBJECT,
-      properties: {}
-    }
-  });
+      allFunctionDeclarations.push({
+        name: "generate_checkout_invoice",
+        description: "Generates a final invoice for the items in the cart, including a payment link (if available) or bank transfer details. Call this when the user is ready to pay.",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {}
+        }
+      });
 
-  allFunctionDeclarations.push({
-    name: "check_order_status",
-    description: "Checks the status of your most recent order. (All Users)",
-    parameters: {
-      type: SchemaType.OBJECT,
-      properties: {}
-    }
-  });
+      allFunctionDeclarations.push({
+        name: "check_order_status",
+        description: "Checks the status of your most recent order. (All Users)",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {}
+        }
+      });
+      
+      allFunctionDeclarations.push({
+          name: "add_to_cart",
+          description: "Adds a specific product to the customer's shopping cart. (Customer & Manager)",
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+              productId: { type: SchemaType.STRING, description: "The unique Product ID" },
+              quantity: { type: SchemaType.NUMBER, description: "Quantity to add (defaults to 1)" }
+            },
+            required: ["productId"]
+          }
+      });
+
+        allFunctionDeclarations.push({
+          name: "view_cart",
+          description: "Shows the current items in the shopping cart and the total amount. (Customer & Manager)",
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties: {}
+          }
+        });
+
+        allFunctionDeclarations.push({
+          name: "clear_cart",
+          description: "Empties all items from the shopping cart. (Customer & Manager)",
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties: {}
+          }
+        });
+
+        allFunctionDeclarations.push({
+          name: "remove_from_cart",
+          description: "Removes a specific product (or reduces quantity) from the customer's shopping cart. (Customer & Manager)",
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+              productId: { type: SchemaType.STRING, description: "The ID of the product to remove." },
+              quantity: { type: SchemaType.NUMBER, description: "The quantity to remove. If omitted, the entire item is removed." }
+            },
+            required: ["productId"]
+          }
+        });
+        
+        allFunctionDeclarations.push({
+          name: "search_products",
+          description: "Searches for products in the catalog by name.",
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties: { query: { type: SchemaType.STRING, description: "Search term" } },
+            required: ["query"]
+          }
+        });
+  }
 
   // 2. Manager Tools (BOSS & STAFF)
   if (isManager) {
-    allFunctionDeclarations.push({
-      name: "manage_activity",
-      description: "Creates or updates a business activity (Waybill, Booking, Order).",
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {
-          id: { type: SchemaType.STRING, description: "Unique ID (e.g. WB102)" },
-          type: { type: SchemaType.STRING, format: "enum", enum: ['order', 'booking', 'waybill', 'donation'], description: "Category" },
-          status: { type: SchemaType.STRING, format: "enum", enum: ['pending', 'confirmed', 'picked_up', 'in_transit', 'delivered', 'cancelled'], description: "New status" },
-          summary: { type: SchemaType.STRING, description: "Full details/update summary" },
-          amount: { type: SchemaType.NUMBER, description: `Total value in ${orgCurrency.code} (for orders/donations)` },
-          customerPhone: { type: SchemaType.STRING, description: "Optionally tag the customer phone" }
-        },
-        required: ["id", "type", "summary"]      }
-    });
-
-    allFunctionDeclarations.push({
-      name: "book_slot",
-      description: "Books a specific time slot for an appointment. Fails if taken.",
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {
-          startTime: { type: SchemaType.STRING, description: "ISO 8601 Date String (e.g. 2026-03-10T14:00:00)" },
-          summary: { type: SchemaType.STRING, description: "Client Name and Service Details" },
-          customerPhone: { type: SchemaType.STRING, description: "Client Phone Number" }
-        },
-        required: ["startTime", "summary", "customerPhone"]
-      }
-    });
-
-    allFunctionDeclarations.push({
-      name: "assign_task_to_staff",
-      description: "Assigns a business activity (Order/Waybill) to a specific staff member. (Boss Only)",
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {
-          staffPhone: { type: SchemaType.STRING, description: `Phone number of the staff member (${phoneExample})` },
-          activityId: { type: SchemaType.STRING, description: "ID of the activity to assign" },
-          instruction: { type: SchemaType.STRING, description: "Special instructions for the staff" }
-        },
-        required: ["staffPhone", "activityId"]
-      }
-    });
-
-    allFunctionDeclarations.push({
-      name: "get_shipping_rates",
-      description: "Gets real-time shipping quotes from carriers (Logistics/Retail).",
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {
-          origin: { type: SchemaType.STRING, description: "Origin City/Area" },
-          destination: { type: SchemaType.STRING, description: "Destination City/Area" },
-          weightKg: { type: SchemaType.NUMBER, description: "Weight in Kilograms" }
-        },
-        required: ["origin", "destination", "weightKg"]
-      }
-    });
-
-    allFunctionDeclarations.push({
-      name: "track_shipment",
-      description: "Gets live tracking status for a shipment using a tracking number.",
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {
-          trackingNumber: { type: SchemaType.STRING, description: "The tracking ID or waybill number" }
-        },
-        required: ["trackingNumber"]
-      }
-    });
-
+    // Universal Manager Tools
     allFunctionDeclarations.push({
       name: "web_search",
       description: "Searches the live internet for real-time information (Exchange rates, market prices, news).",
@@ -192,32 +198,7 @@ export function getTenantTools(
         required: ["query"]
       }
     });
-
-    allFunctionDeclarations.push({
-      name: "manage_stock",
-      description: "Updates the stock level for a product. (Requires Manager Auth)",
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {
-          productId: { type: SchemaType.STRING, description: "Unique ID (sku)" },
-          action: { type: SchemaType.STRING, format: "enum", enum: ['add', 'set', 'reduce'], description: "Action to take" },
-          amount: { type: SchemaType.NUMBER, description: "Quantity" },
-          threshold: { type: SchemaType.NUMBER, description: "Optional: Set new low-stock alert threshold" }
-        },
-        required: ["productId", "action", "amount"]
-      }
-    });
-
-    allFunctionDeclarations.push({
-      name: "search_products",
-      description: "Searches for products in the catalog by name.",
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: { query: { type: SchemaType.STRING, description: "Search term" } },
-        required: ["query"]
-      }
-    });
-
+    
     allFunctionDeclarations.push({
       name: "get_customer_info",
       description: "Retrieves the recent transaction and activity history for a specific customer phone number. (Manager Only)",
@@ -227,17 +208,6 @@ export function getTenantTools(
           phone: { type: SchemaType.STRING, description: `The customer's phone number (e.g. ${phoneExample}0000000)` }
         },
         required: ["phone"]
-      }
-    });
-
-    allFunctionDeclarations.push({
-      name: "get_recent_activities",
-      description: "Retrieves the last 10 activities (Orders, Bookings, Waybills) for the business. (Manager Only)",
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {
-          limit: { type: SchemaType.NUMBER, description: "Number of activities to fetch (max 20, default 10)" }
-        }
       }
     });
 
@@ -252,60 +222,7 @@ export function getTenantTools(
         required: ["phone"]
       }
     });
-
-    allFunctionDeclarations.push({
-      name: "add_to_cart",
-      description: "Adds a specific product to the customer's shopping cart. (Customer & Manager)",
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {
-          productId: { type: SchemaType.STRING, description: "The unique Product ID" },
-          quantity: { type: SchemaType.NUMBER, description: "Quantity to add (defaults to 1)" }
-        },
-        required: ["productId"]
-      }
-    });
-
-    allFunctionDeclarations.push({
-      name: "view_cart",
-      description: "Shows the current items in the shopping cart and the total amount. (Customer & Manager)",
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {}
-      }
-    });
-
-    allFunctionDeclarations.push({
-      name: "clear_cart",
-      description: "Empties all items from the shopping cart. (Customer & Manager)",
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {}
-      }
-    });
-
-    allFunctionDeclarations.push({
-      name: "remove_from_cart",
-      description: "Removes a specific product (or reduces quantity) from the customer's shopping cart. (Customer & Manager)",
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {
-          productId: { type: SchemaType.STRING, description: "The ID of the product to remove." },
-          quantity: { type: SchemaType.NUMBER, description: "The quantity to remove. If omitted, the entire item is removed." }
-        },
-        required: ["productId"]
-      }
-    });
-
-    allFunctionDeclarations.push({
-      name: "get_staff_tasks",
-      description: "Retrieves a list of all pending tasks or deliveries assigned to the current staff member. (Staff Only)",
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {}
-      }
-    });
-
+    
     allFunctionDeclarations.push({
       name: "schedule_reminder",
       description: "Schedules a one-off reminder message to be sent to you after a specific delay. (Manager Only)",
@@ -318,6 +235,114 @@ export function getTenantTools(
         required: ["message", "delaySeconds"]
       }
     });
+
+    // Legacy/Fallback Manager Tools (If no sector pack)
+    if (!sectorPack) {
+        allFunctionDeclarations.push({
+          name: "manage_activity",
+          description: "Creates or updates a business activity (Waybill, Booking, Order).",
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+              id: { type: SchemaType.STRING, description: "Unique ID (e.g. WB102)" },
+              type: { type: SchemaType.STRING, format: "enum", enum: ['order', 'booking', 'waybill', 'donation'], description: "Category" },
+              status: { type: SchemaType.STRING, format: "enum", enum: ['pending', 'confirmed', 'picked_up', 'in_transit', 'delivered', 'cancelled'], description: "New status" },
+              summary: { type: SchemaType.STRING, description: "Full details/update summary" },
+              amount: { type: SchemaType.NUMBER, description: `Total value in ${orgCurrency.code} (for orders/donations)` },
+              customerPhone: { type: SchemaType.STRING, description: "Optionally tag the customer phone" }
+            },
+            required: ["id", "type", "summary"]      }
+        });
+
+        allFunctionDeclarations.push({
+          name: "book_slot",
+          description: "Books a specific time slot for an appointment. Fails if taken.",
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+              startTime: { type: SchemaType.STRING, description: "ISO 8601 Date String (e.g. 2026-03-10T14:00:00)" },
+              summary: { type: SchemaType.STRING, description: "Client Name and Service Details" },
+              customerPhone: { type: SchemaType.STRING, description: "Client Phone Number" }
+            },
+            required: ["startTime", "summary", "customerPhone"]
+          }
+        });
+
+        allFunctionDeclarations.push({
+          name: "assign_task_to_staff",
+          description: "Assigns a business activity (Order/Waybill) to a specific staff member. (Boss Only)",
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+              staffPhone: { type: SchemaType.STRING, description: `Phone number of the staff member (${phoneExample})` },
+              activityId: { type: SchemaType.STRING, description: "ID of the activity to assign" },
+              instruction: { type: SchemaType.STRING, description: "Special instructions for the staff" }
+            },
+            required: ["staffPhone", "activityId"]
+          }
+        });
+
+        allFunctionDeclarations.push({
+          name: "get_shipping_rates",
+          description: "Gets real-time shipping quotes from carriers (Logistics/Retail).",
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+              origin: { type: SchemaType.STRING, description: "Origin City/Area" },
+              destination: { type: SchemaType.STRING, description: "Destination City/Area" },
+              weightKg: { type: SchemaType.NUMBER, description: "Weight in Kilograms" }
+            },
+            required: ["origin", "destination", "weightKg"]
+          }
+        });
+
+        allFunctionDeclarations.push({
+          name: "track_shipment",
+          description: "Gets live tracking status for a shipment using a tracking number.",
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+              trackingNumber: { type: SchemaType.STRING, description: "The tracking ID or waybill number" }
+            },
+            required: ["trackingNumber"]
+          }
+        });
+
+        allFunctionDeclarations.push({
+          name: "get_recent_activities",
+          description: "Retrieves the last 10 activities (Orders, Bookings, Waybills) for the business. (Manager Only)",
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+              limit: { type: SchemaType.NUMBER, description: "Number of activities to fetch (max 20, default 10)" }
+            }
+          }
+        });
+        
+        allFunctionDeclarations.push({
+          name: "manage_stock",
+          description: "Updates the stock level for a product. (Requires Manager Auth)",
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+              productId: { type: SchemaType.STRING, description: "Unique ID (sku)" },
+              action: { type: SchemaType.STRING, format: "enum", enum: ['add', 'set', 'reduce'], description: "Action to take" },
+              amount: { type: SchemaType.NUMBER, description: "Quantity" },
+              threshold: { type: SchemaType.NUMBER, description: "Optional: Set new low-stock alert threshold" }
+            },
+            required: ["productId", "action", "amount"]
+          }
+        });
+        
+        allFunctionDeclarations.push({
+          name: "get_staff_tasks",
+          description: "Retrieves a list of all pending tasks or deliveries assigned to the current staff member. (Staff Only)",
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties: {}
+          }
+        });
+    }
 
     // Strictly Boss-Only Tools
     if (isAdmin) {
@@ -404,33 +429,39 @@ export function getTenantTools(
             properties: { key: { type: SchemaType.STRING, description: "Key to delete" } },
             required: ["key"]
           }
-        },
-        {
-          name: "save_product",
-          description: "Adds or updates a product in the catalog. (Requires Boss Auth)",
-          parameters: {
-            type: SchemaType.OBJECT,
-            properties: {
-              id: { type: SchemaType.STRING, description: "Unique ID (e.g. sku-123)" },
-              name: { type: SchemaType.STRING, description: "Product name" },
-              price: { type: SchemaType.NUMBER, description: `Price in ${orgCurrency.code}` },
-              stock: { type: SchemaType.NUMBER, description: "Available quantity" },
-              category: { type: SchemaType.STRING, description: "e.g. Electronics, Fashion" },
-              imageUrl: { type: SchemaType.STRING, description: "Product Image URL" }
-            },
-            required: ["id", "name", "price"]
-          }
-        },
-        {
-          name: "delete_product",
-          description: "Removes a product from the catalog. (Requires Boss Auth)",
-          parameters: {
-            type: SchemaType.OBJECT,
-            properties: { id: { type: SchemaType.STRING, description: "Product ID to delete" } },
-            required: ["id"]
-          }
         }
       );
+      
+      // Fallback Product Management Tools
+      if (!sectorPack || sectorPack.id === 'pack_commerce') {
+          allFunctionDeclarations.push(
+            {
+              name: "save_product",
+              description: "Adds or updates a product in the catalog. (Requires Boss Auth)",
+              parameters: {
+                type: SchemaType.OBJECT,
+                properties: {
+                  id: { type: SchemaType.STRING, description: "Unique ID (e.g. sku-123)" },
+                  name: { type: SchemaType.STRING, description: "Product name" },
+                  price: { type: SchemaType.NUMBER, description: `Price in ${orgCurrency.code}` },
+                  stock: { type: SchemaType.NUMBER, description: "Available quantity" },
+                  category: { type: SchemaType.STRING, description: "e.g. Electronics, Fashion" },
+                  imageUrl: { type: SchemaType.STRING, description: "Product Image URL" }
+                },
+                required: ["id", "name", "price"]
+              }
+            },
+            {
+              name: "delete_product",
+              description: "Removes a product from the catalog. (Requires Boss Auth)",
+              parameters: {
+                type: SchemaType.OBJECT,
+                properties: { id: { type: SchemaType.STRING, description: "Product ID to delete" } },
+                required: ["id"]
+              }
+            }
+          );
+      }
     }
   }
 

@@ -1,8 +1,10 @@
 import { z } from 'zod';
+export * from './sector.js';
 export * from './interfaces/index.js';
 export * from './config/index.js';
 export * from './config/prompts.js';
 export * from './utils/phone.js';
+export * from './utils/currency.js';
 
 // --- WhatsApp Webhook Schemas (Meta) ---\n
 export const WhatsAppMessageSchema = z.object({
@@ -179,18 +181,14 @@ export const OrganizationSchema = z.object({
   status: z.enum(['PENDING_PAYMENT', 'PENDING_META', 'AWAITING_OTP', 'ACTIVE', 'SUSPENDED', 'TRIAL']).default('ACTIVE'),
   deploymentModel: z.enum(['SHARED', 'INDEPENDENT']).default('SHARED'),
   currency: z.object({
-    code: z.string().default('NGN'),
-    symbol: z.string().default('₦'),
-    locale: z.string().default('en-NG'),
+    code: z.string(),
+    symbol: z.string(),
+    locale: z.string(),
     rate: z.number().default(1.0)
-  }).default({
-    code: 'NGN',
-    symbol: '₦',
-    locale: 'en-NG',
-    rate: 1.0
   }),
   region: z.enum(['NG', 'US', 'UK', 'GLOBAL']).default('NG'),
   timezone: z.string().default('Africa/Lagos'),
+  sector: z.string().default('commerce'),
   trialStartedAt: FirestoreTimestampSchema.optional(),
   trialMessageCount: z.number().default(0),
   systemPrompt: z.string().optional(),

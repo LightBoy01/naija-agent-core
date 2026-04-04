@@ -1,6 +1,7 @@
 # Naija Agent Core Context
 
 ## Critical Information
+- **Master Strategy:** [MASTER_STRATEGY_2026.md](../docs/core/MASTER_STRATEGY_2026.md) (Active).
 - **Active Gemini Model:** `gemini-2.5-flash` (Verified in Production).
 - **Audio Processing:** Verified (Session 13). Correctly transcribes/responds to voice notes.
 - **Image Processing:** Verified (Session 13). Gemini Vision analyzes images/receipts.
@@ -8,6 +9,11 @@
 - **Credit Awareness:** Gemini is now balance-aware (Context Injection) and responds to balance queries.
 
 ## Recent Changes
+- **Phase 8.3 Sector Expansion & Global Foundation (Mar/Apr 2026):**
+    - **Internationalization (i18n):** Upgraded `OrganizationSchema` to enforce `currency` objects (`code`, `symbol`, `locale`) and support region toggles. Integrated `libphonenumber-js` for E.164 normalization.
+    - **Multi-Currency Ledger:** Refactored Next.js dashboard (`InventoryTable.tsx`, etc.) and API Gateway to dynamically format local prices based on currency configuration.
+    - **Automated Reminders & Ghost Locks:** Added `/cron/release-abandoned-locks` endpoint to release inventory holds for abandoned carts, and `/cron/inventory-alerts` for proactive nudges.
+    - **Dynamic Sector Execution:** Introduced `sectorPack` plugin system in worker tool handlers for O(1) domain logic scalability. Added `/network/search` API for agent-to-agent discovery.
 - **Phase 8.2 Iron Shield (Mar 2026):**
     - **Async SMS Bridge:** Decoupled SMS ingestion from processing. API now queues jobs; Worker handles parsing (Regex/LLM) asynchronously to prevent webhook timeouts.
     - **PIN Interceptor:** Implemented a deterministic Regex check (`/^\d{4}$/`) in `messaging.ts` to handle PINs instantly, preventing AI hallucinations and "I understand" loops.
@@ -34,8 +40,9 @@
 - **Iron Shield Hardening:** Implemented strict **Amount Lock** (Receipt vs Bank API comparison), Redis-based verification rate limiting, and zero-leak frontend data sanitization.
 
 ## Next Steps (Phase 8 - Global Expansion)
-- [ ] **Internationalization:** Add support for US/UK phone numbers and multi-currency ledgers.
-- [ ] **Automated Reminders:** Deploy proactive BullMQ nudges for appointments and stock alerts.
-- [ ] **Onboarding Automation:** Streamline the remote OTP relay UI for faster client activation.
+- [x] **Internationalization:** Add support for US/UK phone numbers and multi-currency ledgers.
+- [x] **Automated Reminders:** Deploy proactive BullMQ nudges for appointments and stock alerts.
+- [x] **Onboarding Automation:** Streamline the remote OTP relay UI for faster client activation. (Completed)
+- [x] **Sector Expansion:** Initial `sectorPack` implementations for `commerce` and `health` domains established.
 
 

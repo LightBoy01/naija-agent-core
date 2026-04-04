@@ -19,11 +19,12 @@ const lifeQueueEvents = new QueueEvents('life-queue', { connection: redisConfig 
 async function runTest() {
     console.log('📤 Adding "life-chat" job (User asking about Rice prices)...');
     
-    // Simulating a user who wants to know the price of rice
-    // The "Memory" service will return a default context (empty for now, or whatever is in Firestore)
+    // Simulating a user who wants Aelixxr to read a specific website
+    // This will test the newly integrated MCP Fetch server.
     const job = await lifeQueue.add('life-chat', {
         userPhone: '+2348000000000',
-        message: 'Oga, how much is Rice today? I need to buy for my shop.',
+        orgId: 'naija-agent-master', // Add orgId for billing verification
+        message: 'Aelixxr, please read https://example.com and summarize what it says in one short sentence.',
         timestamp: Date.now()
     });
 

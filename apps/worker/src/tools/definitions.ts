@@ -1,7 +1,7 @@
 import { WhatsAppService } from '../services/whatsapp.js';
 import { PaymentProvider } from '@naija-agent/payments';
 import { Redis } from 'ioredis';
-import { Config } from '@naija-agent/types';
+import { Config, SectorPack } from '@naija-agent/types';
 
 export interface HandlerContext {
   orgId: string;
@@ -17,6 +17,7 @@ export interface HandlerContext {
   whatsappPhoneId: string;
   customerName?: string;
   isVisionContext?: boolean;
+  sectorPack?: SectorPack;
 }
 
 /**
@@ -40,5 +41,8 @@ export const AUTH_REQUIRED_TOOLS = [
   'web_search', 
   'activate_tenant', 
   'get_pending_setups', 
-  'get_network_stats'
+  'get_network_stats',
+  'manage_stock',
+  'get_business_report',
+  'get_customer_info'
 ];

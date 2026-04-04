@@ -10,6 +10,7 @@ import {
   getDb
 } from '@naija-agent/firebase';
 import crypto from 'crypto';
+import { formatCurrency } from '../utils/currency.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -126,7 +127,11 @@ export async function handleSmsBridge(
        
        if (result && org.config?.adminPhone) {
           const greeting = org.region === 'NG' ? 'Oga' : 'Hello';
-          const notificationMsg = `✅ *AI Credit Refill Confirmed (SMS Bridge)*\n\n${greeting}, your payment of *₦${amount.toLocaleString()}* has been received via bank alert.\n\nYour bot has been credited! New balance: *₦${(result.newBalance / 100).toLocaleString()}*.`;
+          const currency = org.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
+          const formattedAmount = formatCurrency(amount, currency.locale, currency.code);
+          const formattedBalance = formatCurrency(result.newBalance / 100, currency.locale, currency.code);
+
+          const notificationMsg = `✅ *AI Credit Refill Confirmed (SMS Bridge)*\n\n${greeting}, your payment of *${formattedAmount}* has been received via bank alert.\n\nYour bot has been credited! New balance: *${formattedBalance}*.`;
 
           const notificationJob: JobData = {
             type: 'text',
@@ -146,6 +151,9 @@ export async function handleSmsBridge(
          logger.info({ orgId, amount, txId: pendingTx.id }, '✅ [SALE MATCH] Linking SMS to Pending Tx.');
          await confirmTransaction(pendingTx.id, alertId);
 
+         const currency = org.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
+         const formattedAmount = formatCurrency(amount, currency.locale, currency.code);
+
          // 1. Notify Customer via WhatsApp
          const customerJob: JobData = {
            type: 'text',
@@ -155,13 +163,14 @@ export async function handleSmsBridge(
            messageId: `SALE-${Date.now()}`,
            timestamp: Date.now(),
            content: {
-             text: `✅ *Payment Confirmed!*\n\nWe have received your payment of *₦${amount.toLocaleString()}*. Your order is now being processed. Thank you!`
+             text: `✅ *Payment Confirmed!*\n\nWe have received your payment of *${formattedAmount}*. Your order is now being processed. Thank you!`
            }
          };
          await whatsappQueue.add('process-message', customerJob, { removeOnComplete: true });
 
          // 2. Notify Boss via WhatsApp (Immediate Sale Alert)
          if (org.config?.adminPhone) {
+            const bossGreeting = org.region === 'NG' ? 'Oga' : 'Hello';
             const bossJob: JobData = {
               type: 'text',
               orgId: 'system',
@@ -170,7 +179,7 @@ export async function handleSmsBridge(
               messageId: `BOSS-SALE-${Date.now()}`,
               timestamp: Date.now(),
               content: {
-                text: `💰 *SALE CONFIRMED (Bank Alert)!*\n\nOga, a customer (*${pendingTx.from}*) has just paid *₦${amount.toLocaleString()}*.\n\nOrder Ref: ${pendingTx.id}\nI have informed the customer already!`
+                text: `💰 *SALE CONFIRMED (Bank Alert)!*\n\n${bossGreeting}, a customer (*${pendingTx.from}*) has just paid *${formattedAmount}*.\n\nOrder Ref: ${pendingTx.id}\nI have informed the customer already!`
               }
             };
             await whatsappQueue.add('process-message', bossJob, { removeOnComplete: true });

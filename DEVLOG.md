@@ -591,3 +591,27 @@
 *   **Build:** Successful build.
 *   **Infrastructure:** Redis connection issues resolved. Health check passed.
 *   **Code Review:** Confirmed type safety and logic correctness.
+
+---
+
+## Session 41: Global Expansion & Dynamic Sectors (Phase 8.3)
+**Date:** April 1, 2026
+
+### **Context:**
+*   **The Goal:** Finalize the Global Expansion requirements (Multi-currency, i18n) and prepare the infrastructure for the multi-sector expansion.
+
+### **Actions Taken:**
+*   **Internationalization (i18n):**
+    *   Integrated `libphonenumber-js` into `packages/types` for dynamic, global E.164 phone formatting based on the org's region.
+*   **Multi-Currency Engine:**
+    *   Upgraded `OrganizationSchema` to enforce a strict `currency` configuration object.
+    *   Refactored the Next.js Web Dashboard and API Webhook ledgers to utilize `Intl.NumberFormat` via localized utilities.
+*   **Automated Nudges & Reminders:**
+    *   Deployed the `/cron/release-abandoned-locks` logic for clearing ghost locks on abandoned carts over 120 minutes old.
+*   **Sector Expansion Architecture (Phase 8.3 Readiness):**
+    *   Implemented the `sectorPack` plugin system in `apps/worker/src/tool-handlers.ts` allowing domain-specific custom tools to execute dynamically before global fallback.
+    *   Added `/network/search` in the API gateway for inter-agent agent discovery.
+
+### **Verification:**
+*   **Code Review:** Verified clean integration of currency formatting and i18n. `sectorPack` implementation successfully handles dynamic tool injection.
+*   **Documentation:** Updated `GEMINI.md` and `TASK_LIST.md` to mark Phase 8 global expansion elements as completed.

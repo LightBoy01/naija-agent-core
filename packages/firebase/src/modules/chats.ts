@@ -174,6 +174,7 @@ export async function removeFromCart(
   const chatId = `${orgId}_${userPhone}`;
   const chatRef = chatsRef.doc(chatId);
   const cartItemRef = chatRef.collection('cart').doc(productId);
+  const productRef = db.collection('organizations').doc(orgId).collection('products').doc(productId);
 
   try {
     return await db.runTransaction(async (t) => {
@@ -185,6 +186,11 @@ export async function removeFromCart(
       if (!quantity || currentQty <= quantity) {
         t.delete(cartItemRef);
         
+        t.update(productRef, {
+            reserved: FieldValue.increment(-currentQty),
+            updatedAt: FieldValue.serverTimestamp()
+        });
+
         const remainingItemsSnapshot = await chatRef.collection('cart').limit(1).get();
         if (remainingItemsSnapshot.empty) {
           t.update(chatRef, { isCartActive: false });
@@ -196,6 +202,12 @@ export async function removeFromCart(
           quantity: currentQty - quantity,
           updatedAt: FieldValue.serverTimestamp()
         });
+
+        t.update(productRef, {
+            reserved: FieldValue.increment(-quantity),
+            updatedAt: FieldValue.serverTimestamp()
+        });
+
         t.update(chatRef, { lastCartUpdateAt: FieldValue.serverTimestamp() });
         return { success: true, message: 'QUANTITY_REDUCED' };
       }
@@ -229,13 +241,47 @@ export async function clearCart(orgId: string, userPhone: string): Promise<void>
   const snapshot = await cartRef.get();
   
   const batch = db.batch();
+  
   snapshot.docs.forEach(doc => {
+    const data = doc.data();
+    const qty = data.quantity || 0;
+    const productId = doc.id;
+    
+    const productRef = db.collection('organizations').doc(orgId).collection('products').doc(productId);
+    batch.update(productRef, {
+      reserved: FieldValue.increment(-qty),
+      updatedAt: FieldValue.serverTimestamp()
+    });
+
     batch.delete(doc.ref);
   });
   
   batch.update(chatRef, { isCartActive: false, lastCartUpdateAt: FieldValue.serverTimestamp() });
   
   await batch.commit();
+}
+
+export async function getExpiredCarts(maxAgeMinutes: number = 120): Promise<{ orgId: string, userPhone: string, chatId: string }[]> {
+  const maxAgeTime = Date.now() - (maxAgeMinutes * 60 * 1000);
+  const maxDate = new Date(maxAgeTime); 
+
+  const snapshot = await db.collection('chats')
+    .where('isCartActive', '==', true)
+    .where('lastCartUpdateAt', '<=', Timestamp.fromDate(maxDate))
+    .get();
+
+  const expired: { orgId: string, userPhone: string, chatId: string }[] = [];
+
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    expired.push({
+      orgId: data.organizationId,
+      userPhone: data.whatsappUserId,
+      chatId: doc.id
+    });
+  });
+
+  return expired;
 }
 
 export async function getOrgChats(orgId: string, limit = 20): Promise<any[]> {

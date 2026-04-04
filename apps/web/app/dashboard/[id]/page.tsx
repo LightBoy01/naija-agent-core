@@ -1,6 +1,6 @@
 import { verifyTenantSession } from '../../../lib/auth';
 import { getOrgById, getRecentActivities } from '@naija-agent/firebase';
-import { formatTimestamp } from '../../../lib/utils';
+import { formatTimestamp, formatCurrency } from '../../../lib/utils';
 import { Activity } from '@naija-agent/types';
 import { logoutTenant } from '../../auth/actions';
 import Link from 'next/link';
@@ -21,6 +21,7 @@ export default async function TenantDashboard({ params }: { params: Promise<{ id
 
   if (!org) return <div>Organization not found.</div>;
 
+  const currency = org.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
   const balanceNaira = (org.balance || 0) / 100;
 
   return (
@@ -50,7 +51,7 @@ export default async function TenantDashboard({ params }: { params: Promise<{ id
              </Link>
              <div className="bg-white px-4 py-2 rounded-2xl border border-zinc-100 shadow-sm">
                 <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block">Bot Balance</span>
-                <span className="text-lg font-bold text-zinc-900">₦{balanceNaira.toLocaleString()}</span>
+                <span className="text-lg font-bold text-zinc-900">{formatCurrency(balanceNaira, currency.locale, currency.code, currency.symbol)}</span>
              </div>
              <form action={logoutTenant}>
                 <button className="p-3 bg-white rounded-2xl border border-zinc-100 shadow-sm text-zinc-400 hover:text-red-600 transition-colors">
@@ -121,7 +122,7 @@ export default async function TenantDashboard({ params }: { params: Promise<{ id
                              </span>
                              {activity.amount && (
                                <span className="text-zinc-900">
-                                  💰 ₦{activity.amount.toLocaleString()}
+                                  💰 {formatCurrency(activity.amount, currency.locale, currency.code, currency.symbol)}
                                </span>
                              )}
                           </div>

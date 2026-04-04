@@ -2,7 +2,8 @@ import { HandlerContext } from './definitions.js';
 import { 
   saveKnowledge, 
   deleteKnowledge, 
-  deductBalance 
+  deductBalance,
+  queryEntity 
 } from '@naija-agent/firebase';
 import { formatCurrency } from '../utils/currency.js';
 
@@ -17,6 +18,49 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
     case 'delete_knowledge':
       await deleteKnowledge(orgId, args.key);
       return { status: 'success', code: 'DELETED', key: args.key };
+
+    case 'search_documents': {
+      try {
+        const { GoogleGenerativeAI } = await import('@google/generative-ai');
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite-preview-02-05' });
+
+        // 1. Semantic Keyword Extraction
+        const keywordPrompt = `
+        Convert this user query into 5 specific search keywords for a document search.
+        Query: "${args.query}"
+        Output format: JSON Array of strings. Example: ["receipt", "school", "fees", "january", "2024"]
+        `;
+        
+        const result = await model.generateContent(keywordPrompt);
+        const text = result.response.text();
+        const jsonMatch = text.match(/\[.*\]/);
+        
+        if (!jsonMatch) return { status: 'error', message: 'I could not understand the search query.' };
+        const keywords = JSON.parse(jsonMatch[0]);
+
+        // 2. Firestore Query
+        const docs = await queryEntity(orgId, 'vault', [['keywords', 'array-contains-any', keywords]]);
+        
+        if (docs.length === 0) {
+           return { status: 'success', message: `I searched for *${keywords.join(', ')}* but found no documents.` };
+        }
+
+        // 3. Format Results
+        const results = docs.map((d: any) => 
+           `- *${d.summary}* (${d.date || 'No Date'}) [${d.category}]`
+        ).join('\n');
+
+        return { 
+           status: 'success', 
+           message: `🔎 Found ${docs.length} documents for "${args.query}":\n\n${results}` 
+        };
+
+      } catch (e: any) {
+        console.error('Document Search Failed:', e.message);
+        return { status: 'error', message: 'The document search engine is temporarily down.' };
+      }
+    }
 
     case 'web_search': {
       try {

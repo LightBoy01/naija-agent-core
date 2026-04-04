@@ -198,6 +198,7 @@
 ## Phase 8: Global Expansion (Foundation) ✅
 - [x] **International Numbers:** Support +1 (US) and +44 (UK) numbers via dynamic phone utilities.
 - [x] **Multi-Currency:** Support USD/GBP ledgers with localized AI tool descriptions and reporting.
+- [x] **Automated Reminders:** Deployed `/cron/release-abandoned-locks` and `/cron/inventory-alerts` via BullMQ.
 - [x] **Timezone Intelligence (Phase 8.1):**
     - [x] **Schema:** Added `timezone` to Organization schema.
     - [x] **Scheduler:** `daily-reports` and `reminders` now respect local business time.
@@ -207,6 +208,9 @@
     - [x] **PIN Interceptor:** Implemented deterministic Regex check to bypass AI for PIN auth.
     - [x] **Ambiguity Defense:** Updated fallback messages to be context-aware.
     - [x] **Master Bot Knowledge:** Seeded Roadmap/Strategy docs and fixed prompt injection logic.
+- [x] **Phase 8.3: Sector Expansion (Arch) ✅**
+    - [x] **Dynamic Execution:** Implemented `sectorPack` plugin system for extensible worker tools.
+    - [x] **Network API:** Added `/network/search` for agent-to-agent discovery.
 
 ## Phase 9: The Life Operating System (The "Soul") ✅
 

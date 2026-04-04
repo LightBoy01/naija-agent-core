@@ -2,6 +2,7 @@ import { getOrgById } from '@naija-agent/firebase';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { updateOrgStatus, topUpBalance } from './actions';
+import { formatCurrency } from '../../../../lib/utils';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -14,6 +15,8 @@ export default async function OrgManagePage({ params }: PageProps) {
   if (!org) {
     notFound();
   }
+
+  const currency = org.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
 
   return (
     <main className="min-h-screen p-8 bg-zinc-50 font-sans">
@@ -40,17 +43,17 @@ export default async function OrgManagePage({ params }: PageProps) {
             <div className="mb-8">
               <p className="text-xs text-zinc-500 mb-1">Current Balance</p>
               <div className="text-4xl font-black text-zinc-900">
-                ₦{(org.balance / 100).toLocaleString()}
+                {formatCurrency(org.balance / 100, currency.locale, currency.code, currency.symbol)}
               </div>
             </div>
 
             <form action={topUpBalance} className="space-y-4">
               <input type="hidden" name="orgId" value={org.id} />
               <div>
-                <label className="block text-xs font-bold text-zinc-700 mb-2 uppercase">Manual Top-Up (Naira)</label>
+                <label className="block text-xs font-bold text-zinc-700 mb-2 uppercase">Manual Top-Up ({currency.code})</label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-bold">₦</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-bold">{currency.symbol}</span>
                     <input 
                       type="number" 
                       name="amount" 

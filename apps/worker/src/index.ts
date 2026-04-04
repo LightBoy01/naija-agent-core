@@ -26,6 +26,7 @@ import { handleSmsBridge } from './handlers/bridge.js';
 import { handleMessage, MessagingDependencies } from './handlers/messaging.js';
 import { formatCurrency } from './utils/currency.js';
 import { CountryCode } from 'libphonenumber-js';
+import { getSectorPack } from './sectors/index.js';
 
 dotenv.config();
 
@@ -206,7 +207,9 @@ const worker = new Worker<JobData>(
 
     // --- BALANCE CHECK & DEDUCTION ---
     if (currentOrg.balance < costPerReply) {
-      await tenantWhatsAppService.sendText(from, "Service suspended: Low balance.");
+      const currency = currentOrg.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
+      const greeting = currentOrg.region === 'NG' ? 'Oga' : 'Hello';
+      await tenantWhatsAppService.sendText(from, `🚫 *Service Suspended*\n\n${greeting}, your bot balance is too low to process this request. Please top up to continue service.`);
       return { success: true, reason: 'Low balance' };
     }
 
@@ -228,6 +231,10 @@ const worker = new Worker<JobData>(
       const regionRaw = currentOrg.region || 'NG';
       const region: CountryCode = (regionRaw === 'GLOBAL' ? 'NG' : regionRaw) as CountryCode;
 
+      // 🛡️ [PHASE 8.3]: Dynamic Sector Pack Loading
+      const sectorId = currentOrg.sector || 'commerce';
+      const sectorPack = getSectorPack(sectorId, currency, region);
+
       const deps: MessagingDependencies = {
         org: currentOrg,
         isAdmin,
@@ -237,7 +244,8 @@ const worker = new Worker<JobData>(
         tenantPaymentProvider,
         genAI,
         redisClient,
-        tenantTools: getTenantTools(isAdmin, isStaff, !!isMaster, !!tenantPaymentProvider, currency, region)
+        tenantTools: getTenantTools(isAdmin, isStaff, !!isMaster, !!tenantPaymentProvider, currency, region, sectorPack),
+        sectorPack
       };
 
       const messageResult = await handleMessage(job, deps);

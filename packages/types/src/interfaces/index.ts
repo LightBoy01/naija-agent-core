@@ -15,7 +15,7 @@ export interface JobData {
         fileName?: string;
         mimeType?: string;
     };
-    type: 'text' | 'image' | 'audio' | 'document' | 'template';
+    type: 'text' | 'image' | 'audio' | 'document' | 'template' | 'life-chat';
     orgId: string;
     messageId: string;
     phoneId: string;
@@ -60,6 +60,18 @@ export interface FraudRecord {
     phone: string;
     reason: string;
     reportedAt: FirestoreTimestamp;
+}
+
+// Stock Lock (Conversational Commerce)
+export interface StockLock {
+    id: string; // The ID of the lock document
+    productId: string;
+    orgId: string;
+    userId: string;
+    lockedQuantity: number;
+    status: 'active' | 'completed' | 'expired';
+    expiresAt: FirestoreTimestamp;
+    createdAt: FirestoreTimestamp;
 }
 
 // Conversation Message

@@ -4,6 +4,7 @@ import { handleInventoryTools } from './tools/inventory.js';
 import { handleAdminTools } from './tools/admin.js';
 import { handleContentTools } from './tools/content.js';
 import { handleSystemTools } from './tools/system.js';
+import { logger } from './utils/logger.js';
 
 export { HandlerContext, AUTH_REQUIRED_TOOLS };
 
@@ -13,6 +14,19 @@ export async function handleToolCall(
   ctx: HandlerContext
 ): Promise<any> {
   const { isAuth } = ctx;
+
+  // 🛡️ [PHASE 8.3]: Dynamic Sector Execution
+  if (ctx.sectorPack && ctx.sectorPack.execute) {
+    try {
+      const sectorResult = await ctx.sectorPack.execute(name, args, ctx);
+      if (sectorResult !== null && sectorResult !== undefined) {
+        return sectorResult;
+      }
+    } catch (err: any) {
+      logger.error({ tool: name, error: err.message }, 'Sector Pack execution failed');
+      return { error: `Failed to execute sector tool: ${err.message}` };
+    }
+  }
 
   // 🛡️ [SPINAL CORD]: Deterministic Security Gatekeeper
   // If the tool is Boss-Only and the session is not auth'd, kill it immediately.

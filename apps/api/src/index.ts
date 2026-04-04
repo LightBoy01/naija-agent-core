@@ -267,9 +267,9 @@ fastify.post('/webhook/paystack', async (request, reply) => {
 
     if (result) {
       const org = await getOrgById(orgId);
-      const currencySymbol = org?.currency?.symbol || '₦';
-      const formattedAmount = `${currencySymbol}${amountVal.toLocaleString()}`;
-      const formattedBalance = `${currencySymbol}${(result.newBalance / 100).toLocaleString()}`;
+      const currency = org?.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
+      const formattedAmount = formatCurrency(amountVal, currency.locale, currency.code);
+      const formattedBalance = formatCurrency(result.newBalance / 100, currency.locale, currency.code);
       
       logger.info({ orgId, amount: amountVal, reference }, `✅ [PAYSTACK] Processed top-up.`);
       
@@ -351,7 +351,11 @@ fastify.post('/webhook/monnify', async (request, reply) => {
       logger.info({ orgId, amount: amountPaid, reference }, `✅ [MONNIFY] Processed top-up.`);
       
       if (org?.config?.adminPhone) {
-        const notificationMsg = `✅ *AI Credit Refill Successful (Monnify)!*\n\nOga, your account has been credited with *₦${amountPaid.toLocaleString()}*.\n\nYour new balance is *₦${(result.newBalance / 100).toLocaleString()}*.`;
+        const currency = org.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
+        const formattedAmount = formatCurrency(amountPaid, currency.locale, currency.code);
+        const formattedBalance = formatCurrency(result.newBalance / 100, currency.locale, currency.code);
+
+        const notificationMsg = `✅ *AI Credit Refill Successful (Monnify)!*\n\nOga, your account has been credited with *${formattedAmount}*.\n\nYour new balance is *${formattedBalance}*.`;
 
         const notificationJob: JobData = {
           type: 'text',
@@ -722,6 +726,82 @@ fastify.get('/cron/inventory-alerts', async (request, reply) => {
   await whatsappQueue.add('hourly-inventory-cleanup', jobData, { removeOnComplete: true });
   logger.info('📡 [CRON] Triggered hourly inventory cleanup/alert.');
   return reply.send({ status: 'success' });
+});
+
+fastify.get('/cron/life-heartbeat', async (request, reply) => {
+  const cronSecret = request.headers['x-cron-secret'];
+  if (cronSecret !== process.env.CRON_SECRET) return reply.status(401).send('Unauthorized');
+
+  const jobData: any = {
+    type: 'system',
+    timestamp: Date.now()
+  };
+
+  await lifeQueue.add('life-heartbeat', jobData, { removeOnComplete: true });
+  logger.info('📡 [CRON] Triggered Aelixxr life-heartbeat scan.');
+  return reply.send({ status: 'success' });
+});
+
+// 7b. CRON: Release Abandoned Cart Locks (Ghost Locks)
+fastify.get('/cron/release-abandoned-locks', async (request, reply) => {
+  const cronSecret = request.headers['x-cron-secret'];
+  if (cronSecret !== process.env.CRON_SECRET) return reply.status(401).send('Unauthorized');
+
+  try {
+    logger.info("🕒 Running Ghost Lock Cleanup CRON...");
+    const { getExpiredCarts, clearCart } = await import('@naija-agent/firebase');
+    
+    // Fetch carts abandoned for more than 2 hours (120 mins)
+    const abandonedCarts = await getExpiredCarts(120); 
+
+    let releasedCount = 0;
+    for (const cart of abandonedCarts) {
+      await clearCart(cart.orgId, cart.userPhone);
+      logger.info({ orgId: cart.orgId, phone: cart.userPhone }, "✅ Released abandoned cart locks.");
+      releasedCount++;
+    }
+
+    return reply.send({ status: 'success', message: `Released ${releasedCount} abandoned carts.` });
+  } catch (error: any) {
+    logger.error({ error: error.message }, "❌ Failed to run Ghost Lock Cleanup");
+    return reply.status(500).send({ error: 'Failed to release locks' });
+  }
+});
+
+// 8. Agent Discovery (GET)
+fastify.get('/network/search', async (request, reply) => {
+  const query = request.query as { sector?: string; capability?: string };
+  const { sector, capability } = query;
+
+  if (!sector) {
+    return reply.status(400).send({ error: 'Sector is required' });
+  }
+
+  const db = getDb();
+  let firestoreQuery = db.collection('organizations')
+    .where('sector', '==', sector)
+    .where('isActive', '==', true)
+    .limit(20);
+
+  if (capability) {
+    firestoreQuery = firestoreQuery.where('capabilities', 'array-contains', capability);
+  }
+
+  const snapshot = await firestoreQuery.get();
+  
+  const agents = snapshot.docs.map(doc => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      name: data.name,
+      phoneId: data.whatsappPhoneId, // Return Phone ID so other agents can message them
+      sector: data.sector,
+      description: data.description || 'No description available.',
+      capabilities: data.capabilities || []
+    };
+  });
+
+  return { status: 'success', count: agents.length, agents };
 });
 
 // Start Server

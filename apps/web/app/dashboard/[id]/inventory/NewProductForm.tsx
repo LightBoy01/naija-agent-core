@@ -3,7 +3,7 @@
 import { useTransition, useState } from 'react';
 import { createProductAction } from './actions';
 
-export default function NewProductForm({ orgId }: { orgId: string }) {
+export default function NewProductForm({ orgId, symbol = '₦' }: { orgId: string, symbol?: string }) {
   const [isPending, startTransition] = useTransition();
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -68,7 +68,7 @@ export default function NewProductForm({ orgId }: { orgId: string }) {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1 px-1">Price (₦)</label>
+              <label className="block text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1 px-1">Price ({symbol})</label>
               <input 
                 type="number" 
                 required

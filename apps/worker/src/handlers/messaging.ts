@@ -17,9 +17,11 @@ import { PaymentProvider } from '@naija-agent/payments';
 import { Redis } from 'ioredis';
 import { handleToolCall } from '../tool-handlers.js';
 import { AUTH_REQUIRED_TOOLS as PIN_PROTECTED_TOOLS } from '../tools/definitions.js';
+import { getSectorPack } from '../sectors/index.js';
 import { getPriceGuardRegex, formatCurrency, parsePrice } from '../utils/currency.js';
 import { formatInTimeZone } from 'date-fns-tz';
 import { logger } from '../utils/logger.js';
+import { SectorPack } from '@naija-agent/types';
 
 export interface MessagingDependencies {
   org: Organization;
@@ -31,8 +33,8 @@ export interface MessagingDependencies {
   genAI: GoogleGenerativeAI;
   redisClient: Redis;
   tenantTools: Tool[];
+  sectorPack?: SectorPack;
 }
-
 export async function handleMessage(
   job: Job<JobData>,
   deps: MessagingDependencies
@@ -107,6 +109,11 @@ export async function handleMessage(
      - Do NOT hallucinate a response.
      - Politely ask them to rephrase.
      - Offer a quick menu: "I can help you check prices, track orders, or book appointments."
+
+  [PAYMENT VERIFICATION PROTOCOL (VISION FIRST)]:
+  - When asking a customer for payment, ALWAYS explicitly request a screenshot: "Please send a screenshot of your transfer receipt for instant verification."
+  - If the customer sends an image, use Vision OCR to analyze it.
+  - [SILENT FALLBACK]: If Vision OCR fails to read the image clearly or verify the payment, intelligently ask the user to forward the bank SMS alert as a backup.
   `;
 
   // 1. Training Confirmation Logic (Phase 8.2)
@@ -209,18 +216,22 @@ export async function handleMessage(
     Admin Status: ${isAdmin ? (isAuth ? 'AUTHENTICATED' : 'LOCKED') : 'STAFF_AUTHORIZED'}.
     ${isAdmin ? "If Status is LOCKED, you MUST ask the Boss for their PIN before performing high-value Admin tasks." : ""}
 
-    [DNA]: ${org.systemPrompt || 'Serve the business with excellence.'}
+    [DNA]: ${org.systemPrompt || deps.sectorPack?.systemPrompt || 'Serve the business with excellence.'}
     [CONTEXT]:
     Current Time: ${currentLocalTime} (${orgTimeZone})
+    Currency: ${currency.code} (${currency.symbol})
+    Locale: ${currency.locale}
     Current Knowledge:\n${knowledgeContext || 'Empty - Please tell me your prices so I can start selling!'}
     ${GLOBAL_PROTOCOL}`;
   } else {
-    systemPrompt = org.systemPrompt || "You are a helpful sales assistant.";
+    systemPrompt = org.systemPrompt || deps.sectorPack?.systemPrompt || "You are a helpful sales assistant.";
     systemPrompt += `\n\n[YOUR PURPOSE]: Sales assistant for ${org.name}. 
     [THE RULES]: No price guessing! Strictly use catalog. Rapport vibes: "Sir/Ma", "Oga/Madam".
     [ORDER TRACKING]: If the user asks for their order, use 'check_order_status' to give them a live update.
     [CONTEXT]:
     Current Time: ${currentLocalTime} (${orgTimeZone})
+    Currency: ${currency.code} (${currency.symbol})
+    Locale: ${currency.locale}
     [BUSINESS KNOWLEDGE]:\n${knowledgeContext || 'No specific facts yet.'}
     ${GLOBAL_PROTOCOL}`;
   }
@@ -236,7 +247,7 @@ export async function handleMessage(
   const chatId = await findOrCreateChat(orgId, from, job.data.name || 'User');
   const history = await getChatHistory(chatId, 10);
   const isAuth = isAdmin ? await verifyAdminSession(orgId, from) : false;
-  const balanceContext = isManager ? `\n\n[CONTEXT] Current Business Credit Balance: ${org.balance} kobo.\nAdmin Auth Status: ${isAdmin ? (isAuth ? 'AUTHENTICATED' : 'LOCKED') : 'STAFF_AUTHORIZED'}` : "";
+  const balanceContext = isManager ? `\n\n[CONTEXT] Current Business Credit Balance: ${formatCurrency(org.balance / 100, currency.locale, currency.code)}\nAdmin Auth Status: ${isAdmin ? (isAuth ? 'AUTHENTICATED' : 'LOCKED') : 'STAFF_AUTHORIZED'}` : "";
 
   const chatHistory = [
     { role: "user", parts: [{ text: `System Instruction: ${systemPrompt}${balanceContext}` }] },
@@ -392,7 +403,8 @@ export async function handleMessage(
             currency: currency,
             whatsappPhoneId: org.whatsappPhoneId || process.env.WHATSAPP_PHONE_ID || '',
             customerName: job.data.name,
-            isVisionContext
+            isVisionContext,
+            sectorPack: deps.sectorPack
           });
           functionResponses.push({ functionResponse: { name: call.name, response } });
         } catch (e: any) {

@@ -4,12 +4,15 @@ import { Product } from '@naija-agent/types';
 import { useTransition, useState } from 'react';
 import { updateProductAction, removeProductAction } from './actions';
 
+import { formatCurrency } from '../../../../lib/utils';
+
 interface InventoryTableProps {
   orgId: string;
   products: Product[];
+  currency: { code: string; symbol: string; locale: string };
 }
 
-export default function InventoryTable({ orgId, products }: InventoryTableProps) {
+export default function InventoryTable({ orgId, products, currency }: InventoryTableProps) {
   const [isPending, startTransition] = useTransition();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditEditData] = useState({ price: 0, stock: 0 });
@@ -79,7 +82,7 @@ export default function InventoryTable({ orgId, products }: InventoryTableProps)
                       className="w-24 px-2 py-1 bg-zinc-100 border border-zinc-200 rounded-lg text-sm font-bold outline-none focus:border-green-600"
                     />
                   ) : (
-                    <span className="text-sm font-black text-zinc-900">₦{p.price.toLocaleString()}</span>
+                    <span className="text-sm font-black text-zinc-900">{formatCurrency(p.price, currency.locale, currency.code, currency.symbol)}</span>
                   )}
                 </td>
                 <td className="px-6 py-5">

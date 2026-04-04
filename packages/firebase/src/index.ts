@@ -15,6 +15,7 @@ export * from './modules/chats.js';
 export * from './modules/fraud.js';
 export * from './modules/auth.js';
 export * from './modules/media.js';
+export * from './modules/polymorphic.js';
 
 export type { 
   Config, 

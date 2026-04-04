@@ -1,4 +1,4 @@
-import { formatTimestamp, sanitizeOrgForFrontend } from '../../lib/utils';
+import { formatTimestamp, sanitizeOrgForFrontend, formatCurrency } from '../../lib/utils';
 import { getNetworkStats, getNetworkChats } from '@naija-agent/firebase';
 import { Chat } from '@naija-agent/types';
 import Link from 'next/link';
@@ -42,7 +42,7 @@ export default async function Dashboard() {
             <div className="px-4 py-2 bg-white rounded-lg border border-zinc-200 shadow-sm">
               <span className="text-sm font-medium text-zinc-500 uppercase tracking-wider">Vault Status</span>
               <div className="text-xl font-bold text-green-600">
-                ₦{(stats.totalVaultKobo / 100).toLocaleString()}
+                {formatCurrency(stats.totalVaultKobo / 100)}
               </div>
             </div>
             <form action={logout}>
@@ -104,7 +104,7 @@ export default async function Dashboard() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="text-sm font-mono font-semibold text-zinc-900">
-                            ₦{(client.balance / 100).toLocaleString()}
+                            {formatCurrency(client.balance / 100, (client as any).currency?.locale, (client as any).currency?.code, (client as any).currency?.symbol)}
                           </div>
                         </td>
                         <td className="px-6 py-4 text-right">
