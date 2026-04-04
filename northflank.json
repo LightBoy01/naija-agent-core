@@ -1,0 +1,106 @@
+{
+  "version": "1.0.0",
+  "parameters": [
+    {
+      "name": "REDIS_PASSWORD",
+      "description": "Password for the Redis database",
+      "type": "string",
+      "generate": true,
+      "length": 32
+    }
+  ],
+  "resources": [
+    {
+      "name": "naija-agent-redis",
+      "type": "addon",
+      "addonType": "redis",
+      "version": "7",
+      "replicas": 1,
+      "storage": 1024,
+      "secrets": {
+        "REDIS_PASSWORD": "${REDIS_PASSWORD}"
+      }
+    }
+  ],
+  "services": [
+    {
+      "name": "naija-agent-api",
+      "type": "combined",
+      "deployment": {
+        "instances": 1
+      },
+      "ports": [
+        {
+          "name": "http",
+          "port": 3000,
+          "protocol": "http",
+          "public": true
+        }
+      ],
+      "build": {
+        "dockerfile": {
+          "path": "/Dockerfile"
+        }
+      },
+      "startup": {
+        "command": "npm start",
+        "workingDir": "/apps/api"
+      },
+      "environment": {
+        "REDIS_URL": "redis://:${REDIS_PASSWORD}@${naija-agent-redis.endpoints.default.host}:${naija-agent-redis.endpoints.default.port}",
+        "NODE_ENV": "production"
+      },
+      "dependsOn": [
+        "naija-agent-redis"
+      ]
+    },
+    {
+      "name": "naija-agent-worker",
+      "type": "job",
+      "jobType": "daemon",
+      "deployment": {
+        "instances": 1
+      },
+      "build": {
+        "dockerfile": {
+          "path": "/Dockerfile"
+        }
+      },
+      "startup": {
+        "command": "npm start",
+        "workingDir": "/apps/worker"
+      },
+      "environment": {
+        "REDIS_URL": "redis://:${REDIS_PASSWORD}@${naija-agent-redis.endpoints.default.host}:${naija-agent-redis.endpoints.default.port}",
+        "NODE_ENV": "production"
+      },
+      "dependsOn": [
+        "naija-agent-redis"
+      ]
+    },
+    {
+      "name": "naija-agent-worker-life",
+      "type": "job",
+      "jobType": "daemon",
+      "deployment": {
+        "instances": 1
+      },
+      "build": {
+        "dockerfile": {
+          "path": "/Dockerfile"
+        }
+      },
+      "startup": {
+        "command": "npm start",
+        "workingDir": "/apps/worker-life"
+      },
+      "environment": {
+        "REDIS_URL_LOS": "redis://:${REDIS_PASSWORD}@${naija-agent-redis.endpoints.default.host}:${naija-agent-redis.endpoints.default.port}",
+        "NODE_ENV": "production"
+      },
+      "dependsOn": [
+        "naija-agent-redis"
+      ]
+    }
+  ]
+}
