@@ -29,25 +29,26 @@ const TOOL_COSTS: Record<string, number> = {
 // --- Redis Configuration for Life Engine (LOS) ---
 const redisUrl = process.env.REDIS_URL_LOS || process.env.REDIS_URL; 
 let redisConfig: any;
+let redisClient: any; // We only use it for Queue connection options here, but BullMQ accepts ioredis instances.
+// Wait, BullMQ's connection option accepts an object OR an IORedis instance.
 
 if (redisUrl) {
-  try {
-    const parsed = new URL(redisUrl);
-    redisConfig = {
-      host: parsed.hostname,
-      port: parseInt(parsed.port),
-      password: parsed.password,
-      username: parsed.username,
-      maxRetriesPerRequest: null,
-      retryStrategy: (times: number) => Math.min(times * 100, 3000)
-    };
-  } catch (e) {
-    logger.error('❌ Failed to parse REDIS_URL_LOS, falling back to localhost');
-    redisConfig = { host: 'localhost', port: 6379, maxRetriesPerRequest: null };
+  const commonOptions = {
+    maxRetriesPerRequest: null,
+    retryStrategy: (times: number) => Math.min(times * 100, 3000)
+  };
+  if (redisUrl.startsWith('rediss://')) {
+      redisConfig = { ...commonOptions, tls: { rejectUnauthorized: false } };
+  } else {
+      redisConfig = commonOptions;
   }
+  // BullMQ will instantiate its own connections using redisConfig or we pass an instance.
+  // We'll pass the instance to connection to ensure TLS works flawlessly.
+  redisClient = new Redis(redisUrl, redisConfig);
 } else {
   logger.warn('⚠️ REDIS_URL_LOS not set. Using localhost default.');
   redisConfig = { host: 'localhost', port: 6379, maxRetriesPerRequest: null };
+  redisClient = new Redis(redisConfig);
 }
 
 // --- AI Configuration ---
@@ -354,7 +355,7 @@ const worker = new Worker(
     }
   },
   { 
-    connection: redisConfig, 
+    connection: redisClient, 
     concurrency: 5 
   }
 );
