@@ -35,14 +35,9 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Only copy necessary files from builder
-COPY --from=builder /app/package.json /app/package-lock.json ./
-COPY --from=builder /app/apps/api/dist ./apps/api/dist
-COPY --from=builder /app/apps/worker/dist ./apps/worker/dist
-COPY --from=builder /app/apps/worker-life/dist ./apps/worker-life/dist
-
-# Install ONLY production dependencies (no devDeps, no TS needed for bundled CJS)
-RUN npm install --omit=dev
+# Copy the entire workspace with node_modules and dist files
+# This guarantees all workspace dependencies (like bullmq) are present.
+COPY --from=builder /app ./
 
 # SAFETY CHECK
 RUN ls -la apps/api/dist/index.js && ls -la apps/worker/dist/index.js && ls -la apps/worker-life/dist/index.js
