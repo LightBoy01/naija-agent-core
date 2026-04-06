@@ -12,7 +12,7 @@ async function build(appName, entryPath, outPath) {
   // CommonJS is more stable for bundling legacy dynamic requires 
   // found in bullmq and firebase-admin.
   const external = [
-    'bcrypt', 'bullmq',
+    'bcrypt', 'bullmq', 'pino', 'pino-pretty',
     'path', 'fs', 'os', 'crypto', 'child_process', 'http', 'https',
     'zlib', 'events', 'util', 'stream', 'url', 'net', 'tls', 'dns', 'perf_hooks'
   ];
