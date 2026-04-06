@@ -615,3 +615,33 @@
 ### **Verification:**
 *   **Code Review:** Verified clean integration of currency formatting and i18n. `sectorPack` implementation successfully handles dynamic tool injection.
 *   **Documentation:** Updated `GEMINI.md` and `TASK_LIST.md` to mark Phase 8 global expansion elements as completed.
+
+## Session: Nanobot & IronClaw Integration (2026-04-06)
+
+**Status:** 🟢 **Completed**
+
+### **Context:**
+*   **The Goal:** Upgrade Aelixxr (Life OS) from a reactive chatbot into a proactive, extensible personal companion by integrating concepts from the open-source `nanobot` and `ironclaw` ecosystems.
+*   **Challenge:** The Northflank production environment posed several scale/security challenges for the new architecture, including Free Tier limits (max 2 services) and strict TLS requirements for Redis.
+
+### **Actions Taken:**
+*   **Proactive Heartbeat Engine:**
+    *   Implemented `HeartbeatService` to fetch user configurations from Firestore and execute evaluations via BullMQ cron jobs (`/cron/life-heartbeat`).
+    *   Refactored the heartbeat worker loop into a bounded parallel fan-out (using `Promise.allSettled`) to prevent blocking the main queue.
+*   **Model Context Protocol (MCP) Client:**
+    *   Integrated the official `@modelcontextprotocol/sdk` to enable dynamic tool loading (e.g., `mcp-server-fetch` for live web reading).
+    *   Built an in-memory caching mechanism (`globalLifeTools`) to eliminate IPC latency on every message, bypassing the need for Aelixxr to ping the MCP server constantly.
+*   **IronClaw Identity Vault (Zero-Trust Security):**
+    *   Created `vaultService.ts` to store user-specific OAuth tokens securely in Firestore rather than global `.env` files.
+    *   Implemented `executeStatefulTool` to spawn *ephemeral* MCP clients, injecting user credentials at runtime and destroying the process immediately after execution.
+*   **Infrastructure & Deployment Fixes (Northflank):**
+    *   Replaced the network-reliant `npx` boot sequence with a local, stateless `mcp-fetch.mjs` Node script, fixing worker startup crashes.
+    *   **CRITICAL FIX (TLS):** Diagnosed `ECONNRESET` errors by fixing how `ioredis` interprets the `rediss://` protocol, explicitly passing the raw URL string to `new Redis()` in the API and Workers.
+    *   **CRITICAL FIX (BullMQ):** Fixed a crash where BullMQ attempted to connect to `localhost` by passing the initialized `redisConnection` instance to the `Queue` and `Worker` constructors instead of the raw configuration object.
+    *   **CRITICAL FIX (Free Tier Bypass):** Created `scripts/start-workers.mjs` to launch both Zynux and Aelixxr inside a single Docker container, bypassing Northflank's 2-service limit. Fixed the `MODULE_NOT_FOUND` BullMQ sandboxing bug by copying the full workspace (including `node_modules`) from the builder stage in the `Dockerfile`.
+*   **Environment Sync:**
+    *   Wrote a custom CLI utility (`push-env.mjs`) to parse local `.env` files, fix Northflank Redis URIs, and push them securely to the cloud services.
+
+### **Verification:**
+*   **System Integrity:** All cloud services (API, Workers, Redis) are reporting a green **Running** status on Northflank with 0 restarts.
+*   **Feature Test:** Successfully pushed a `life-chat` job to BullMQ, forcing Aelixxr to use the new `fetch_webpage` MCP tool. The dynamic billing engine successfully deducted 50 Kobo, and Aelixxr gracefully handled a local SSL error, proving the end-to-end Zero-Trust execution pipeline works.

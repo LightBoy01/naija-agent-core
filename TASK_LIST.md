@@ -230,3 +230,9 @@
     - [ ] **Health Shield:** NAFDAC Greenbook verification tool.
     - [ ] **Japa Guide:** Visa checklist and personalized planning.
     - [ ] **Education:** JAMB result checker proxy.
+
+- [x] **Aelixxr Evolution (Nanobot/IronClaw):**
+    - [x] Integrate Proactive Heartbeat Engine.
+    - [x] Implement Stateless MCP Client for dynamic tools.
+    - [x] Create IronClaw Identity Vault (`vaultService`) for stateful execution.
+    - [x] Fix Northflank infrastructure and bypass Free Tier limits via Unified Worker container.

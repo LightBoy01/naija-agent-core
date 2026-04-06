@@ -134,3 +134,23 @@ This log tracks recurring technical friction points and their established soluti
 *   **Issue:** `Error: connect ECONNREFUSED 127.0.0.1:6379` during health checks or local runtime.
 *   **Root Cause:** The local `redis-server` process was not running or had crashed.
 *   **Solution:** Start Redis in daemon mode: `redis-server --daemonize yes`. Verify with `redis-cli ping`.
+
+## Issue: Northflank Production Crashes (Redis & BullMQ)
+
+*   **Date:** 2026-04-06
+*   **Component:** `apps/api`, `apps/worker`, `apps/worker-life`
+*   **Symptoms:**
+    *   API Service throwing `read ECONNRESET` continuously.
+    *   Worker Service throwing `ECONNREFUSED 127.0.0.1:6379` and `Cannot find module 'bullmq'`.
+    *   BullMQ Sandbox throwing `Cannot find module '/app/apps/worker-life/dist/lib/worker.js'`
+*   **Root Cause:**
+    1.  **TLS Connection Bug:** `apps/api/src/index.ts` manually unpacked the `REDIS_URL` into `host`, `port`, `password`, but stripped the `rediss://` protocol. This forced `ioredis` to attempt a plaintext TCP connection to a strict TLS Northflank server, resulting in `ECONNRESET`.
+    2.  **BullMQ Configuration Error:** We passed the plain `redisConfig` object to `new Queue()` and `new Worker()`. BullMQ ignored it because it lacked the URL string, causing the workers to fallback to `localhost:6379`.
+    3.  **Docker Monorepo Pruning:** The `Dockerfile` tried to optimize Stage 2 by running `npm install --omit=dev`. Because this is an NPM workspace, this accidentally deleted the `bullmq` dependency from the built apps.
+    4.  **Esbuild Bundling Conflict:** Compiling `bullmq` into `dist/index.js` using `esbuild` destroyed BullMQ's ability to find its internal sandboxing script (`lib/worker.js`), causing the unified worker container to crash on boot.
+*   **Solution:**
+    *   Refactored Redis connections to pass the raw `rediss://` URL string directly to `new Redis()`, allowing `ioredis` to handle TLS natively.
+    *   Updated `new Queue()` and `new Worker()` to accept the instantiated `redisClient` object instead of the configuration object.
+    *   Updated the `Dockerfile` to copy the complete `node_modules` folder from the builder stage instead of attempting a lean install.
+    *   *(Note: The esbuild conflict was mitigated by ensuring the full workspace path was preserved, allowing the unified `start-workers.mjs` script to run both main entrypoints safely).*
+*   **Status:** Resolved. All Northflank services are running stable.
