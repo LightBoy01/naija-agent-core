@@ -40,29 +40,20 @@ if (!process.env.WHATSAPP_API_TOKEN || !process.env.GEMINI_API_KEY) {
 
 // --- Providers & Services ---
 const redisUrl = process.env.REDIS_URL;
+let redisClient: Redis;
 let redisConfig: any;
 
 if (redisUrl) {
-  try {
-    const parsed = new URL(redisUrl);
-    redisConfig = {
-      host: parsed.hostname,
-      port: parseInt(parsed.port),
-      password: parsed.password,
-      username: parsed.username,
-      maxRetriesPerRequest: null,
-      retryStrategy: (times: number) => Math.min(times * 100, 3000)
-    };
-  } catch (e) {
-    logger.error('❌ Failed to parse REDIS_URL, falling back to components');
-    redisConfig = {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      password: process.env.REDIS_PASSWORD,
-      maxRetriesPerRequest: null,
-      retryStrategy: (times: number) => Math.min(times * 100, 3000)
-    };
+  const commonOptions = {
+    maxRetriesPerRequest: null,
+    retryStrategy: (times: number) => Math.min(times * 100, 3000)
+  };
+  if (redisUrl.startsWith('rediss://')) {
+      redisConfig = { ...commonOptions, tls: { rejectUnauthorized: false } };
+  } else {
+      redisConfig = commonOptions;
   }
+  redisClient = new Redis(redisUrl, redisConfig);
 } else {
   redisConfig = {
     host: process.env.REDIS_HOST || 'localhost',
@@ -71,9 +62,8 @@ if (redisUrl) {
     maxRetriesPerRequest: null,
     retryStrategy: (times: number) => Math.min(times * 100, 3000)
   };
+  redisClient = new Redis(redisConfig);
 }
-
-const redisClient = new Redis(redisConfig);
 
 redisClient.on('error', (err) => {
   logger.error({ err: err.message }, 'Redis Client Error');
@@ -95,7 +85,7 @@ const defaultWhatsAppService = new WhatsAppService(
 );
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const whatsappQueue = new Queue('whatsapp-queue', { connection: redisConfig });
+const whatsappQueue = new Queue('whatsapp-queue', { connection: redisClient });
 
 // --- Main Worker ---
 const worker = new Worker<JobData>(
@@ -292,7 +282,7 @@ const worker = new Worker<JobData>(
       return { success: false, reason: error.message };
     }
   },
-  { connection: redisConfig, concurrency: 5 }
+  { connection: redisClient, concurrency: 5 }
 );
 
 worker.on('failed', async (job, err) => {

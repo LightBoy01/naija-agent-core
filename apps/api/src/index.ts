@@ -147,29 +147,24 @@ fastify.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, bo
 
 // --- Redis & Queue Setup ---
 const redisUrl = process.env.REDIS_URL;
+let redisConnection: Redis;
 let redisConfig: any;
 
 if (redisUrl) {
-  try {
-    const parsed = new URL(redisUrl);
-    redisConfig = {
-      host: parsed.hostname,
-      port: parseInt(parsed.port),
-      password: parsed.password,
-      username: parsed.username,
-      maxRetriesPerRequest: null,
-      retryStrategy: (times: number) => Math.min(times * 100, 3000)
-    };
-  } catch (e) {
-    logger.error('❌ Failed to parse REDIS_URL, falling back to components');
-    redisConfig = {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      password: process.env.REDIS_PASSWORD,
-      maxRetriesPerRequest: null,
-      retryStrategy: (times: number) => Math.min(times * 100, 3000)
-    };
+  const commonOptions = {
+    maxRetriesPerRequest: null,
+    retryStrategy: (times: number) => Math.min(times * 100, 3000)
+  };
+  
+  // If it's a rediss:// URL, ioredis requires tls options to be explicitly set
+  // However, passing the URL string directly is the most reliable method for ioredis parsing.
+  if (redisUrl.startsWith('rediss://')) {
+      redisConfig = { ...commonOptions, tls: { rejectUnauthorized: false } };
+  } else {
+      redisConfig = commonOptions;
   }
+  
+  redisConnection = new Redis(redisUrl, redisConfig);
 } else {
   redisConfig = {
     host: process.env.REDIS_HOST || 'localhost',
@@ -178,9 +173,8 @@ if (redisUrl) {
     maxRetriesPerRequest: null,
     retryStrategy: (times: number) => Math.min(times * 100, 3000)
   };
+  redisConnection = new Redis(redisConfig);
 }
-
-const redisConnection = new Redis(redisConfig);
 
 redisConnection.on('error', (err) => {
   logger.error({ err: err.message }, 'Redis Connection Error');
@@ -190,8 +184,8 @@ redisConnection.on('connect', () => {
   logger.info('✅ Connected to Redis');
 });
 
-const whatsappQueue = new Queue('whatsapp-queue', { connection: redisConfig });
-const lifeQueue = new Queue('life-queue', { connection: redisConfig });
+const whatsappQueue = new Queue('whatsapp-queue', { connection: redisConnection });
+const lifeQueue = new Queue('life-queue', { connection: redisConnection });
 
 // --- Helpers ---
 
