@@ -29,19 +29,19 @@ export const SystemConfig = {
     // Models
     MODELS: {
         // --- ZYNUX (Business) ---
-        ZYNUX_PRIMARY: 'gemini-3.1-flash-lite',
+        ZYNUX_PRIMARY: 'gemini-3.1-flash-lite-preview',
         ZYNUX_FALLBACK: 'gemini-2.5-flash',
 
         // --- AELIXXR (Life) ---
-        AELIXXR_PRIMARY: 'gemini-3.1-flash-lite',
+        AELIXXR_PRIMARY: 'gemini-3.1-flash-lite-preview',
         AELIXXR_FALLBACK: 'gemini-2.5-flash',
 
         // --- ROUTER (Gateway) ---
-        ROUTER_PRIMARY: 'gemini-3.1-flash-lite',
+        ROUTER_PRIMARY: 'gemini-3.1-flash-lite-preview',
         ROUTER_FALLBACK: 'gemini-2.5-flash',
 
         // Legacy keys to prevent immediate breakage (deprecated)
-        DEFAULT: 'gemini-3.1-flash-lite',
+        DEFAULT: 'gemini-3.1-flash-lite-preview',
         FALLBACK_L2: 'gemini-2.5-flash',
         FALLBACK_L3: 'gemini-1.5-flash',
     },    // Defaults
