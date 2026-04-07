@@ -56,6 +56,6 @@ export class WhatsAppService {
 
 export const whatsappService = new WhatsAppService(
   process.env.WHATSAPP_API_TOKEN || '',
-  process.env.WHATSAPP_PHONE_ID || '',
+  process.env.AELIXXR_PHONE_ID || process.env.WHATSAPP_PHONE_ID || '',
   process.env.WHATSAPP_APP_SECRET
 );
