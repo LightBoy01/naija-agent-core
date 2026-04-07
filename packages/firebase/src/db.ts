@@ -3,20 +3,12 @@ import { getFirestore } from 'firebase-admin/firestore';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
 
 // Fix for ESM/CJS interop for firebase-admin
 const firebaseAdmin = (admin as any).default || admin;
 
 // Fix for __dirname in ESM/CJS transition
-let currentDir: string;
-if (typeof __dirname !== 'undefined') {
-  currentDir = __dirname;
-} else {
-  // @ts-ignore
-  currentDir = path.dirname(fileURLToPath(import.meta.url));
-}
-const _dirname = currentDir;
+const _dirname = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
 
 // Load .env
 const envPaths = [

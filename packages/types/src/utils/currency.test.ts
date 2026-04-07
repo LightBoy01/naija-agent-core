@@ -45,6 +45,11 @@ describe('Currency Utilities', () => {
     it('should handle zero gracefully', () => {
       expect(formatCurrency(0, 'en-NG', 'NGN')).toBe('₦0');
     });
+
+    it('should correctly render Naira from internal Kobo balances', () => {
+      const balanceInKobo = 500000; // 5,000 Naira
+      expect(formatCurrency(balanceInKobo / 100, 'en-NG', 'NGN')).toBe('₦5,000');
+    });
   });
 
   describe('getPriceGuardRegex', () => {
