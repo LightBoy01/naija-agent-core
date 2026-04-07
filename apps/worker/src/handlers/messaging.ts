@@ -48,9 +48,29 @@ export async function handleMessage(
 
   const isManager = isAdmin || isStaff;
 
-  // 🛡️ [PIN INTERCEPTOR]: Deterministic Unlock (Phase 7.3)
-  if (isManager && type === 'text' && content.text && /^\d{4}$/.test(content.text.trim())) {
-      const pinAttempt = content.text.trim();
+  const expectingPinKey = `expecting_pin:${orgId}:${from}`;
+  const isExpectingPin = await redisClient.get(expectingPinKey);
+  const textTrimmed = content.text?.trim() || '';
+
+  let isPinAttempt = false;
+  let pinAttempt = '';
+
+  // 🛡️ [PIN INTERCEPTOR]: Deterministic Unlock (Phase 7.3 with Contextual Check)
+  if (isManager && type === 'text' && textTrimmed) {
+      if (isExpectingPin && /^\d{4}$/.test(textTrimmed)) {
+          isPinAttempt = true;
+          pinAttempt = textTrimmed;
+      } else if (/^#\d{4}$/.test(textTrimmed)) {
+          isPinAttempt = true;
+          pinAttempt = textTrimmed.substring(1);
+      } else if (/^PIN\s+\d{4}$/i.test(textTrimmed)) {
+          isPinAttempt = true;
+          pinAttempt = textTrimmed.split(/\s+/)[1];
+      }
+  }
+
+  if (isPinAttempt) {
+      await redisClient.del(expectingPinKey);
       const { setAdminAuth } = await import('@naija-agent/firebase');
       const bcrypt = await import('bcrypt');
 
@@ -389,6 +409,7 @@ export async function handleMessage(
         const isProtected = PIN_PROTECTED_TOOLS.includes(call.name);
         if (isProtected && (!isAdmin || !isAuth)) {
            logger.warn({ tool: call.name, from }, `🛡️ [AUTH BLOCKED] Tool blocked (Unauthorized/Locked)`);
+           await redisClient.setex(`expecting_pin:${orgId}:${from}`, 300, '1');
            functionResponses.push({ functionResponse: { name: call.name, response: { status: 'error', code: 'AUTH_REQUIRED', message: 'Oga, please type your 4-digit PIN to proceed.' } } });
            continue;
         }
@@ -406,6 +427,11 @@ export async function handleMessage(
             isVisionContext,
             sectorPack: deps.sectorPack
           });
+
+          if (response?.code === 'AUTH_REQUIRED') {
+             await redisClient.setex(`expecting_pin:${orgId}:${from}`, 300, '1');
+          }
+
           functionResponses.push({ functionResponse: { name: call.name, response } });
         } catch (e: any) {
           functionResponses.push({ functionResponse: { name: call.name, response: { status: 'error', message: e.message } } });
