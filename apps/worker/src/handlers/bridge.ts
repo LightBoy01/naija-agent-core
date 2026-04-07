@@ -110,8 +110,25 @@ export async function handleSmsBridge(
 
   if (amount !== null) {
     // --- REFILL CHECK: Does the SMS body contain the Sovereign's Account Number? ---
-    const sovereignAccount = org.config?.sovereignBankDetails?.accountNumber;
-    const isRefill = sovereignAccount && body.includes(sovereignAccount);
+    if (!org.config?.sovereignBankDetails || !org.config?.sovereignBankDetails?.accountNumber) {
+       logger.warn({ orgId, alertId }, '⚠️ [SMS BRIDGE WORKER] sovereignBankDetails missing. Unable to classify SMS. Defaulting to unclassified state.');
+       if (org.config?.adminPhone) {
+           const alertJob: JobData = {
+               type: 'text',
+               orgId: 'system',
+               phoneId: org.whatsappPhoneId || '',
+               from: org.config.adminPhone,
+               messageId: `BR-ERR-${Date.now()}`,
+               timestamp: Date.now(),
+               content: { text: `⚠️ *System Alert: SMS Bridge Misconfigured*\n\nI received a bank alert for *${amount}*, but your bank details are missing in the system.\n\nI cannot safely classify this as a customer sale or a top-up refill. Please check your bank and update your settings.` }
+           };
+           await whatsappQueue.add('process-message', alertJob, { removeOnComplete: true });
+       }
+       return { success: true, reason: 'unclassified_missing_config' };
+    }
+
+    const sovereignAccount = org.config.sovereignBankDetails.accountNumber;
+    const isRefill = body.includes(sovereignAccount);
 
     const tenantWhatsAppService = org.config?.whatsappToken 
       ? new WhatsAppService(
