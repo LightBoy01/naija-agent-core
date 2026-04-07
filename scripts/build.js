@@ -78,6 +78,17 @@ async function main() {
   // Build Life OS Worker to .js
   await build('apps/worker-life', 'apps/worker-life/src/index.ts', 'apps/worker-life/dist/index.js');
   
+  // Ensure static assets like mcp-fetch.mjs are copied
+  const mcpFetchSrc = path.join(process.cwd(), 'apps/worker-life/src/utils/mcp-fetch.mjs');
+  const mcpFetchDestDir = path.join(process.cwd(), 'apps/worker-life/dist/utils');
+  if (fs.existsSync(mcpFetchSrc)) {
+    if (!fs.existsSync(mcpFetchDestDir)) {
+      fs.mkdirSync(mcpFetchDestDir, { recursive: true });
+    }
+    fs.copyFileSync(mcpFetchSrc, path.join(mcpFetchDestDir, 'mcp-fetch.mjs'));
+    console.log('✅ Copied mcp-fetch.mjs to apps/worker-life/dist/utils');
+  }
+  
   console.log("\n🎉 All apps bundled successfully!");
 }
 
