@@ -3,7 +3,7 @@ import { Redis } from 'ioredis';
 import dotenv from 'dotenv';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { SystemConfig, formatCurrency } from '@naija-agent/types';
-import { deductBalance, getOrgById, getChatHistory, findOrCreateChat } from '@naija-agent/firebase';
+import { deductBalance, getOrgById, getChatHistory, findOrCreateChat, saveMessage } from '@naija-agent/firebase';
 import { ingestDocument } from '@naija-agent/storage';
 import { logger } from './utils/logger.js';
 import { marketService } from './services/marketData.js';
@@ -364,11 +364,24 @@ const worker = new Worker(
                         }
                     }
 
+                    const finalReplyMatch = text.match(/<reply>([\s\S]*?)<\/reply>/i);
+                    if (finalReplyMatch) {
+                        text = finalReplyMatch[1].trim();
+                    }
+
                     text += billingNote; // Append billing notification
                     logger.info({ response: text }, '🗣️ Life Guardian Replying');
                     
                     // Send via WhatsApp
                     await whatsappService.sendText(userPhone, text);
+
+                    // Save conversation history to the database
+                    await saveMessage(chatId, { 
+                        role: 'user', content: message, type: 'text' 
+                    });
+                    await saveMessage(chatId, { 
+                        role: 'assistant', content: text, type: 'text' 
+                    });
                     
                     return { success: true, reply: text };
                 } catch (apiError: any) {
