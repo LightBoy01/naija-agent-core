@@ -7,6 +7,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import https from 'https';
 
 const server = new Server(
   { name: 'local-fetch-mcp', version: '1.0.0' },
@@ -35,7 +36,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (request.params.name === 'fetch_webpage') {
     try {
       const url = request.params.arguments.url;
-      const response = await axios.get(url, { timeout: 10000 });
+      const response = await axios.get(url, { 
+        timeout: 10000,
+        httpsAgent: new https.Agent({ rejectUnauthorized: false })
+      });
       const $ = cheerio.load(response.data);
       
       // Remove scripts and styles for safety and context window size

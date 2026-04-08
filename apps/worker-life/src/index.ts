@@ -226,6 +226,7 @@ const worker = new Worker(
 
                     // 1. Retrieve Long-Term Memory
                     const context = await lifeMemory.getContext(userPhone);
+                    const activeMonitors = await heartbeatService.getUserConfigs(userPhone);
                     
                     // 2. Construct Prompt with Context
                     const systemPrompt = `
@@ -239,6 +240,10 @@ const worker = new Worker(
                     - Family: ${JSON.stringify(context.family || {})}
                     - Goals: ${JSON.stringify(context.goals || [])}
                     - Preferences: ${JSON.stringify(context.preferences || {})}
+
+                    [ACTIVE MONITORS & REMINDERS]:
+                    You have set up the following proactive monitors for the user. If they ask about their reminders or alerts, reference this list:
+                    ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently active."}
                     
                     Your Goal: Provide actionable, empathetic, and hyper-relevant advice.
                     
