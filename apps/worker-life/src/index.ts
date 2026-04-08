@@ -279,7 +279,7 @@ const worker = new Worker(
                     let chatSession;
                     let result;
 
-                    const chatId = await findOrCreateChat(orgId || 'naija-agent-master', userPhone, 'User');
+                    const chatId = await findOrCreateChat(orgId || 'naija-agent-master', `${userPhone}_life`, 'User');
                     const history = await getChatHistory(chatId, 10);
                     
                     const chatHistory = [
