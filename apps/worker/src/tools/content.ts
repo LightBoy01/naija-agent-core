@@ -82,7 +82,7 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
 
         try {
           // Tier 1: Gemini 3.1 Preview
-          const summary = await trySearch("gemini-3.1-flash-lite-preview");
+          const summary = await trySearch("gemma-4-26b-a4b-it");
           return { status: 'success', result: summary };
         } catch (firstTryErr: any) {
            if (firstTryErr.message.includes('429')) {

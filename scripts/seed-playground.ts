@@ -34,7 +34,7 @@ async function seedPlayground() {
       config: {
         tools: ['web_search', 'calculator'],
         adminPhone: process.env.MASTER_ADMIN_PHONE,
-        model: 'gemini-3.1-flash-lite-preview',
+        model: 'gemma-4-26b-a4b-it',
         isMaster: false
       },
       balance: 1000000, // 10,000 NGN for testing

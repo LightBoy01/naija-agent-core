@@ -211,7 +211,7 @@ export async function handleOnboarding(
         `🔋 *Service:* ${org.isActive ? '✅ ACTIVE' : '💤 MAINTENANCE'}\n` +
         `💳 *Balance:* ${formatCurrency(balanceMajor, currency.locale, currency.code)}\n` +
         `📲 *SMS Bridge:* ${bridgeStatus}\n` +
-        `🧠 *Model:* ${org.config?.model || 'gemini-3.1-flash-lite-preview'}\n\n` +
+        `🧠 *Model:* ${org.config?.model || 'gemma-4-26b-a4b-it'}\n\n` +
         `Oga, I am at your service!`;
       
       await tenantWhatsAppService.sendText(from, statusMsg);

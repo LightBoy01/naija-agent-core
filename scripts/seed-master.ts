@@ -56,7 +56,7 @@ async function seedMaster() {
         tools: ['web_search', 'calculator'],
         adminPhone: BOSS_PHONE,
         adminPin: '0000', // Change this immediately via #setup
-        model: 'gemini-3.1-flash-lite-preview',
+        model: 'gemma-4-26b-a4b-it',
         isMaster: true,
         sovereignBankDetails: SOVEREIGN_BANK
       },

@@ -43,7 +43,7 @@ export async function registerTrialInterest(data: {
       adminPhone,
       botPhone,
       tools: ['web_search'],
-      model: 'gemini-3.1-flash-lite-preview'
+      model: 'gemma-4-26b-a4b-it'
     },
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
@@ -221,7 +221,7 @@ export async function createTenant(data: {
     costPerReply: 3300, 
     config: {
       tools: ['web_search'],
-      model: 'gemini-3.1-flash-lite-preview',
+      model: 'gemma-4-26b-a4b-it',
       adminPin: hashedPin,
       bridgeSecret, 
       useSmsBridge: true
