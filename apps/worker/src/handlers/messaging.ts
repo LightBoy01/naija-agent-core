@@ -462,6 +462,11 @@ export async function handleMessage(
   }
 
   // 7. Finalize & Reply
+  const replyMatch = responseText.match(/<reply>([\s\S]*?)<\/reply>/i);
+  if (replyMatch) {
+      responseText = replyMatch[1].trim();
+  }
+
   await saveMessage(chatId, { 
     role: 'user', content: userMessageContent, type: type as any, 
     metadata: { messageId, ...(mediaId ? { mediaId } : {}) } 

@@ -159,8 +159,8 @@ const worker = new Worker(
                                 If no alert is needed, you MUST reply with exactly "SKIP" and nothing else.
 
                                 [RESPONSE FORMATTING - CRITICAL]:
-                                - DO NOT output your internal thinking, planning, or chain-of-thought process to the user.
-                                - Respond directly with the final message or "SKIP". No preambles or self-talk.
+                                - DO NOT output your internal thinking, planning, or chain-of-thought process directly to the user.
+                                - You MUST wrap your final message (or "SKIP") in <reply>...</reply> tags. Everything outside these tags will be ignored.
                                 `;
                                 
                                 const { primaryModel } = await getDynamicModels();
@@ -169,7 +169,12 @@ const worker = new Worker(
                                 });
                                 
                                 const result = await chatSession.sendMessage("Evaluate and generate proactive message or SKIP.");
-                                const text = result.response.text().trim();
+                                let text = result.response.text().trim();
+                                
+                                const replyMatch = text.match(/<reply>([\s\S]*?)<\/reply>/i);
+                                if (replyMatch) {
+                                    text = replyMatch[1].trim();
+                                }
                                 
                                 if (text !== 'SKIP') {
                                     logger.info({ userId }, 'Proactive heartbeat message generated');
@@ -266,8 +271,8 @@ const worker = new Worker(
                     - You have access to the 'fetch_webpage' tool to read URLs provided by the user. If the user gives a URL, use the tool to read it before responding.
 
                     [RESPONSE FORMATTING - CRITICAL]:
-                    - DO NOT output your internal thinking, planning, or chain-of-thought process to the user.
-                    - Respond directly with the final, empathetic, and conversational answer. No preambles or self-talk.
+                    - DO NOT output your internal thinking, planning, or chain-of-thought process directly to the user.
+                    - You MUST wrap your final, conversational answer in <reply>...</reply> tags. Everything outside these tags will be ignored.
                     `;
 
                     // 3. Generate Content (Reasoning) with Fallback Strategy
@@ -306,6 +311,11 @@ const worker = new Worker(
 
                     const response = result.response;
                     let text = response.text();
+                    
+                    const replyMatch = text.match(/<reply>([\s\S]*?)<\/reply>/i);
+                    if (replyMatch) {
+                        text = replyMatch[1].trim();
+                    }
 
                     // 4. Tool Execution (Function Calling) with SMART BILLING
                     const functionCalls = response.functionCalls();
