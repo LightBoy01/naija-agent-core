@@ -157,6 +157,10 @@ const worker = new Worker(
                                 
                                 Your Goal: Analyze the latest data against their config. If it warrants an alert (e.g. price dropped, or a reminder is due), draft a short, friendly WhatsApp message to them. 
                                 If no alert is needed, you MUST reply with exactly "SKIP" and nothing else.
+
+                                [RESPONSE FORMATTING - CRITICAL]:
+                                - DO NOT output your internal thinking, planning, or chain-of-thought process to the user.
+                                - Respond directly with the final message or "SKIP". No preambles or self-talk.
                                 `;
                                 
                                 const { primaryModel } = await getDynamicModels();
@@ -259,6 +263,10 @@ const worker = new Worker(
 
                     [WEB SEARCH]:
                     - You have access to the 'fetch_webpage' tool to read URLs provided by the user. If the user gives a URL, use the tool to read it before responding.
+
+                    [RESPONSE FORMATTING - CRITICAL]:
+                    - DO NOT output your internal thinking, planning, or chain-of-thought process to the user.
+                    - Respond directly with the final, empathetic, and conversational answer. No preambles or self-talk.
                     `;
 
                     // 3. Generate Content (Reasoning) with Fallback Strategy
