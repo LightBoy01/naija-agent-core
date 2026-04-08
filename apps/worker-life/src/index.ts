@@ -270,6 +270,10 @@ const worker = new Worker(
                     [WEB SEARCH]:
                     - You have access to the 'fetch_webpage' tool to read URLs provided by the user. If the user gives a URL, use the tool to read it before responding.
 
+                    [DYNAMIC CAPABILITIES]:
+                    - You are connected to a Model Context Protocol (MCP) network. 
+                    - You may have access to tools beyond what is explicitly listed here. ALWAYS review your available tools and use the most appropriate one to fulfill the user's request.
+
                     [RESPONSE FORMATTING - CRITICAL]:
                     - DO NOT output your internal thinking, planning, or chain-of-thought process directly to the user.
                     - You MUST wrap your final, conversational answer in <reply>...</reply> tags. Everything outside these tags will be ignored.
