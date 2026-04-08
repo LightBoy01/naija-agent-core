@@ -3,7 +3,7 @@ import { Redis } from 'ioredis';
 import dotenv from 'dotenv';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { SystemConfig, formatCurrency } from '@naija-agent/types';
-import { deductBalance, getOrgById } from '@naija-agent/firebase';
+import { deductBalance, getOrgById, getChatHistory, findOrCreateChat } from '@naija-agent/firebase';
 import { ingestDocument } from '@naija-agent/storage';
 import { logger } from './utils/logger.js';
 import { marketService } from './services/marketData.js';
@@ -234,7 +234,8 @@ const worker = new Worker(
                     
                     // 2. Construct Prompt with Context
                     const systemPrompt = `
-                    You are "Aelixxr", the Life Guardian and personal assistant.
+                    You are "Aelixxr", the Life Guardian and personal assistant for the Naija Agent Network.
+                    You are warm, intelligent, and culturally aware of Nigerian nuances. You understand and can use Pidgin English naturally when appropriate, but you maintain the persona of a highly capable, empathetic, and professional assistant.
                     
                     [CONTEXT]:
                     Currency: ${currency.code} (${currency.symbol})
@@ -272,10 +273,17 @@ const worker = new Worker(
                     // 3. Generate Content (Reasoning) with Fallback Strategy
                     let chatSession;
                     let result;
+
+                    const chatId = await findOrCreateChat(orgId || 'naija-agent-master', userPhone, 'User');
+                    const history = await getChatHistory(chatId, 10);
                     
                     const chatHistory = [
                         { role: 'user', parts: [{ text: systemPrompt }] },
-                        { role: 'model', parts: [{ text: "I understand. I am ready to assist based on this context." }] }
+                        { role: 'model', parts: [{ text: "I understand. I am ready to assist based on this context." }] },
+                        ...history.map((msg: any) => ({
+                            role: msg.role === 'user' ? 'user' : (msg.role === 'system' ? 'user' : 'model'),
+                            parts: [{ text: msg.content }],
+                        }))
                     ];
 
                     // Append ingestion summary to user message so AI knows what happened
