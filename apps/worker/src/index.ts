@@ -85,7 +85,7 @@ const defaultWhatsAppService = new WhatsAppService(
 );
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const whatsappQueue = new Queue('whatsapp-queue', { connection: redisClient });
+const whatsappQueue = new Queue('whatsapp-queue', { connection: redisClient as any });
 
 // --- Main Worker ---
 const worker = new Worker<JobData>(
@@ -282,7 +282,7 @@ const worker = new Worker<JobData>(
       return { success: false, reason: error.message };
     }
   },
-  { connection: redisClient, concurrency: 5 }
+  { connection: redisClient as any, concurrency: 5 }
 );
 
 worker.on('failed', async (job, err) => {

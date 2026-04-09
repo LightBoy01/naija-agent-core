@@ -124,7 +124,7 @@ export async function handleSmsBridge(
            };
            await whatsappQueue.add('process-message', alertJob, { removeOnComplete: true });
        }
-       return { success: true, reason: 'unclassified_missing_config' };
+       return { success: true };
     }
 
     const sovereignAccount = org.config.sovereignBankDetails.accountNumber;
