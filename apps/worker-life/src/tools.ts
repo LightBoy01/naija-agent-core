@@ -87,6 +87,17 @@ export const STATIC_LIFE_TOOLS: Tool = {
         },
         required: ['configId', 'userId']
       }
+    },
+    {
+      name: 'web_search',
+      description: 'Search the live internet for general knowledge, news, facts, and live information.',
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          query: { type: SchemaType.STRING, description: 'The search query (e.g. "Latest news in Nigeria today", "Who won the Champions League match yesterday?").' }
+        },
+        required: ['query']
+      }
     }
   ],
 };
@@ -135,6 +146,43 @@ export async function executeLifeTool(name: string, args: any): Promise<any> {
 
       case 'delete_heartbeat':
         return await heartbeatService.deleteHeartbeat(args.userId, args.configId);
+
+      case 'web_search': {
+        try {
+          const { GoogleGenerativeAI } = await import('@google/generative-ai');
+          const searchGenAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || '');
+          
+          const trySearch = async (modelName: string) => {
+            const searchModel = searchGenAI.getGenerativeModel({ 
+              model: modelName,
+              tools: [{ googleSearch: {} }] as any
+            });
+
+            const searchResult = await searchModel.generateContent({
+              contents: [{ role: 'user', parts: [{ text: `Search for: ${args.query}. Summarize the key facts, prices, or news found.` }] }]
+            });
+            
+            return searchResult.response.text();
+          };
+
+          try {
+            // Tier 1: Primary Gemma 4
+            const summary = await trySearch("gemma-4-26b-a4b-it");
+            return { status: 'success', result: summary };
+          } catch (firstTryErr: any) {
+             if (firstTryErr.message.includes('429') || firstTryErr.message.includes('503')) {
+                logger.warn(`🔄 [LIFE SEARCH FALLBACK] Quota Exceeded or Model Busy. Retrying with Gemini 2.5 Flash...`);
+                // Tier 2: 2.5 Flash (Reliability)
+                const secondSummary = await trySearch("gemini-2.5-flash");
+                return { status: 'success', result: secondSummary };
+             }
+             throw firstTryErr;
+          }
+        } catch (err: any) {
+          logger.error({ error: err.message }, 'Web Search Failed');
+          return { error: 'Oga, I don search tire for today! I don reach my limit for now.' };
+        }
+      }
 
       default:
         // Try fallback to MCP dynamically loaded tools
