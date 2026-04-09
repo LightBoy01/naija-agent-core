@@ -236,3 +236,16 @@
     - [x] Implement Stateless MCP Client for dynamic tools.
     - [x] Create IronClaw Identity Vault (`vaultService`) for stateful execution.
     - [x] Fix Northflank infrastructure and bypass Free Tier limits via Unified Worker container.
+    - [x] Integrate persistent chat memory & active monitor awareness.
+    - [x] Prevent database conflict by isolating `_life` chat histories.
+    - [x] Rebrand to "Life Companion" and stabilize model usage (`gemma-4-26b-a4b-it` & `gemini-2.5-flash`).
+    - [x] Strip internal chain-of-thought using `<think>` tag regex parsing.
+    - [x] Fix MCP fetch SSL bypass & add native tiered `web_search` tool.
+
+## Phase 10: The Agentic Network Architecture (Planning) 🟡
+- [ ] **Migrate to Triad Architecture:** Extract hardcoded TS prompts into `Soul.md`, `Agent.md`, and `Skill.md`.
+- [ ] **Implement RAM Caching:** Build memory loader with `fs.watch` for hot-reloading markdown brains.
+- [ ] **Constitutional Hybrid Middleware:** Build a deterministic router that intercepts high-stakes tool execution (e.g., Vault deletion) and enforces strict Playbooks/PIN auth before hitting the LLM.
+- [ ] **Sector Packs Execution:** Implement dynamic routing of both Native and MCP tools using Sector Packs (Education, Health, Commerce, Core) to prevent Tool Overload.
+- [ ] **CLI Tooling:** Expand `scripts/` directory with a CLI for local test-agent execution and MCP server management.
+- [ ] **Tier 2 Web Automation:** Develop/connect to a Playwright/Browserbase MCP Server (`deep_browse_action`) for human-like internet navigation and login handling.

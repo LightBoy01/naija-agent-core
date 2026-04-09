@@ -645,3 +645,33 @@
 ### **Verification:**
 *   **System Integrity:** All cloud services (API, Workers, Redis) are reporting a green **Running** status on Northflank with 0 restarts.
 *   **Feature Test:** Successfully pushed a `life-chat` job to BullMQ, forcing Aelixxr to use the new `fetch_webpage` MCP tool. The dynamic billing engine successfully deducted 50 Kobo, and Aelixxr gracefully handled a local SSL error, proving the end-to-end Zero-Trust execution pipeline works.
+
+## Session: Agentic Architecture & Life Companion Polish (2026-04-08)
+
+**Status:** 🟢 **Completed**
+
+### **Context:**
+*   **The Goal:** Stabilize the API infrastructure, resolve critical memory and identity conflicts in the Life Engine, and lay the theoretical groundwork for a modular "Triad" Agentic Architecture.
+*   **Challenge:** The preview `gemini-3.1-flash-lite-preview` model was consistently failing with 503 and 429 errors, cascading into fallback failures. Additionally, Aelixxr (Life OS) suffered from context amnesia and identity overlap with Zynux (Business OS).
+
+### **Actions Taken:**
+*   **API Stability & Fallbacks:**
+    *   Replaced the unstable 3.1 preview models with `gemma-4-26b-a4b-it` (Primary) and `gemini-2.5-flash` (Fallback) in `packages/types/src/config/index.ts`.
+    *   Verified the fallback logic properly handles 429/503 errors and successfully routes traffic without crashing the worker.
+*   **Memory & Identity Isolation:**
+    *   **Fixed Amnesia:** Imported `getChatHistory` and `saveMessage` into `apps/worker-life/src/index.ts`, ensuring Aelixxr natively reads its past 10 messages and writes new ones to Firestore.
+    *   **Data Separation:** Modified Aelixxr's chat ID generation to append `_life` (`findOrCreateChat(orgId, '${userPhone}_life', 'User')`), physically isolating its memories from Zynux's chat document.
+*   **UX & Personality Polish:**
+    *   **Rebranding:** Renamed Aelixxr from "Life Guardian" to "Life Companion" across all prompts and logs to foster a peer-level, empathetic relationship.
+    *   **Chain-of-Thought Stripping:** Replaced fragile `<reply>` tag logic with a robust regex parser (`text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()`) to securely hide Gemma 4's internal reasoning from WhatsApp users.
+*   **Tooling Enhancements:**
+    *   **SSL Bypass:** Updated the local MCP fetcher (`mcp-fetch.mjs`) to use an `https.Agent` with `rejectUnauthorized: false` to allow scraping sites with strict certificate rules.
+    *   **Native Web Search:** Added a `web_search` native tool with a Gemma 4 -> Gemini 2.5 fallback tier to grant Aelixxr robust, live internet access.
+    *   **MCP Awareness:** Injected a `[DYNAMIC CAPABILITIES]` block into Aelixxr's system prompt, explicitly teaching the AI to utilize any newly connected MCP servers automatically.
+*   **Architectural Planning:**
+    *   Drafted `docs/plans/PHASE_9_AGENTIC_ARCHITECTURE.md` to document the upcoming migration from hardcoded TypeScript prompts to a Modular Triad Architecture (`Soul.md`, `Agent.md`, `Skill.md`).
+    *   Debated and documented the "Constitutional Hybrid" approach (Principle-Based Architecture for conversation, strict deterministic Playbooks for high-stakes tool execution).
+    *   Designed the "Sector Packs" concept for dynamic routing of Native + MCP tools.
+
+### **Verification:**
+*   **Production Stability:** Logs from Northflank confirm zero API errors. Aelixxr successfully recalls active heartbeat monitors and recent conversation history, and correctly executes web fetches/searches while stripping internal `<think>` tags. The MVP is fully stabilized and cleared for early user testing.
