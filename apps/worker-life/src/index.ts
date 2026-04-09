@@ -147,7 +147,7 @@ const worker = new Worker(
                             if (shouldMessage) {
                                 const context = await lifeMemory.getContext(userId);
                                 const systemPrompt = `
-                                You are "Aelixxr", the Life Guardian.
+                                You are "Aelixxr", the Life Companion.
                                 This is a PROACTIVE message. The user did not speak to you.
                                 You are checking their active heartbeat config: ${JSON.stringify(config)}
                                 Here is the latest data for this config: ${JSON.stringify(contextData)}
@@ -159,8 +159,8 @@ const worker = new Worker(
                                 If no alert is needed, you MUST reply with exactly "SKIP" and nothing else.
 
                                 [RESPONSE FORMATTING - CRITICAL]:
-                                - DO NOT output your internal thinking, planning, or chain-of-thought process directly to the user.
-                                - You MUST wrap your final message (or "SKIP") in <reply>...</reply> tags. Everything outside these tags will be ignored.
+                                - If you need to think internally or plan your response, you MUST enclose your chain of thought entirely within <think>...</think> tags.
+                                - Write your final message (or "SKIP") clearly AFTER and OUTSIDE these tags.
                                 `;
                                 
                                 const { primaryModel } = await getDynamicModels();
@@ -171,10 +171,7 @@ const worker = new Worker(
                                 const result = await chatSession.sendMessage("Evaluate and generate proactive message or SKIP.");
                                 let text = result.response.text().trim();
                                 
-                                const replyMatch = text.match(/<reply>([\s\S]*?)<\/reply>/i);
-                                if (replyMatch) {
-                                    text = replyMatch[1].trim();
-                                }
+                                text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
                                 
                                 if (text !== 'SKIP') {
                                     logger.info({ userId }, 'Proactive heartbeat message generated');
@@ -239,7 +236,7 @@ const worker = new Worker(
                     
                     // 2. Construct Prompt with Context
                     const systemPrompt = `
-                    You are "Aelixxr", the Life Guardian and personal assistant for the Naija Agent Network.
+                    You are "Aelixxr", the Life Companion and personal assistant for the Naija Agent Network.
                     You are warm, intelligent, and culturally aware of Nigerian nuances. You understand and can use Pidgin English naturally when appropriate, but you maintain the persona of a highly capable, empathetic, and professional assistant.
                     
                     [CONTEXT]:
@@ -275,8 +272,8 @@ const worker = new Worker(
                     - You may have access to tools beyond what is explicitly listed here. ALWAYS review your available tools and use the most appropriate one to fulfill the user's request.
 
                     [RESPONSE FORMATTING - CRITICAL]:
-                    - DO NOT output your internal thinking, planning, or chain-of-thought process directly to the user.
-                    - You MUST wrap your final, conversational answer in <reply>...</reply> tags. Everything outside these tags will be ignored.
+                    - If you need to think internally or plan your response, you MUST enclose your chain of thought entirely within <think>...</think> tags.
+                    - Write your final, conversational answer clearly AFTER and OUTSIDE these tags.
                     `;
 
                     // 3. Generate Content (Reasoning) with Fallback Strategy
@@ -316,10 +313,7 @@ const worker = new Worker(
                     const response = result.response;
                     let text = response.text();
                     
-                    const replyMatch = text.match(/<reply>([\s\S]*?)<\/reply>/i);
-                    if (replyMatch) {
-                        text = replyMatch[1].trim();
-                    }
+                    text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
                     // 4. Tool Execution (Function Calling) with SMART BILLING
                     const functionCalls = response.functionCalls();
@@ -368,13 +362,10 @@ const worker = new Worker(
                         }
                     }
 
-                    const finalReplyMatch = text.match(/<reply>([\s\S]*?)<\/reply>/i);
-                    if (finalReplyMatch) {
-                        text = finalReplyMatch[1].trim();
-                    }
+                    text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
                     text += billingNote; // Append billing notification
-                    logger.info({ response: text }, '🗣️ Life Guardian Replying');
+                    logger.info({ response: text }, '🗣️ Life Companion Replying');
                     
                     // Send via WhatsApp
                     await whatsappService.sendText(userPhone, text);

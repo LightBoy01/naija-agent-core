@@ -131,8 +131,8 @@ export async function handleMessage(
      - Offer a quick menu: "I can help you check prices, track orders, or book appointments."
 
   [RESPONSE FORMATTING - CRITICAL]:
-  - DO NOT output your internal thinking, planning, or chain-of-thought process to the user.
-  - Respond directly with the final, conversational answer. No preambles or self-talk.
+  - If you need to think internally or plan your response, you MUST enclose your chain of thought entirely within <think>...</think> tags.
+  - Write your final, conversational answer clearly AFTER and OUTSIDE these tags.
 
   [PAYMENT VERIFICATION PROTOCOL (VISION FIRST)]:
   - When asking a customer for payment, ALWAYS explicitly request a screenshot: "Please send a screenshot of your transfer receipt for instant verification."
@@ -462,10 +462,7 @@ export async function handleMessage(
   }
 
   // 7. Finalize & Reply
-  const replyMatch = responseText.match(/<reply>([\s\S]*?)<\/reply>/i);
-  if (replyMatch) {
-      responseText = replyMatch[1].trim();
-  }
+  responseText = responseText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
   await saveMessage(chatId, { 
     role: 'user', content: userMessageContent, type: type as any, 
