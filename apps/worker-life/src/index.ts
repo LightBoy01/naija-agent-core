@@ -1,7 +1,7 @@
 import { Worker, Job } from 'bullmq';
 import { Redis } from 'ioredis';
 import dotenv from 'dotenv';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { SystemConfig, formatCurrency } from '@naija-agent/types';
 import { deductBalance, getOrgById, getChatHistory, findOrCreateChat, saveMessage } from '@naija-agent/firebase';
 import { ingestDocument } from '@naija-agent/storage';
@@ -88,14 +88,31 @@ let globalLifeTools: any[] | null = null;
 async function getDynamicModels() {
   const tools = globalLifeTools || await getLifeTools();
   
+  const responseSchema = {
+    type: SchemaType.OBJECT,
+    properties: {
+      internal_thoughts: {
+        type: SchemaType.STRING,
+        description: "Your private chain-of-thought, reasoning, or planning process. This will NOT be shown to the user."
+      },
+      whatsapp_message: {
+        type: SchemaType.STRING,
+        description: "The final, formatted conversational message to send to the user (or 'SKIP' for heartbeats)."
+      }
+    },
+    required: ["internal_thoughts", "whatsapp_message"]
+  };
+
   const primaryModel = genAI.getGenerativeModel({ 
     model: process.env.GEMINI_MODEL_LOS || SystemConfig.MODELS.AELIXXR_PRIMARY,
-    tools
+    tools,
+    generationConfig: { responseMimeType: "application/json", responseSchema }
   });
 
   const fallbackModel = genAI.getGenerativeModel({ 
     model: SystemConfig.MODELS.AELIXXR_FALLBACK,
-    tools
+    tools,
+    generationConfig: { responseMimeType: "application/json", responseSchema }
   });
 
   return { primaryModel, fallbackModel };
@@ -159,8 +176,9 @@ const worker = new Worker(
                                 If no alert is needed, you MUST reply with exactly "SKIP" and nothing else.
 
                                 [RESPONSE FORMATTING - CRITICAL]:
-                                - If you need to think internally or plan your response, you MUST enclose your chain of thought entirely within <think>...</think> tags.
-                                - Write your final message (or "SKIP") clearly AFTER and OUTSIDE these tags.
+                                - The API enforces structured JSON output. 
+                                - Place all your internal reasoning in the "internal_thoughts" field.
+                                - Place your final, conversational message (or exactly "SKIP") in the "whatsapp_message" field.
                                 `;
                                 
                                 const { primaryModel } = await getDynamicModels();
@@ -171,7 +189,13 @@ const worker = new Worker(
                                 const result = await chatSession.sendMessage("Evaluate and generate proactive message or SKIP.");
                                 let text = result.response.text().trim();
                                 
-                                text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+                                try {
+                                    const parsed = JSON.parse(text);
+                                    text = parsed.whatsapp_message || "SKIP";
+                                } catch (e) {
+                                    logger.warn({ text }, "Failed to parse JSON in heartbeat");
+                                    text = "SKIP"; // Fail safe
+                                }
                                 
                                 if (text !== 'SKIP') {
                                     logger.info({ userId }, 'Proactive heartbeat message generated');
@@ -272,8 +296,9 @@ const worker = new Worker(
                     - You may have access to tools beyond what is explicitly listed here. ALWAYS review your available tools and use the most appropriate one to fulfill the user's request.
 
                     [RESPONSE FORMATTING - CRITICAL]:
-                    - If you need to think internally or plan your response, you MUST enclose your chain of thought entirely within <think>...</think> tags.
-                    - Write your final, conversational answer clearly AFTER and OUTSIDE these tags.
+                    - The API enforces structured JSON output. 
+                    - Place all your internal reasoning in the "internal_thoughts" field.
+                    - Place your final, conversational answer in the "whatsapp_message" field.
                     `;
 
                     // 3. Generate Content (Reasoning) with Fallback Strategy
@@ -301,7 +326,7 @@ const worker = new Worker(
                         chatSession = primaryModel.startChat({ history: chatHistory });
                         result = await chatSession.sendMessage(fullMessage);
                     } catch (primaryError: any) {
-                        if (primaryError.message.includes('429') || primaryError.message.includes('503')) {
+                        if (primaryError.message.includes('429') || primaryError.message.includes('503') || primaryError.message.includes('fetch failed') || primaryError.message.includes('500')) {
                             logger.warn('⚠️ Primary Life Model Failed. Switching to Fallback.');
                             chatSession = fallbackModel.startChat({ history: chatHistory });
                             result = await chatSession.sendMessage(fullMessage);
@@ -313,7 +338,12 @@ const worker = new Worker(
                     const response = result.response;
                     let text = response.text();
                     
-                    text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+                    try {
+                        const parsed = JSON.parse(text);
+                        text = parsed.whatsapp_message || text;
+                    } catch (e) {
+                        logger.warn({ text }, "Failed to parse JSON in main chat");
+                    }
 
                     // 4. Tool Execution (Function Calling) with SMART BILLING
                     const functionCalls = response.functionCalls();
@@ -358,11 +388,16 @@ const worker = new Worker(
                                 }
                             }]);
                             
-                            text = followUpResult.response.text(); 
+                            let followUpText = followUpResult.response.text(); 
+                            try {
+                                const parsed = JSON.parse(followUpText);
+                                text = parsed.whatsapp_message || followUpText;
+                            } catch (e) {
+                                logger.warn({ text: followUpText }, "Failed to parse JSON after tool call");
+                                text = followUpText;
+                            }
                         }
                     }
-
-                    text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
                     text += billingNote; // Append billing notification
                     logger.info({ response: text }, '🗣️ Life Companion Replying');

@@ -12,7 +12,7 @@ import {
   logSystemEvent,
   Organization
 } from '@naija-agent/firebase';
-import { GoogleGenerativeAI, Tool } from '@google/generative-ai';
+import { GoogleGenerativeAI, Tool, SchemaType } from '@google/generative-ai';
 import { PaymentProvider } from '@naija-agent/payments';
 import { Redis } from 'ioredis';
 import { handleToolCall } from '../tool-handlers.js';
@@ -131,8 +131,9 @@ export async function handleMessage(
      - Offer a quick menu: "I can help you check prices, track orders, or book appointments."
 
   [RESPONSE FORMATTING - CRITICAL]:
-  - If you need to think internally or plan your response, you MUST enclose your chain of thought entirely within <think>...</think> tags.
-  - Write your final, conversational answer clearly AFTER and OUTSIDE these tags.
+  - The API enforces structured JSON output. 
+  - Place all your internal reasoning in the "internal_thoughts" field.
+  - Place your final, conversational answer in the "whatsapp_message" field.
 
   [PAYMENT VERIFICATION PROTOCOL (VISION FIRST)]:
   - When asking a customer for payment, ALWAYS explicitly request a screenshot: "Please send a screenshot of your transfer receipt for instant verification."
@@ -260,11 +261,27 @@ export async function handleMessage(
     ${GLOBAL_PROTOCOL}`;
   }
 
+  const responseSchema = {
+    type: SchemaType.OBJECT,
+    properties: {
+      internal_thoughts: {
+        type: SchemaType.STRING,
+        description: "Your private chain-of-thought, reasoning, or planning process. This will NOT be shown to the user."
+      },
+      whatsapp_message: {
+        type: SchemaType.STRING,
+        description: "The final, formatted conversational message to send to the user."
+      }
+    },
+    required: ["internal_thoughts", "whatsapp_message"]
+  };
+
   // 3. Model Setup - Use Zynux (Business) Primary Model
   const tenantModelName = org.config?.model || SystemConfig.MODELS.ZYNUX_PRIMARY;
   const model = genAI.getGenerativeModel({ 
     model: tenantModelName,
-    tools: tenantTools.length > 0 ? tenantTools : undefined
+    tools: tenantTools.length > 0 ? tenantTools : undefined,
+    generationConfig: { responseMimeType: "application/json", responseSchema }
   });
 
   // 4. Chat Session & History
@@ -390,7 +407,11 @@ export async function handleMessage(
       } catch (err: any) {
           if (err.message.includes('429') || err.message.includes('503')) {
               logger.warn({ orgId, error: err.message }, '⚠️ Primary Model Failed. Switching to Zynux Fallback.');
-              const fallbackModel = genAI.getGenerativeModel({ model: SystemConfig.MODELS.ZYNUX_FALLBACK });
+              const fallbackModel = genAI.getGenerativeModel({ 
+                model: SystemConfig.MODELS.ZYNUX_FALLBACK,
+                tools: tenantTools.length > 0 ? tenantTools : undefined,
+                generationConfig: { responseMimeType: "application/json", responseSchema } 
+              });
               return await fallbackModel.startChat({ history: chatHistory }).sendMessage(parts);
           }
           throw err;
@@ -462,7 +483,12 @@ export async function handleMessage(
   }
 
   // 7. Finalize & Reply
-  responseText = responseText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  try {
+      const parsed = JSON.parse(responseText);
+      responseText = parsed.whatsapp_message || responseText;
+  } catch (e) {
+      logger.warn({ responseText }, "Failed to parse JSON in Zynux chat");
+  }
 
   await saveMessage(chatId, { 
     role: 'user', content: userMessageContent, type: type as any, 
