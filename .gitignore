@@ -6,3 +6,6 @@ coverage
 packages/firebase/serviceAccountKey.json
 dump.rdb
 .vercel
+nf-env*.json
+*.log
+logs.*.json
