@@ -56,17 +56,13 @@ async function main() {
   console.log("🚀 Starting Monorepo Bundle Build...");
   
   // --- MONOREPO PACKAGES BUILDING ---
-  // Ensure real dist/ folders exist for local packages
-  const packages = ['types', 'firebase', 'payments', 'storage', 'logistics'];
-  for (const pkg of packages) {
-    const pkgPath = path.join(process.cwd(), `packages/${pkg}`);
-    console.log(`🔨 Building @naija-agent/${pkg}...`);
-    try {
-      execSync('npm run build', { cwd: pkgPath, stdio: 'inherit' });
-    } catch (e) {
-      console.error(`❌ Package build failed for @naija-agent/${pkg}`);
-      process.exit(1);
-    }
+  // Compile all packages together to save memory (Termux OOM fix)
+  console.log(`🔨 Compiling all packages via TypeScript Project References...`);
+  try {
+    execSync('npx tsc -b packages/types packages/firebase packages/payments packages/storage packages/logistics', { stdio: 'inherit' });
+  } catch (e) {
+    console.error(`❌ Package compilation failed`);
+    process.exit(1);
   }
 
   // Build API to .js

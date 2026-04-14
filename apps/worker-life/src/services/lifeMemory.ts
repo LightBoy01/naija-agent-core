@@ -19,6 +19,7 @@ export interface LifeContext {
   };
   academicProfile?: AcademicProfile; // Added for Student Lifecycle
   lastInteraction?: Date;
+  energyCredits?: number; // Added for the Battery/Energy System
 }
 
 export class LifeMemoryService {
@@ -31,15 +32,101 @@ export class LifeMemoryService {
   async getContext(phone: string): Promise<LifeContext> {
     try {
       const db = getDb();
-      const doc = await db.collection(this.collection).doc(phone).get();
+      const docRef = db.collection(this.collection).doc(phone);
+      const doc = await docRef.get();
       
       if (!doc.exists) {
-        return { lastInteraction: new Date() };
+        // --- WELCOME BONUS ---
+        // Give new users 100 Energy Credits (₦1,000 equivalent)
+        const initialContext: LifeContext = { 
+          lastInteraction: new Date(),
+          energyCredits: 100 
+        };
+        await docRef.set(initialContext);
+        logger.info({ phone }, '🎁 New user registered! Granted 100 Welcome Bonus Credits.');
+        return initialContext;
       }
       return doc.data() as LifeContext;
     } catch (error: any) {
       logger.error({ phone, error: error.message }, 'Failed to fetch Life Context');
       return {};
+    }
+  }
+
+  /**
+   * Deducts energy credits from a user securely using a transaction.
+   * Returns the new balance, or null if insufficient.
+   */
+  async deductEnergy(phone: string, amount: number): Promise<number | null> {
+    try {
+      const db = getDb();
+      const docRef = db.collection(this.collection).doc(phone);
+      let newBalance: number | null = null;
+
+      await db.runTransaction(async (t: any) => {
+        const doc = await t.get(docRef);
+        if (!doc.exists) throw new Error('User profile not found');
+
+        const data = doc.data() as LifeContext;
+        const currentBalance = data.energyCredits || 0;
+
+        // Allow overdraft down to -2 for emergency reserves
+        if (currentBalance < amount && (currentBalance - amount < -2)) {
+          throw new Error(`Insufficient energy: ${currentBalance} < ${amount}`);
+        }
+
+        newBalance = currentBalance - amount;
+        t.update(docRef, { energyCredits: newBalance });
+      });
+
+      return newBalance;
+    } catch (e: any) {
+      logger.warn({ phone, error: e.message }, `Energy deduction failed`);
+      return null;
+    }
+  }
+
+  /**
+   * Adds energy credits to a user securely using a transaction.
+   * Returns the new balance.
+   */
+  async addEnergy(phone: string, amount: number): Promise<number | null> {
+    try {
+      const db = getDb();
+      const docRef = db.collection(this.collection).doc(phone);
+      let newBalance: number | null = null;
+
+      await db.runTransaction(async (t: any) => {
+        const doc = await t.get(docRef);
+        
+        let currentBalance = 0;
+        if (doc.exists) {
+          const data = doc.data() as LifeContext;
+          currentBalance = data.energyCredits || 0;
+        }
+
+        newBalance = currentBalance + amount;
+        t.set(docRef, { energyCredits: newBalance, lastInteraction: new Date() }, { merge: true });
+      });
+
+      logger.info({ phone, added: amount, newBalance }, '🔋 Energy Added Successfully');
+      return newBalance;
+    } catch (e: any) {
+      logger.warn({ phone, error: e.message }, `Energy addition failed`);
+      return null;
+    }
+  }
+
+  /**
+   * Check if a user's LifeContext already exists.
+   */
+  async checkExists(phone: string): Promise<boolean> {
+    try {
+      const db = getDb();
+      const doc = await db.collection(this.collection).doc(phone).get();
+      return doc.exists;
+    } catch (error: any) {
+      return false;
     }
   }
 

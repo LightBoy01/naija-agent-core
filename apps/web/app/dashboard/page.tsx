@@ -12,6 +12,20 @@ interface Client {
   isActive: boolean;
   status: string;
   botPhone: string;
+  currency?: {
+    locale: string;
+    code: string;
+    symbol: string;
+  };
+}
+
+interface LifeUser {
+  id: string;
+  name: string;
+  energyCredits: number;
+  lastInteraction: string | null;
+  isActive: boolean;
+  status: string;
 }
 
 export default async function Dashboard() {
@@ -36,6 +50,9 @@ export default async function Dashboard() {
             <p className="text-zinc-500">Real-time status of your Naija Agent network</p>
           </div>
           <div className="flex gap-4 items-center">
+            <Link href="/dashboard/queues" className="px-4 py-2 bg-white rounded-lg border border-zinc-200 shadow-sm text-sm font-semibold text-zinc-600 hover:text-zinc-900 transition-colors flex items-center gap-2">
+              📊 Queues
+            </Link>
             <Link href="/vault" className="px-4 py-2 bg-white rounded-lg border border-zinc-200 shadow-sm text-sm font-semibold text-zinc-600 hover:text-zinc-900 transition-colors flex items-center gap-2">
               🖼️ Media Vault
             </Link>
@@ -73,53 +90,101 @@ export default async function Dashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Portfolio List (Preserved) */}
-          <section className="lg:col-span-2">
-            <h2 className="text-xl font-bold text-zinc-900 mb-6">Network Portfolio</h2>
-            <div className="overflow-hidden bg-white rounded-xl border border-zinc-200 shadow-sm">
-              <table className="min-w-full divide-y divide-zinc-200">
-                <thead className="bg-zinc-50">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-zinc-500 uppercase">Organization</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-zinc-500 uppercase">Status</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-zinc-500 uppercase text-right">Balance</th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-zinc-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-200">
-                  {liveClients.map((client: Client) => {
-                    return (
-                      <tr key={client.id} className="hover:bg-zinc-50 transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-bold text-zinc-900">{client.name}</div>
-                          <div className="text-xs text-zinc-500">{client.id}</div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            client.isActive 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {client.isActive ? 'Active' : 'Paused'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="text-sm font-mono font-semibold text-zinc-900">
-                            {formatCurrency(client.balance / 100, (client as any).currency?.locale, (client as any).currency?.code, (client as any).currency?.symbol)}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <Link 
-                            href={`/dashboard/organizations/${client.id}`}
-                            className="text-xs font-bold text-zinc-400 hover:text-zinc-900 uppercase tracking-tighter transition-colors"
-                          >
-                            Manage →
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          <section className="lg:col-span-2 space-y-8">
+            <div>
+              <h2 className="text-xl font-bold text-zinc-900 mb-6">Business Organizations (Zynux)</h2>
+              <div className="overflow-hidden bg-white rounded-xl border border-zinc-200 shadow-sm">
+                <table className="min-w-full divide-y divide-zinc-200">
+                  <thead className="bg-zinc-50">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-zinc-500 uppercase">Organization</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-zinc-500 uppercase">Status</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-zinc-500 uppercase text-right">Balance</th>
+                      <th className="px-6 py-4 text-right text-xs font-semibold text-zinc-500 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-200">
+                    {liveClients.map((client: Client) => {
+                      return (
+                        <tr key={client.id} className="hover:bg-zinc-50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-bold text-zinc-900">{client.name}</div>
+                            <div className="text-xs text-zinc-500">{client.id}</div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              client.isActive 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {client.isActive ? 'Active' : 'Paused'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="text-sm font-mono font-semibold text-zinc-900">
+                              {formatCurrency(client.balance / 100, client.currency?.locale, client.currency?.code, client.currency?.symbol)}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <Link 
+                              href={`/dashboard/organizations/${client.id}`}
+                              className="text-xs font-bold text-zinc-400 hover:text-zinc-900 uppercase tracking-tighter transition-colors"
+                            >
+                              Manage →
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Life OS Users */}
+            <div>
+              <h2 className="text-xl font-bold text-zinc-900 mb-6 flex items-center gap-2">
+                🔋 Life OS Users (Aelixxr)
+              </h2>
+              <div className="overflow-hidden bg-white rounded-xl border border-zinc-200 shadow-sm">
+                <table className="min-w-full divide-y divide-zinc-200">
+                  <thead className="bg-zinc-50">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-zinc-500 uppercase">User</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-zinc-500 uppercase">Energy Level</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-zinc-500 uppercase text-right">Credits</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-200">
+                    {(stats.lifeUsers || []).map((user: LifeUser) => {
+                      const maxEnergy = 100;
+                      const energyPercent = Math.min(100, Math.max(0, (user.energyCredits / maxEnergy) * 100));
+                      let batteryColor = 'bg-green-500';
+                      if (energyPercent < 20) batteryColor = 'bg-red-500';
+                      else if (energyPercent < 50) batteryColor = 'bg-yellow-500';
+
+                      return (
+                        <tr key={user.id} className="hover:bg-zinc-50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-bold text-zinc-900">{user.name}</div>
+                            <div className="text-xs text-zinc-500">{user.id}</div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="w-full bg-zinc-200 rounded-full h-2.5 max-w-xs">
+                              <div className={`h-2.5 rounded-full ${batteryColor}`} style={{ width: `${energyPercent}%` }}></div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="text-sm font-mono font-bold text-zinc-900">
+                              {user.energyCredits} ⚡
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </section>
 

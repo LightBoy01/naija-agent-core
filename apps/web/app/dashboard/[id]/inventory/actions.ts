@@ -7,15 +7,11 @@ import { revalidatePath } from 'next/cache';
 /**
  * UPDATES A PRODUCT'S PRICE OR STOCK
  */
-export async function updateProductAction(orgId: string, productId: string, data: {
-  price?: number;
-  stock?: number;
-  lowStockThreshold?: number;
-}) {
+export async function updateProductAction(orgId: string, productId: string, data: Record<string, unknown>) {
   await verifyTenantSession(orgId);
 
   try {
-    await saveProduct(orgId, productId, data);
+    await saveProduct(orgId, productId, data as Record<string, unknown>);
     revalidatePath(`/dashboard/${orgId}/inventory`);
     return { success: true };
   } catch (e: unknown) {
@@ -43,18 +39,14 @@ export async function removeProductAction(orgId: string, productId: string) {
 /**
  * CREATES A NEW PRODUCT
  */
-export async function createProductAction(orgId: string, data: {
-  name: string;
-  price: number;
-  stock: number;
-  category?: string;
-}) {
+export async function createProductAction(orgId: string, data: Record<string, unknown>) {
   await verifyTenantSession(orgId);
 
   try {
     // Generate a clean slug + random suffix for ID
-    const productId = data.name.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 20) + '_' + Math.random().toString(36).substring(2, 7);
-    await saveProduct(orgId, productId, data);
+    const baseName = String(data.name || data.title || data.id || 'entity');
+    const productId = baseName.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 20) + '_' + Math.random().toString(36).substring(2, 7);
+    await saveProduct(orgId, productId, data as Record<string, unknown>);
     revalidatePath(`/dashboard/${orgId}/inventory`);
     return { success: true };
   } catch (e: unknown) {

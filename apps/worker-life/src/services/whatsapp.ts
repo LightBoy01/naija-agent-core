@@ -13,18 +13,26 @@ export class WhatsAppService {
   }
 
   async sendText(to: string, text: string) {
+    const maxLen = 4096;
+    const chunks = [];
+    for (let i = 0; i < text.length; i += maxLen) {
+      chunks.push(text.slice(i, i + maxLen));
+    }
+
     try {
-      await axios.post(
-        `${this.apiUrl}/${this.phoneNumberId}/messages`,
-        {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to,
-          type: 'text',
-          text: { body: text },
-        },
-        { headers: { Authorization: `Bearer ${this.accessToken}` } }
-      );
+      for (const chunk of chunks) {
+        await axios.post(
+          `${this.apiUrl}/${this.phoneNumberId}/messages`,
+          {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to,
+            type: 'text',
+            text: { body: chunk },
+          },
+          { headers: { Authorization: `Bearer ${this.accessToken}` } }
+        );
+      }
     } catch (error: any) {
       logger.error({ error: error.response?.data || error.message }, 'WhatsApp Send Failed');
     }

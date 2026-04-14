@@ -10,10 +10,6 @@ import { heartbeatService } from './services/heartbeat.js';
 export const STATIC_LIFE_TOOLS: Tool = {
   functionDeclarations: [
     {
-      name: 'get_market_prices',
-      description: 'Get current food prices in Nigerian markets (Rice, Beans, Yam, etc.) to help users find the best deals.',
-    },
-    {
       name: 'generate_quiz',
       description: 'Generate a study quiz for a student. Requires subject and topic.',
       parameters: {
@@ -63,32 +59,6 @@ export const STATIC_LIFE_TOOLS: Tool = {
       }
     },
     {
-      name: 'create_heartbeat',
-      description: 'Create a proactive monitor or reminder. Use this when the user asks you to "remind me", "alert me if", or "check every morning".',
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {
-          type: { type: SchemaType.STRING, description: 'The type of monitor (e.g. "market", "reminder", "custom").' },
-          query: { type: SchemaType.STRING, description: 'What to monitor or remind about (e.g. "Price of Rice drops below 50k", "Call mum").' },
-          intervalDescription: { type: SchemaType.STRING, description: 'How often to check (e.g. "every morning", "every 2 hours", "daily at 5pm").' },
-          userId: { type: SchemaType.STRING, description: 'The user\'s phone number (Phone ID).' }
-        },
-        required: ['type', 'query', 'intervalDescription', 'userId']
-      }
-    },
-    {
-      name: 'delete_heartbeat',
-      description: 'Delete an active proactive monitor or reminder.',
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {
-          configId: { type: SchemaType.STRING, description: 'The unique ID of the heartbeat config.' },
-          userId: { type: SchemaType.STRING, description: 'The user\'s phone number (Phone ID).' }
-        },
-        required: ['configId', 'userId']
-      }
-    },
-    {
       name: 'web_search',
       description: 'Search the live internet for general knowledge, news, facts, and live information.',
       parameters: {
@@ -97,6 +67,29 @@ export const STATIC_LIFE_TOOLS: Tool = {
           query: { type: SchemaType.STRING, description: 'The search query (e.g. "Latest news in Nigeria today", "Who won the Champions League match yesterday?").' }
         },
         required: ['query']
+      }
+    },
+    {
+      name: 'generate_invite',
+      description: 'Generate a referral invite link for the user to invite a friend. Explain the "Give 10, Get 10" energy bonus.',
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          userId: { type: SchemaType.STRING, description: 'The user\'s phone number (Phone ID).' }
+        },
+        required: ['userId']
+      }
+    },
+    {
+      name: 'delegate_task',
+      description: 'Delegate a complex task or research request to a specialized sub-agent (Small Language Model). Use this when you need an expert to execute tools or analyze data on your behalf.',
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          sector: { type: SchemaType.STRING, description: 'The sector pack required. Must be one of: "EducationPack", "LifePack", "ResearchPack", or "CommercePack".' },
+          instruction: { type: SchemaType.STRING, description: 'Clear, detailed instructions for the sub-agent on what exactly you need them to do or find out.' }
+        },
+        required: ['sector', 'instruction']
       }
     }
   ],
@@ -120,14 +113,11 @@ export async function getLifeTools(): Promise<Tool[]> {
 }
 
 // --- Tool Execution Logic ---
-export async function executeLifeTool(name: string, args: any): Promise<any> {
+export async function executeLifeTool(name: string, args: Record<string, any>): Promise<any> {
   logger.info({ tool: name, args }, '🛠️ Executing Life Tool');
 
   try {
     switch (name) {
-      case 'get_market_prices':
-        return await marketService.getPrices();
-      
       case 'generate_quiz':
         return await studyBuddy.generateQuiz(args.subject, args.topic, args.level);
 
@@ -141,11 +131,14 @@ export async function executeLifeTool(name: string, args: any): Promise<any> {
       case 'delete_from_vault':
         return await deleteFromVault(args.userId, args.docId);
 
-      case 'create_heartbeat':
-        return await heartbeatService.createHeartbeat(args.userId, args.type, args.query, args.intervalDescription);
-
-      case 'delete_heartbeat':
-        return await heartbeatService.deleteHeartbeat(args.userId, args.configId);
+      case 'generate_invite':
+        const botPhone = process.env.AELIXXR_PHONE_ID_DISPLAY || '2347042310893'; // Fallback to test number
+        const encodedText = encodeURIComponent(`Hi Aelixxr! My friend ${args.userId} invited me. Let's chat!`);
+        return { 
+           status: 'success', 
+           inviteLink: `https://wa.me/${botPhone}?text=${encodedText}`,
+           instructions: 'Tell the user to share this link. When their friend sends the pre-filled message, both will receive 10 extra Energy Credits!'
+        };
 
       case 'web_search': {
         try {
@@ -170,7 +163,7 @@ export async function executeLifeTool(name: string, args: any): Promise<any> {
             const summary = await trySearch("gemma-4-26b-a4b-it");
             return { status: 'success', result: summary };
           } catch (firstTryErr: any) {
-             if (firstTryErr.message.includes('429') || firstTryErr.message.includes('503')) {
+             if (firstTryErr.message.includes('429') || firstTryErr.message.includes('503') || firstTryErr.message.includes('fetch failed') || firstTryErr.message.includes('500')) {
                 logger.warn(`🔄 [LIFE SEARCH FALLBACK] Quota Exceeded or Model Busy. Retrying with Gemini 2.5 Flash...`);
                 // Tier 2: 2.5 Flash (Reliability)
                 const secondSummary = await trySearch("gemini-2.5-flash");

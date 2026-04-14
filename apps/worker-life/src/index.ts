@@ -1,4 +1,4 @@
-import { Worker, Job } from 'bullmq';
+import { Worker, Job, Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import dotenv from 'dotenv';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
@@ -11,19 +11,27 @@ import { lifeMemory } from './services/lifeMemory.js';
 import { getLifeTools, executeLifeTool } from './tools.js';
 import { whatsappService } from './services/whatsapp.js';
 import { heartbeatService } from './services/heartbeat.js';
+import fs from 'fs';
+import path from 'path';
 
-dotenv.config();
-
-
-logger.info('🌱 [LIFE OS] Worker Starting... (Engine 2: Intelligence)');
+// --- Load Aelixxr Soul Prompt (Cached in RAM) ---
+let aelixxrSoulPrompt = '';
+try {
+    const promptPath = path.join(__dirname, 'prompts', 'Aelixxr.Soul.md');
+    aelixxrSoulPrompt = fs.readFileSync(promptPath, 'utf-8');
+    logger.info('🧠 Loaded Aelixxr.Soul.md into RAM');
+} catch (e: any) {
+    logger.error('Failed to load Aelixxr.Soul.md. Worker may crash on chat.');
+}
 
 // --- Billing Configuration ---
 const TOOL_COSTS: Record<string, number> = {
-    'get_market_prices': SystemConfig.COSTS.MARKET_PRICE_LOOKUP,
-    'verify_nafdac': SystemConfig.COSTS.NAFDAC_VERIFICATION,
     'generate_quiz': 0, // Free (Loss Leader)
     'search_vault': 0, // Free for now (User Retention)
-    // Add other tools here
+    'save_note': 0,
+    'delete_from_vault': 0,
+    'generate_invite': 0,
+    'web_search': 3000,
 };
 
 // --- Redis Configuration for Life Engine (LOS) ---
@@ -63,7 +71,6 @@ const genAI = new GoogleGenerativeAI(apiKey || 'mock-key');
 
 // --- Bootstrapping MCP Server (Phase 1) ---
 import { mcpClient } from './services/mcpClient.js';
-import path from 'path';
 
 let globalLifeTools: any[] | null = null;
 
@@ -88,7 +95,7 @@ let globalLifeTools: any[] | null = null;
 async function getDynamicModels() {
   const tools = globalLifeTools || await getLifeTools();
   
-  const responseSchema = {
+  const responseSchema: any = {
     type: SchemaType.OBJECT,
     properties: {
       internal_thoughts: {
@@ -118,6 +125,9 @@ async function getDynamicModels() {
   return { primaryModel, fallbackModel };
 }
 
+// --- Queue Setup ---
+const lifeQueue = new Queue('life-queue', { connection: redisClient });
+
 // --- Worker Setup ---
 const worker = new Worker(
   'life-queue',
@@ -138,80 +148,77 @@ const worker = new Worker(
                     
                     const configs = await heartbeatService.getUserConfigs(userId);
                     for (const config of configs) {
-                        // Dynamically add a specific job for this config to the queue
-                        // We use a separate function (or redis push) here, but for simplicity we will
-                        // handle it via a new job type 'evaluate-heartbeat'
                         const evalJobData = {
                             userId,
                             config,
                             timestamp: Date.now()
                         };
                         
-                        // Note: We need access to the queue to push. Since worker doesn't have it natively,
-                        // we can either import the queue or emit an event. The cleanest way in BullMQ is 
-                        // creating a dedicated Queue instance, or passing it down. 
-                        // For now, we will handle evaluation natively but wrapped in promises to parallelize 
-                        // up to the concurrency limit, avoiding strict sequential blocking.
+                        await lifeQueue.add('evaluate-heartbeat', evalJobData, {
+                            jobId: `eval-${userId}-${config.id}-${Date.now()}`,
+                            removeOnComplete: true,
+                            removeOnFail: false
+                        });
+                        logger.info({ userId, configId: config.id }, 'Queued evaluate-heartbeat job');
                     }
                 }
                 
-                // Optimized Parallel Execution (Bounded)
-                const promises = activeUsers.map(async (userId) => {
-                    try {
-                        const configs = await heartbeatService.getUserConfigs(userId);
-                        for (const config of configs) {
-                            const { shouldMessage, contextData } = await heartbeatService.evaluateConfig(config);
-                            if (shouldMessage) {
-                                const context = await lifeMemory.getContext(userId);
-                                const systemPrompt = `
-                                You are "Aelixxr", the Life Companion.
-                                This is a PROACTIVE message. The user did not speak to you.
-                                You are checking their active heartbeat config: ${JSON.stringify(config)}
-                                Here is the latest data for this config: ${JSON.stringify(contextData)}
-                                User Context:
-                                - Family: ${JSON.stringify(context.family || {})}
-                                - Goals: ${JSON.stringify(context.goals || [])}
-                                
-                                Your Goal: Analyze the latest data against their config. If it warrants an alert (e.g. price dropped, or a reminder is due), draft a short, friendly WhatsApp message to them. 
-                                If no alert is needed, you MUST reply with exactly "SKIP" and nothing else.
+                return { success: true, queuedUsers: activeUsers.length };
 
-                                [RESPONSE FORMATTING - CRITICAL]:
-                                - The API enforces structured JSON output. 
-                                - Place all your internal reasoning in the "internal_thoughts" field.
-                                - Place your final, conversational message (or exactly "SKIP") in the "whatsapp_message" field.
-                                `;
-                                
-                                const { primaryModel } = await getDynamicModels();
-                                const chatSession = primaryModel.startChat({
-                                    history: [{ role: 'user', parts: [{ text: systemPrompt }] }]
-                                });
-                                
-                                const result = await chatSession.sendMessage("Evaluate and generate proactive message or SKIP.");
-                                let text = result.response.text().trim();
-                                
-                                try {
-                                    const parsed = JSON.parse(text);
-                                    text = parsed.whatsapp_message || "SKIP";
-                                } catch (e) {
-                                    logger.warn({ text }, "Failed to parse JSON in heartbeat");
-                                    text = "SKIP"; // Fail safe
-                                }
-                                
-                                if (text !== 'SKIP') {
-                                    logger.info({ userId }, 'Proactive heartbeat message generated');
-                                    await whatsappService.sendText(userId, text);
-                                } else {
-                                    logger.info({ userId }, 'Heartbeat evaluated: SKIP');
-                                }
-                            }
+            case 'evaluate-heartbeat':
+                logger.info('🔍 Evaluating Individual Heartbeat Config...');
+                const { userId, config } = job.data;
+                
+                try {
+                    const { shouldMessage, contextData } = await heartbeatService.evaluateConfig(config);
+                    if (shouldMessage) {
+                        const context = await lifeMemory.getContext(userId);
+                        const systemPrompt = `
+                        You are "Aelixxr", the Life Companion.
+                        This is a PROACTIVE message. The user did not speak to you.
+                        You are checking their active heartbeat config: ${JSON.stringify(config)}
+                        Here is the latest data for this config: ${JSON.stringify(contextData)}
+                        User Context:
+                        - Family: ${JSON.stringify(context.family || {})}
+                        - Goals: ${JSON.stringify(context.goals || [])}
+                        
+                        Your Goal: Analyze the latest data against their config. If it warrants an alert (e.g. price dropped, or a reminder is due), draft a short, friendly WhatsApp message to them. 
+                        If no alert is needed, you MUST reply with exactly "SKIP" and nothing else.
+
+                        [RESPONSE FORMATTING - CRITICAL]:
+                        - The API enforces structured JSON output. 
+                        - Place all your internal reasoning in the "internal_thoughts" field.
+                        - Place your final, conversational message (or exactly "SKIP") in the "whatsapp_message" field.
+                        `;
+                        
+                        const { primaryModel } = await getDynamicModels();
+                        const chatSession = primaryModel.startChat({
+                            history: [{ role: 'user', parts: [{ text: systemPrompt }] }]
+                        });
+                        
+                        const result = await chatSession.sendMessage("Evaluate and generate proactive message or SKIP.");
+                        let text = result.response.text().trim();
+                        
+                        try {
+                            const parsed = JSON.parse(text);
+                            text = parsed.whatsapp_message || "SKIP";
+                        } catch (e) {
+                            logger.warn({ text }, "Failed to parse JSON in heartbeat");
+                            text = "SKIP"; // Fail safe
                         }
-                    } catch (err: any) {
-                        logger.error({ userId, err: err.message }, 'Failed heartbeat evaluation for user');
+                        
+                        if (text !== 'SKIP') {
+                            logger.info({ userId }, 'Proactive heartbeat message generated');
+                            await whatsappService.sendText(userId, text);
+                        } else {
+                            logger.info({ userId }, 'Heartbeat evaluated: SKIP');
+                        }
                     }
-                });
-
-                // Wait for all to complete
-                await Promise.allSettled(promises);
+                } catch (err: any) {
+                    logger.error({ userId, err: err.message }, 'Failed heartbeat evaluation for user');
+                    throw err; // Re-throw to let BullMQ handle retries/failures
+                }
+                
                 return { success: true };
 
             case 'market-scrape':
@@ -226,6 +233,52 @@ const worker = new Worker(
 
                 const org = orgId ? await getOrgById(orgId) : null;
                 const currency = org?.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
+                
+                // --- 0. REFERRAL INTERCEPTOR ---
+                let referralSummary = "";
+                const referralMatch = message ? message.match(/friend\s+(\+?\d+)\s+invited/i) : null;
+                
+                if (referralMatch) {
+                    const rawReferrerPhone = referralMatch[1];
+                    // Very basic normalization (strip '+', allow just numbers). Note: Should ideally use a strict E.164 normalizer
+                    const referrerPhone = rawReferrerPhone.replace(/\D/g, ''); 
+                    
+                    if (referrerPhone === userPhone.replace(/\D/g, '')) {
+                        logger.warn({ userPhone }, '🚨 Blocked Self-Referral Exploit');
+                    } else {
+                        const isNewUser = !(await lifeMemory.checkExists(userPhone));
+                        const referrerExists = await lifeMemory.checkExists(referrerPhone);
+                        
+                        if (isNewUser && referrerExists) {
+                            logger.info({ newPhone: userPhone, referrerPhone }, '🎉 Valid Referral Detected!');
+                            
+                            // Give Referrer +10
+                            await lifeMemory.addEnergy(referrerPhone, 10);
+                            await whatsappService.sendText(referrerPhone, `Oga! Your friend (${userPhone}) just joined us using your link. I'm feeling energized! I just added 10 units of energy to my battery. Thank you! 🔋⚡`);
+                            
+                            // Let the system know to grant the new user +10 on top of the welcome bonus
+                            // The Welcome Bonus (100) will be granted in the getContext() call right after this.
+                            referralSummary = `\n\n[SYSTEM UPDATE]: You have successfully applied their friend's referral code. They have received an extra 10 Energy Credits! Welcome them warmly.`;
+                            await lifeMemory.updateContext(userPhone, { energyCredits: 110 }); // Pre-seed with 110. getContext will just return it.
+                        } else if (!isNewUser) {
+                            logger.warn({ userPhone }, 'Blocked Late-Referral Exploit (User already exists)');
+                        } else if (!referrerExists) {
+                            logger.warn({ userPhone, referrerPhone }, 'Blocked Ghost-Referral Exploit (Referrer does not exist)');
+                        }
+                    }
+                }
+
+                // 1. Retrieve Long-Term Memory & Energy Balance (Triggers Welcome Bonus if new)
+                const context = await lifeMemory.getContext(userPhone);
+                const energyCredits = context.energyCredits ?? 0;
+
+                // --- SHORT CIRCUIT: BATTERY DEAD ---
+                if (energyCredits <= -2) {
+                    logger.warn({ userPhone, energyCredits }, '🔋 Battery critically dead. Short-circuiting request.');
+                    const deadMessage = `Oga, my battery is completely dead right now! 🪫 I'm officially 'sleeping' and can't process any messages until you plug me in. Please use your portal to recharge me so we can continue chatting!`;
+                    await whatsappService.sendText(userPhone, deadMessage);
+                    return { success: false, reason: 'insufficient_energy' };
+                }
 
                 if (!apiKey || apiKey === 'your_gemini_api_key_here' || apiKey === 'mock-key') {
                     logger.warn('⚠️ Using Mock Response due to missing/invalid API Key');
@@ -245,8 +298,12 @@ const worker = new Worker(
                            const mediaId = imageId || documentId;
                            const { buffer, mimeType } = await whatsappService.downloadMedia(mediaId);
                            
-                           const doc = await ingestDocument(userPhone, buffer, mimeType, apiKey);
-                           ingestionSummary = `\n\n[SYSTEM UPDATE]: I have saved this document to your Vault.\nSummary: ${doc.summary}\nID: ${doc.id}`;
+                           const doc = await ingestDocument(userPhone, buffer, mimeType, apiKey, {
+                               orgId,
+                               caption: message, // Use the user's message as the caption for context
+                               originalMediaId: mediaId
+                           });
+                           ingestionSummary = `\n\n[SYSTEM UPDATE]: I have saved this document to your Vault.\nTitle: ${doc.title}\nCategory: ${doc.type}\nSummary: ${doc.summary}\nID: ${doc.id}`;
                            logger.info({ docId: doc.id }, '✅ Saved to Vault');
                         } catch (ingestErr: any) {
                            logger.error({ error: ingestErr.message }, '❌ Vault Ingestion Failed');
@@ -254,52 +311,28 @@ const worker = new Worker(
                         }
                     }
 
-                    // 1. Retrieve Long-Term Memory
-                    const context = await lifeMemory.getContext(userPhone);
                     const activeMonitors = await heartbeatService.getUserConfigs(userPhone);
                     
                     // 2. Construct Prompt with Context
                     const systemPrompt = `
-                    You are "Aelixxr", the Life Companion and personal assistant for the Naija Agent Network.
-                    You are warm, intelligent, and culturally aware of Nigerian nuances. You understand and can use Pidgin English naturally when appropriate, but you maintain the persona of a highly capable, empathetic, and professional assistant.
+${aelixxrSoulPrompt}
                     
-                    [CONTEXT]:
-                    Currency: ${currency.code} (${currency.symbol})
-                    Locale: ${currency.locale}
+---
+[DYNAMIC SYSTEM CONTEXT]:
+- Currency: ${currency.code} (${currency.symbol})
+- Locale: ${currency.locale}
+- Current Energy Credits: ${energyCredits} units left.
 
-                    User Context:
-                    - Family: ${JSON.stringify(context.family || {})}
-                    - Goals: ${JSON.stringify(context.goals || [])}
-                    - Preferences: ${JSON.stringify(context.preferences || {})}
+User Context:
+- Family: ${JSON.stringify(context.family || {})}
+- Goals: ${JSON.stringify(context.goals || [])}
+- Preferences: ${JSON.stringify(context.preferences || {})}
 
-                    [ACTIVE MONITORS & REMINDERS]:
-                    You have set up the following proactive monitors for the user. If they ask about their reminders or alerts, reference this list:
-                    ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently active."}
-                    
-                    Your Goal: Provide actionable, empathetic, and hyper-relevant advice.
-                    
-                    [THE VAULT - YOUR SUPERPOWER]:
-                    - You have a 'search_vault' tool. Use it whenever the user asks about past receipts, bank alerts, or documents.
-                    - If the user sends an image or document, I have ALREADY saved it to the Vault for you.
-                    - Tell them: "I've filed this in your Vault. You can ask me to retrieve it anytime."
-                    
-                    [BILLING AWARENESS]:
-                    - Some actions cost money (e.g. verifying drugs).
-                    - You do NOT need to ask for permission for small amounts (under ${formatCurrency(0.5, currency.locale, currency.code)}).
-                    - Just do it and helpful.
-
-                    [WEB SEARCH]:
-                    - You have access to the 'fetch_webpage' tool to read URLs provided by the user. If the user gives a URL, use the tool to read it before responding.
-
-                    [DYNAMIC CAPABILITIES]:
-                    - You are connected to a Model Context Protocol (MCP) network. 
-                    - You may have access to tools beyond what is explicitly listed here. ALWAYS review your available tools and use the most appropriate one to fulfill the user's request.
-
-                    [RESPONSE FORMATTING - CRITICAL]:
-                    - The API enforces structured JSON output. 
-                    - Place all your internal reasoning in the "internal_thoughts" field.
-                    - Place your final, conversational answer in the "whatsapp_message" field.
-                    `;
+[ACTIVE MONITORS & REMINDERS]:
+You have set up the following proactive monitors for the user. If they ask about their reminders or alerts, reference this list:
+${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently active."}
+---
+`;
 
                     // 3. Generate Content (Reasoning) with Fallback Strategy
                     let chatSession;
@@ -317,8 +350,8 @@ const worker = new Worker(
                         }))
                     ];
 
-                    // Append ingestion summary to user message so AI knows what happened
-                    const fullMessage = message + ingestionSummary;
+                    // Append ingestion summary and referral summary to user message so AI knows what happened
+                    const fullMessage = message + ingestionSummary + referralSummary;
 
                     const { primaryModel, fallbackModel } = await getDynamicModels();
 
@@ -345,35 +378,62 @@ const worker = new Worker(
                         logger.warn({ text }, "Failed to parse JSON in main chat");
                     }
 
-                    // 4. Tool Execution (Function Calling) with SMART BILLING
+                    // 4. Tool Execution (Function Calling) with SMART ENERGY (BILLING)
                     const functionCalls = response.functionCalls();
                     let billingNote = "";
 
                     if (functionCalls && functionCalls.length > 0) {
                         logger.info('🛠️ AI requested tools...');
                         for (const call of functionCalls) {
+                            // --- SUPERVISOR DELEGATION INTERCEPTOR ---
+                            if (call.name === 'delegate_task') {
+                                const args = call.args as any;
+                                logger.info({ sector: args.sector }, '🔀 Orchestrator delegating task to SLM...');
+                                
+                                await lifeQueue.add('execute-slm-task', {
+                                    orgId,
+                                    userPhone,
+                                    chatId,
+                                    originalMessage: message,
+                                    sector: args.sector,
+                                    instruction: args.instruction,
+                                    energyCredits,
+                                    timestamp: Date.now()
+                                }, { removeOnComplete: true, removeOnFail: false });
+
+                                const interimMsg = `I'm on it! Let me consult my ${args.sector?.replace('Pack', '') || 'expert'} to handle that for you... ⏳`;
+                                await whatsappService.sendText(userPhone, interimMsg);
+                                
+                                await saveMessage(chatId, { role: 'user', content: message, type: 'text' });
+                                await lifeMemory.deductEnergy(userPhone, 1);
+                                
+                                return { success: true, delegated: true, interimMsg };
+                            }
+
                             // Phase 4: Dynamic Billing Map
                             // If a tool is not explicitly defined in TOOL_COSTS, we assume it is a 3rd-party MCP tool 
-                            // and charge a default execution cost (e.g. 50 Kobo) to prevent API drain.
+                            // and charge a default execution cost (e.g. 3000 Kobo = 3 Credits) to prevent API drain.
                             const isUnknownMcpTool = !(call.name in TOOL_COSTS);
-                            const cost = isUnknownMcpTool ? 50 : TOOL_COSTS[call.name];
+                            const cost = isUnknownMcpTool ? 3000 : TOOL_COSTS[call.name];
+                            const costInCredits = cost / 1000;
                             
                             // 🛡️ SECURITY: Enforce Billing Identity
                             if (cost > 0) {
-                                if (!orgId) {
-                                    logger.warn({ tool: call.name }, '🚨 [BILLING] Attempted paid tool without OrgID');
-                                    text = `🚫 *System Error:* Unable to identify wallet for billing. Please contact support.`;
-                                    break; // BLOCK execution
+                                logger.info({ tool: call.name, cost, energyCredits }, '🔋 Attempting energy deduction...');
+                                
+                                // Emergency Reserve Check (Soft Bounce)
+                                if (energyCredits <= 0) {
+                                     text = `Here is what I was trying to do, but my battery actually hit 0% right now! I'd love to use my tools for you, but I'm officially 'sleeping'. Please use your portal to recharge me so we can continue! 🔋💤`;
+                                     break;
                                 }
 
-                                logger.info({ tool: call.name, cost }, '💰 Attempting deduction...');
-                                const newBalance = await deductBalance(orgId, cost);
+                                const newBalance = await lifeMemory.deductEnergy(userPhone, costInCredits);
                                 
                                 if (newBalance === null) {
-                                    text = `🚫 *Insufficient Balance.* \n\nOga, checking this costs ${formatCurrency(cost/100, currency.locale, currency.code)}, but your Zynux wallet is low. Please top up to use premium Life features.`;
+                                    text = `I'd love to help with this, but it takes a lot of energy (${costInCredits} units) and my battery is too low right now. Can we recharge quickly so I can get to work? 🔋🔌`;
                                     break; // Stop execution
                                 }
-                                billingNote += `\n_(${formatCurrency(cost/100, currency.locale, currency.code)} deducted for ${call.name})_`;
+                                billingNote += `\n_(-${costInCredits} Energy used for deep search)_`;
                             }
 
                             // Inject userId for tools that need it (like search_vault)
@@ -399,9 +459,12 @@ const worker = new Worker(
                         }
                     }
 
-                    text += billingNote; // Append billing notification
+                    text += billingNote; // Append energy notification
                     logger.info({ response: text }, '🗣️ Life Companion Replying');
                     
+                    // Deduct 1 credit for standard message (Base Cost)
+                    await lifeMemory.deductEnergy(userPhone, 1);
+
                     // Send via WhatsApp
                     await whatsappService.sendText(userPhone, text);
 
@@ -417,6 +480,143 @@ const worker = new Worker(
                 } catch (apiError: any) {
                     logger.error({ error: apiError.message }, '❌ Gemini API Call Failed');
                     throw apiError;
+                }
+
+            case 'execute-slm-task':
+                logger.info('🤖 Starting SLM Worker...');
+                const { sector, instruction: slmInst, originalMessage: slmOrig, userPhone: slmPhone, chatId: slmChatId } = job.data;
+                
+                let agentPrompt = '';
+                try {
+                    let agentFile = '';
+                    if (sector === 'EducationPack') agentFile = 'StudyBuddy.Agent.md';
+                    else if (sector === 'LifePack') agentFile = 'VaultClerk.Agent.md';
+                    else if (sector === 'ResearchPack') agentFile = 'WebResearcher.Agent.md';
+                    else agentFile = `${sector}.Agent.md`; // Fallback
+
+                    const promptPath = path.join(__dirname, 'prompts', agentFile);
+                    agentPrompt = fs.readFileSync(promptPath, 'utf-8');
+                } catch (e: any) {
+                    logger.error(`Failed to load ${sector} prompt: ${e.message}`);
+                    agentPrompt = `You are an SLM worker for the ${sector}. Execute the instruction. Output valid JSON.`;
+                }
+
+                const fullInstruction = `
+                [USER_ID]: ${slmPhone}
+                [INSTRUCTION]: ${slmInst}
+                `;
+
+                const slmModel = genAI.getGenerativeModel({
+                    model: SystemConfig.MODELS.AELIXXR_WORKER, // 4B model for fast/cheap SLM execution
+                    tools: globalLifeTools || await getLifeTools(), 
+                    generationConfig: { responseMimeType: "application/json" }
+                });
+
+                const slmChat = slmModel.startChat({
+                    history: [{ role: 'user', parts: [{ text: agentPrompt }] }]
+                });
+
+                let slmReport = "SLM Task Failed to generate a report.";
+                try {
+                    const result = await slmChat.sendMessage(fullInstruction);
+                    const response = result.response;
+                    
+                    const slmCalls = response.functionCalls();
+                    if (slmCalls && slmCalls.length > 0) {
+                        logger.info({ tool: slmCalls[0].name }, 'SLM Requested Tool...');
+                        const call = slmCalls[0];
+                        const args = { ...call.args, userId: slmPhone };
+                        
+                        const toolResult = await executeLifeTool(call.name, args);
+                        const followUp = await slmChat.sendMessage([{
+                            functionResponse: {
+                                name: call.name,
+                                response: toolResult
+                            }
+                        }]);
+                        slmReport = followUp.response.text();
+                    } else {
+                        slmReport = response.text();
+                    }
+                } catch (e: any) {
+                    logger.error({ error: e.message }, 'SLM Worker Failed');
+                    slmReport = JSON.stringify({ status: "error", report: "SLM crashed: " + e.message });
+                }
+
+                // Clean JSON aggressively
+                let cleanedReport = slmReport;
+                const jsonMatch = slmReport.match(/\{[\s\S]*\}/);
+                if (jsonMatch) cleanedReport = jsonMatch[0];
+
+                await lifeQueue.add('life-chat-resume', {
+                    userPhone: slmPhone,
+                    chatId: slmChatId,
+                    originalMessage: slmOrig,
+                    slmReport: cleanedReport,
+                    sector
+                }, { removeOnComplete: true, removeOnFail: false });
+
+                return { success: true, slmReport: cleanedReport };
+
+            case 'life-chat-resume':
+                logger.info('🧠 Resuming Aelixxr Orchestration...');
+                const { userPhone: resumePhone, originalMessage: resumeOrig, slmReport: resumeRep, chatId: resumeChatId, sector: resumeSector } = job.data;
+                
+                const resumeCurrency = { code: 'NGN', symbol: '₦', locale: 'en-NG' };
+                const resumeContext = await lifeMemory.getContext(resumePhone);
+                const resumeEnergy = resumeContext.energyCredits ?? 0;
+                const resumeMonitors = await heartbeatService.getUserConfigs(resumePhone);
+
+                const resumePrompt = `
+${aelixxrSoulPrompt}
+                    
+---
+[DYNAMIC SYSTEM CONTEXT]:
+- Currency: ${resumeCurrency.code} (${resumeCurrency.symbol})
+- Locale: ${resumeCurrency.locale}
+- Current Energy Credits: ${resumeEnergy} units left.
+
+User Context:
+- Family: ${JSON.stringify(resumeContext.family || {})}
+- Goals: ${JSON.stringify(resumeContext.goals || [])}
+- Preferences: ${JSON.stringify(resumeContext.preferences || {})}
+
+[ACTIVE MONITORS & REMINDERS]:
+You have set up the following proactive monitors for the user. If they ask about their reminders or alerts, reference this list:
+${resumeMonitors.length > 0 ? JSON.stringify(resumeMonitors) : "None currently active."}
+---
+`;
+                const { primaryModel: resumePrimary } = await getDynamicModels();
+                const resumeHistory = await getChatHistory(resumeChatId, 10);
+                const resumeChatSession = resumePrimary.startChat({
+                    history: [
+                        { role: 'user', parts: [{ text: resumePrompt }] },
+                        { role: 'model', parts: [{ text: "I understand. I am ready to assist based on this context." }] },
+                        ...resumeHistory.map((msg: any) => ({
+                            role: msg.role === 'user' ? 'user' : (msg.role === 'system' ? 'user' : 'model'),
+                            parts: [{ text: msg.content }],
+                        }))
+                    ]
+                });
+
+                const resumeMessage = `${resumeOrig}\n\n[SYSTEM UPDATE]: Your specialized sub-agent (${resumeSector}) has returned the following JSON report:\n${resumeRep}\n\nPlease synthesize this report and provide your final empathetic response to the user based on what the SLM found. DO NOT use the delegate_task tool again for this turn. DO NOT mention you are an AI or reading JSON. Just provide the final answer natively.`;
+                
+                try {
+                    const resumeRes = await resumeChatSession.sendMessage(resumeMessage);
+                    let finalTxt = resumeRes.response.text();
+                    try {
+                        const parsed = JSON.parse(finalTxt);
+                        finalTxt = parsed.whatsapp_message || finalTxt;
+                    } catch(e) {}
+
+                    logger.info({ response: finalTxt }, '🗣️ Life Companion Replying (Post-SLM)');
+                    await whatsappService.sendText(resumePhone, finalTxt);
+                    await saveMessage(resumeChatId, { role: 'assistant', content: finalTxt, type: 'text' });
+                    
+                    return { success: true, reply: finalTxt };
+                } catch(e: any) {
+                    logger.error('Failed to resume life chat', e);
+                    throw e;
                 }
 
             default:

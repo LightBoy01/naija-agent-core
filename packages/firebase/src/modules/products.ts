@@ -12,7 +12,7 @@ const orgsRef = db.collection('organizations');
  * Fetches all products for an organization.
  */
 export async function getProducts(orgId: string): Promise<Product[]> {
-  const snapshot = await orgsRef.doc(orgId).collection('products').orderBy('name').get();
+  const snapshot = await orgsRef.doc(orgId).collection('products').get();
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
 }
 
@@ -46,7 +46,8 @@ export async function commitStagingProducts(orgId: string): Promise<void> {
   snapshot.forEach(doc => {
     const data = doc.data();
     const updateData: any = { ...data, updatedAt: FieldValue.serverTimestamp() };
-    if (data.name) updateData.nameLowercase = data.name.toLowerCase();
+    const searchField = data.name || data.title;
+    if (searchField) updateData.nameLowercase = String(searchField).toLowerCase();
     
     batch.set(productsRef.doc(doc.id), updateData, { merge: true });
     batch.delete(stagingRef.doc(doc.id));
@@ -69,18 +70,12 @@ export async function clearStagingProducts(orgId: string): Promise<void> {
 /**
  * Saves or updates a product in the structured catalog.
  */
-export async function saveProduct(orgId: string, id: string, data: { 
-  name?: string; 
-  price?: number; 
-  stock?: number; 
-  category?: string; 
-  imageUrl?: string;
-  lowStockThreshold?: number;
-}): Promise<void> {
+export async function saveProduct(orgId: string, id: string, data: any): Promise<void> {
   const updateData: any = { ...data, updatedAt: FieldValue.serverTimestamp() };
   
-  if (data.name) {
-    updateData.nameLowercase = data.name.toLowerCase();
+  const searchField = data.name || data.title;
+  if (searchField) {
+    updateData.nameLowercase = String(searchField).toLowerCase();
   }
 
   // 🛡️ [PHASE 7.1]: Auto-flag low stock for O(1) indexed querying

@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { SystemConfig } from '@naija-agent/types';
 import { logger } from '../utils/logger.js';
 
@@ -21,11 +21,13 @@ export class StudyBuddyService {
         logger.info({ subject, topic, level }, '📚 Generating Quiz...');
 
         const model = this.genAI.getGenerativeModel({ 
-            model: SystemConfig.MODELS.ZYNUX_PRIMARY, // Use Flash for speed/cost
+            model: SystemConfig.MODELS.AELIXXR_WORKER, // Use 4B model for fast/cheap generation
             generationConfig: { responseMimeType: "application/json" }
         });
 
         const prompt = `
+        You are an API that ONLY outputs valid JSON arrays. You must not output any markdown formatting, no preambles, and no conversational text. Start directly with '[' and end with ']'.
+        
         Generate a 5-question multiple-choice quiz for a Nigerian student.
         Subject: ${subject}
         Topic: ${topic}
@@ -48,7 +50,17 @@ export class StudyBuddyService {
         try {
             const result = await model.generateContent(prompt);
             const text = result.response.text();
-            const quiz = JSON.parse(text) as QuizQuestion[];
+            
+            // Aggressive JSON extraction
+            let cleanedText = text;
+            const jsonMatch = text.match(/\[\s*\{.*\}\s*\]/s);
+            if (jsonMatch) {
+                cleanedText = jsonMatch[0];
+            } else {
+                cleanedText = text.replace(/```json\n?/gi, '').replace(/```/g, '').trim();
+            }
+            
+            const quiz = JSON.parse(cleanedText) as QuizQuestion[];
             return quiz;
         } catch (error: any) {
             logger.error({ error: error.message }, '❌ Failed to generate quiz');

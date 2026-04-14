@@ -480,8 +480,10 @@ fastify.post('/webhook', async (request, reply) => {
         await lifeQueue.add('life-chat', {
             orgId: org.id, // Pass Org ID for billing
             userPhone: from,
-            message: jobData.content.text || '', // Life bot is text-first for now
-            // Future: Pass full jobData for image/audio support
+            message: jobData.content.text || jobData.content.caption || '', 
+            imageId: jobData.content.imageId,
+            documentId: jobData.content.documentId,
+            mimeType: jobData.content.mimeType
         }, {
             removeOnComplete: true,
             attempts: 3

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { EntityDefinitionSchema } from './sector.js';
+
 export * from './sector.js';
 export * from './interfaces/index.js';
 export * from './config/index.js';
@@ -92,21 +94,16 @@ export type Activity = z.infer<typeof ActivitySchema>;
 export type ActivityType = Activity['type'];
 export type ActivityStatus = Activity['status'];
 
-export const ProductSchema = z.object({
+export const EntitySchema = z.record(z.any()).and(z.object({
   id: z.string(),
-  name: z.string(),
-  price: z.number(), // In Naira
-  stock: z.number().optional(),
-  reserved: z.number().optional(), // Units in pending checkout (Phase 7.2)
-  available: z.number().optional(), // Stock - Reserved
-  category: z.string().optional(),
-  imageUrl: z.string().optional(),
-  lowStockThreshold: z.number().optional(),
-  isLowStock: z.boolean().optional(),
-  updatedAt: FirestoreTimestampSchema,
-});
+  updatedAt: FirestoreTimestampSchema.optional(),
+}));
 
-export type Product = z.infer<typeof ProductSchema>;
+export type Entity = z.infer<typeof EntitySchema>;
+
+// Temporarily alias Product to Entity to prevent build failures during migration
+export const ProductSchema = EntitySchema;
+export type Product = Entity;
 
 export const StaffSchema = z.object({
   phone: z.string(),
@@ -194,6 +191,7 @@ export const OrganizationSchema = z.object({
   systemPrompt: z.string().optional(),
   onboardingStep: z.string().optional(), // e.g. 'NAME', 'PIN', 'BANK', 'TONE', 'COMPLETE'
   onboardingData: OnboardingDataSchema.optional(), // Temporary storage for setup data
+  entityDef: EntityDefinitionSchema.optional(), // Dynamic schema for entities (e.g. Products, Patients)
   pendingSetup: z.object({
     phoneId: z.string(),
     accessToken: z.string(),

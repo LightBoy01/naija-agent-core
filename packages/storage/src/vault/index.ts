@@ -12,18 +12,23 @@ const logger = pino({ name: 'vault-service' });
 export const VaultDocumentSchema = z.object({
   id: z.string(),
   userId: z.string(), // WhatsApp Phone ID
-  type: z.enum(['receipt', 'invoice', 'contract', 'id_card', 'bank_alert', 'note', 'other']),
+  orgId: z.string().optional(), // Added orgId context
+  type: z.string(), // Extracted category
+  title: z.string().optional(),
   summary: z.string(), // "GTBank Transfer of 50k to Tunde"
   content: z.string().optional(), // Full text content for notes
   extractedData: z.object({
     amount: z.number().optional(),
+    currency: z.string().optional(),
     date: z.string().optional(), // ISO String
-    sender: z.string().optional(),
+    issuer: z.string().optional(), // Renamed from sender for broader context
     receiver: z.string().optional(),
     reference: z.string().optional(),
   }),
   storageUrl: z.string().optional(), // Permanent URL (Optional for notes)
+  originalMediaId: z.string().optional(),
   mimeType: z.string(), // 'text/plain' for notes
+  caption: z.string().optional(),
   createdAt: z.string(), // ISO String
   tags: z.array(z.string()), // ["school_fees", "gtbank", "2026"]
 });
@@ -48,19 +53,27 @@ async function uploadToVault(userId: string, buffer: Buffer, mimeType: string): 
   return `https://storage.googleapis.com/${bucket.name}/${filePath}`;
 }
 
-async function extractMetadata(buffer: Buffer, mimeType: string, apiKey: string): Promise<any> {
+async function extractMetadata(buffer: Buffer, mimeType: string, caption: string | undefined, apiKey: string): Promise<any> {
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const prompt = `
-  You are the Chief Archivist. Analyze this document/image.
-  Goal: Extract structured data for "The Vault".
-  [EXTRACTION RULES]:
-  1. TYPE: Classify as 'receipt', 'invoice', 'contract', 'id_card', 'bank_alert', or 'other'.
-  2. SUMMARY: Write a 1-sentence summary.
-  3. DATA: Extract: amount, date, sender, receiver, reference.
-  4. TAGS: Generate 3-5 tags.
-  Return JSON ONLY.
+  You are an expert Document Classification and Extraction AI for a "Life OS" Vault.
+  Analyze this document or image thoroughly. Extract the following JSON structure:
+  {
+    "title": "A concise, descriptive title for this document (e.g., 'GTBank Transfer Receipt - 15,000 NGN', 'IKEDC Electricity Bill - March 2026')",
+    "summary": "A brief 1-2 sentence summary of the document's contents and purpose.",
+    "category": "Must be one of: [Receipt, Invoice, Utility_Bill, Contract, Identity_Doc, Medical_Record, Official_Letter, Ticket, Other]",
+    "amount": Number or null (extract any total amount, payment, or balance. Do not include currency symbols),
+    "currency": "String or null (e.g., NGN, USD, GBP)",
+    "date": "YYYY-MM-DD or null (the date on the document, or the transaction date)",
+    "issuer": "Name of the issuing authority, company, or sender (e.g., 'MTN Nigeria', 'Lagos State Government') or null",
+    "receiver": "Name of the recipient or beneficiary or null",
+    "reference": "Any transaction ID, invoice number, account number, or reference code found or null",
+    "tags": ["List", "of", "5-10", "search", "keywords", "related", "to", "the", "content", "for", "indexing"]
+  }
+  RETURN JSON ONLY, no markdown formatting blocks.
+  Caption Context provided by the user: "${caption || ''}"
   `;
 
   try {
@@ -69,10 +82,10 @@ async function extractMetadata(buffer: Buffer, mimeType: string, apiKey: string)
       { inlineData: { data: buffer.toString('base64'), mimeType } }
     ]);
     const text = result.response.text();
-    return safeParseJSON(text) || { summary: 'Processed Document', tags: [] };
+    return safeParseJSON(text) || { summary: 'Processed Document', category: 'Other', tags: [] };
   } catch (e: any) {
     logger.error({ error: e.message }, 'Metadata extraction failed');
-    return { summary: 'Unprocessed Document', tags: [] };
+    return { summary: 'Unprocessed Document', category: 'Other', tags: [] };
   }
 }
 
@@ -81,25 +94,30 @@ async function extractNoteMetadata(text: string, apiKey: string): Promise<any> {
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const prompt = `
-  You are the Chief Archivist. Analyze this text note.
-  Goal: Extract structured data for "The Vault".
-  [EXTRACTION RULES]:
-  1. SUMMARY: Write a 1-sentence summary.
-  2. DATA: Extract any financial data or dates if present.
-  3. TAGS: Generate 3-5 tags for search.
-
+  You are an expert Document Classification and Extraction AI for a "Life OS" Vault.
+  Analyze this text note. Extract structured data for "The Vault".
+  
+  {
+    "title": "A concise, descriptive title for this note",
+    "summary": "A brief 1-2 sentence summary.",
+    "category": "Must be 'Note'",
+    "amount": Number or null (if financial data is present),
+    "currency": "String or null",
+    "date": "YYYY-MM-DD or null (if a specific date is mentioned)",
+    "tags": ["List", "of", "3-5", "search", "keywords"]
+  }
+  
   Text: "${text}"
-
-  Return JSON ONLY: { "summary": string, "amount": number?, "date": string?, "tags": string[] }
+  RETURN JSON ONLY, no markdown formatting blocks.
   `;
 
   try {
     const result = await model.generateContent(prompt);
     const responseText = result.response.text();
-    return safeParseJSON(responseText) || { summary: 'Saved Note', tags: [] };
+    return safeParseJSON(responseText) || { summary: 'Saved Note', category: 'Note', tags: [] };
   } catch (e: any) {
     logger.error({ error: e.message }, 'Note metadata extraction failed');
-    return { summary: 'Saved Note', tags: [] };
+    return { summary: 'Saved Note', category: 'Note', tags: [] };
   }
 }
 
@@ -108,7 +126,8 @@ export async function ingestDocument(
   userId: string, 
   buffer: Buffer, 
   mimeType: string,
-  apiKey: string
+  apiKey: string,
+  options?: { orgId?: string; caption?: string; originalMediaId?: string }
 ): Promise<VaultDocument> {
   logger.info({ userId, mimeType }, '📥 Ingesting document into Vault...');
 
@@ -117,7 +136,7 @@ export async function ingestDocument(
   logger.info({ userId, storageUrl }, '☁️ Uploaded to Storage');
 
   // 2. Extract Data (The "Intelligence")
-  const analysis = await extractMetadata(buffer, mimeType, apiKey);
+  const analysis = await extractMetadata(buffer, mimeType, options?.caption, apiKey);
   logger.info({ userId, summary: analysis.summary }, '🧠 extracted metadata');
 
   // 3. Save to Database (The "Index")
@@ -125,17 +144,22 @@ export async function ingestDocument(
   const doc: VaultDocument = {
     id: docId,
     userId,
-    type: analysis.type || 'other',
+    orgId: options?.orgId,
+    type: analysis.category || 'Other',
+    title: analysis.title || 'Untitled Document',
     summary: analysis.summary || 'Uploaded Document',
     extractedData: {
       amount: analysis.amount,
+      currency: analysis.currency,
       date: analysis.date,
-      sender: analysis.sender,
+      issuer: analysis.issuer,
       receiver: analysis.receiver,
       reference: analysis.reference
     },
     storageUrl,
+    originalMediaId: options?.originalMediaId,
     mimeType,
+    caption: options?.caption,
     createdAt: new Date().toISOString(),
     tags: analysis.tags || []
   };
@@ -150,7 +174,8 @@ export async function ingestDocument(
 export async function ingestNote(
   userId: string,
   content: string,
-  apiKey: string
+  apiKey: string,
+  options?: { orgId?: string }
 ): Promise<VaultDocument> {
   logger.info({ userId }, '📝 Ingesting note into Vault...');
 
@@ -163,11 +188,14 @@ export async function ingestNote(
   const doc: VaultDocument = {
     id: docId,
     userId,
-    type: 'note',
+    orgId: options?.orgId,
+    type: analysis.category || 'Note',
+    title: analysis.title || 'Note',
     summary: analysis.summary || 'Saved Note',
     content: content,
     extractedData: {
       amount: analysis.amount,
+      currency: analysis.currency,
       date: analysis.date,
     },
     mimeType: 'text/plain',
@@ -185,15 +213,19 @@ export async function ingestNote(
 export async function searchVault(userId: string, query: string): Promise<VaultDocument[]> {
     const snapshot = await getDb().collection('vault').doc(userId).collection('docs')
         .orderBy('createdAt', 'desc')
-        .limit(50) // Increased limit for MVP scalability
+        .limit(100) // Increased limit for LLM processing
         .get();
 
     const results = snapshot.docs.map(d => d.data() as VaultDocument);
     
+    // Basic fallback matching. LLM in worker will refine this further.
     const lowerQuery = query.toLowerCase();
     return results.filter((d: VaultDocument) => 
+        (d.title && d.title.toLowerCase().includes(lowerQuery)) ||
         d.summary.toLowerCase().includes(lowerQuery) || 
         (d.content && d.content.toLowerCase().includes(lowerQuery)) || 
+        (d.type && d.type.toLowerCase().includes(lowerQuery)) ||
+        (d.extractedData?.issuer && d.extractedData.issuer.toLowerCase().includes(lowerQuery)) ||
         d.tags.some((t: string) => t.toLowerCase().includes(lowerQuery))
     );
 }

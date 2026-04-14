@@ -1,21 +1,21 @@
 'use client';
 
-import { Product } from '@naija-agent/types';
 import { useTransition, useState } from 'react';
 import { updateProductAction, removeProductAction } from './actions';
-
 import { formatCurrency } from '../../../../lib/utils';
+import { EntityDefinition } from '@naija-agent/types';
 
 interface InventoryTableProps {
   orgId: string;
-  products: Product[];
+  products: (Record<string, string | number | boolean | undefined | null> & { id: string })[];
   currency: { code: string; symbol: string; locale: string };
+  entityDef: EntityDefinition;
 }
 
-export default function InventoryTable({ orgId, products, currency }: InventoryTableProps) {
+export default function InventoryTable({ orgId, products, currency, entityDef }: InventoryTableProps) {
   const [isPending, startTransition] = useTransition();
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editData, setEditEditData] = useState({ price: 0, stock: 0 });
+  const [editData, setEditData] = useState<Record<string, string | number>>({});
 
   const handleSave = (productId: string) => {
     startTransition(async () => {
@@ -39,71 +39,71 @@ export default function InventoryTable({ orgId, products, currency }: InventoryT
   };
 
   return (
-    <div className="bg-white rounded-3xl border border-zinc-100 shadow-xl overflow-hidden">
-      <table className="w-full text-left">
+    <div className="bg-white rounded-3xl border border-zinc-100 shadow-xl overflow-hidden overflow-x-auto">
+      <table className="w-full text-left whitespace-nowrap">
         <thead>
           <tr className="bg-zinc-50 border-b border-zinc-100">
-            <th className="px-6 py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Product</th>
-            <th className="px-6 py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Price</th>
-            <th className="px-6 py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Stock</th>
+            {entityDef.fields.map(field => (
+              <th key={field.key} className="px-6 py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest">
+                {field.label}
+              </th>
+            ))}
             <th className="px-6 py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-right">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-zinc-50">
           {products.length === 0 ? (
             <tr>
-              <td colSpan={4} className="px-6 py-20 text-center text-sm text-zinc-400 italic">
-                No products found. Add them via WhatsApp or the AI!
+              <td colSpan={entityDef.fields.length + 1} className="px-6 py-20 text-center text-sm text-zinc-400 italic">
+                No {entityDef.plural.toLowerCase()} found. Add them via WhatsApp or the AI!
               </td>
             </tr>
           ) : (
             products.map((p) => (
               <tr key={p.id} className="hover:bg-zinc-50/50 transition-colors group">
-                <td className="px-6 py-5">
-                  <div className="flex items-center gap-3">
-                    {p.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.imageUrl} alt={p.name} className="w-10 h-10 rounded-xl object-cover border border-zinc-100" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-xl bg-zinc-100 flex items-center justify-center text-xl">📦</div>
-                    )}
-                    <div>
-                      <p className="text-sm font-bold text-zinc-900">{p.name}</p>
-                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-tight">{p.category || 'Uncategorized'}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-5">
-                  {editingId === p.id ? (
-                    <input 
-                      type="number" 
-                      value={editData.price} 
-                      onChange={(e) => setEditEditData({ ...editData, price: Number(e.target.value) })}
-                      className="w-24 px-2 py-1 bg-zinc-100 border border-zinc-200 rounded-lg text-sm font-bold outline-none focus:border-green-600"
-                    />
-                  ) : (
-                    <span className="text-sm font-black text-zinc-900">{formatCurrency(p.price, currency.locale, currency.code, currency.symbol)}</span>
-                  )}
-                </td>
-                <td className="px-6 py-5">
-                  {editingId === p.id ? (
-                    <input 
-                      type="number" 
-                      value={editData.stock} 
-                      onChange={(e) => setEditEditData({ ...editData, stock: Number(e.target.value) })}
-                      className="w-20 px-2 py-1 bg-zinc-100 border border-zinc-200 rounded-lg text-sm font-bold outline-none focus:border-green-600"
-                    />
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <span className={`text-sm font-black ${p.isLowStock ? 'text-red-600' : 'text-zinc-900'}`}>
-                        {p.stock ?? 0}
-                      </span>
-                      {p.isLowStock && (
-                        <span className="text-[8px] font-black bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full uppercase">Low</span>
+                {entityDef.fields.map(field => {
+                  const isEditing = editingId === p.id && !['name', 'title', 'image'].includes(field.key);
+                  const val = p[field.key];
+
+                  return (
+                    <td key={field.key} className="px-6 py-5">
+                      {isEditing ? (
+                        <input 
+                          type={field.type === 'number' ? 'number' : 'text'} 
+                          value={editData[field.key] ?? ''} 
+                          onChange={(e) => setEditData({ 
+                            ...editData, 
+                            [field.key]: field.type === 'number' ? Number(e.target.value) : e.target.value 
+                          })}
+                          className="w-full min-w-[80px] px-2 py-1 bg-zinc-100 border border-zinc-200 rounded-lg text-sm font-bold outline-none focus:border-green-600"
+                        />
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          {field.type === 'image' && (
+                            val ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={val as string} alt={String(p.name || p.title || 'Item')} className="w-10 h-10 rounded-xl object-cover border border-zinc-100" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-xl bg-zinc-100 flex items-center justify-center text-xl">📦</div>
+                            )
+                          )}
+                          <div>
+                            {field.type === 'image' ? null : field.key === 'price' ? (
+                              <span className="text-sm font-black text-zinc-900">{formatCurrency(Number(val ?? 0), currency.locale, currency.code, currency.symbol)}</span>
+                            ) : (
+                              <span className={`text-sm ${['name', 'title'].includes(field.key) ? 'font-bold text-zinc-900' : 'font-medium text-zinc-600'}`}>
+                                {val !== undefined && val !== null ? String(val) : '-'}
+                              </span>
+                            )}
+                            {field.key === 'stock' && p.isLowStock && !isEditing && (
+                              <span className="ml-2 text-[8px] font-black bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full uppercase">Low</span>
+                            )}
+                          </div>
+                        </div>
                       )}
-                    </div>
-                  )}
-                </td>
+                    </td>
+                  );
+                })}
                 <td className="px-6 py-5 text-right">
                   <div className="flex justify-end gap-2">
                     {editingId === p.id ? (
@@ -127,17 +127,24 @@ export default function InventoryTable({ orgId, products, currency }: InventoryT
                         <button 
                           onClick={() => {
                             setEditingId(p.id);
-                            setEditEditData({ price: p.price, stock: p.stock ?? 0 });
+                            // Pre-fill editable fields
+                            const initialData: Record<string, string | number> = {};
+                            entityDef.fields.forEach(f => {
+                              if (!['name', 'title', 'image'].includes(f.key)) {
+                                initialData[f.key] = (p[f.key] as string | number) ?? (f.type === 'number' ? 0 : '');
+                              }
+                            });
+                            setEditData(initialData);
                           }}
                           className="p-2 text-zinc-400 hover:text-zinc-900 transition-colors"
-                          title="Edit Product"
+                          title="Edit"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                         </button>
                         <button 
-                          onClick={() => handleDelete(p.id, p.name)}
+                          onClick={() => handleDelete(p.id, String(p.name || p.title || 'Item'))}
                           className="p-2 text-zinc-400 hover:text-red-600 transition-colors"
-                          title="Delete Product"
+                          title="Delete"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 3 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                         </button>

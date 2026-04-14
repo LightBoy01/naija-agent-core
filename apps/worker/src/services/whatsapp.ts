@@ -43,26 +43,37 @@ export class WhatsAppService {
     }
     const finalBody = body || "I'm sorry, I couldn't generate a response. Please try again.";
 
-    try {
-      const response = await axios.post(
-        `${this.baseUrl}/${this.phoneId}/messages`,
-        {
-          messaging_product: 'whatsapp',
-          to: to,
-          type: 'text',
-          text: { body: finalBody },
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.apiToken}`,
-            'Content-Type': 'application/json',
-          },
-          params: this.getAuthParams(),
-        }
-      );
+    const maxLen = 4096;
+    const chunks = [];
+    for (let i = 0; i < finalBody.length; i += maxLen) {
+      chunks.push(finalBody.slice(i, i + maxLen));
+    }
 
-      const data = WhatsAppSendResponseSchema.parse(response.data);
-      return data.messages[0].id;
+    let lastMessageId = '';
+
+    try {
+      for (const chunk of chunks) {
+        const response = await axios.post(
+          `${this.baseUrl}/${this.phoneId}/messages`,
+          {
+            messaging_product: 'whatsapp',
+            to: to,
+            type: 'text',
+            text: { body: chunk },
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${this.apiToken}`,
+              'Content-Type': 'application/json',
+            },
+            params: this.getAuthParams(),
+          }
+        );
+
+        const data = WhatsAppSendResponseSchema.parse(response.data);
+        lastMessageId = data.messages[0].id;
+      }
+      return lastMessageId;
     } catch (error: any) {
       console.error('WhatsApp Send Error:', error.response?.data || error.message);
       throw new Error('Failed to send WhatsApp message');

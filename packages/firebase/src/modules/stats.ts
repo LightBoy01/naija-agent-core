@@ -33,14 +33,14 @@ export async function getNetworkStats(orgId: string): Promise<any> {
   // 2. Fetch Organizations for the list (Still needed for the portfolio table)
   const snapshot = await orgsRef.get();
   const clients: any[] = [];
-  
+
   snapshot.forEach(doc => {
     const data = doc.data();
     if (doc.id !== 'naija-agent-master') {
-      clients.push({ 
-        id: doc.id, 
-        name: data.name, 
-        balance: data.balance, 
+      clients.push({
+        id: doc.id,
+        name: data.name,
+        balance: data.balance,
         isActive: data.isActive,
         status: data.status || 'ACTIVE',
         botPhone: data.config?.botPhone || 'N/A'
@@ -48,12 +48,27 @@ export async function getNetworkStats(orgId: string): Promise<any> {
     }
   });
 
+  // 3. Fetch Life OS Users (Aelixxr users)
+  const lifeUsersSnapshot = await db.collection('user_profiles').get();
+  const lifeUsers: any[] = [];
+  lifeUsersSnapshot.forEach(doc => {
+    const data = doc.data();
+    lifeUsers.push({
+      id: doc.id,
+      name: data.fullName || 'Life OS User',
+      energyCredits: data.energyCredits || 0,
+      lastInteraction: data.lastInteraction ? data.lastInteraction.toDate().toISOString() : null,
+      isActive: true,
+      status: 'ACTIVE'
+    });
+  });
+
   return {
     activeClients: meta.activeClients,
     totalVaultKobo: meta.totalVaultKobo,
-    clients
-  };
-}
+    clients,
+    lifeUsers
+  };}
 
 /**
  * Atomically increments daily sales in the snapshot for the current date.

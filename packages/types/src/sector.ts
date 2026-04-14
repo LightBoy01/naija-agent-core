@@ -3,38 +3,42 @@ import { z } from 'zod';
 
 // --- SECTOR AGNOSTIC DEFINITIONS (PHASE 8.3) ---
 
+export const EntityDefinitionSchema = z.object({
+  name: z.string(),
+  plural: z.string(),
+  fields: z.array(z.object({
+    key: z.string(),
+    label: z.string(),
+    type: z.enum(['string', 'number', 'boolean', 'date', 'image', 'enum']),
+    options: z.array(z.string()).optional(),
+    required: z.boolean(),
+    description: z.string().optional()
+  }))
+});
+
 /**
  * Defines the schema for a generic "Entity" (Product, Patient, Property).
  * Used by the UI to render forms and by the AI to ask questions.
  */
-export interface EntityDefinition {
-  name: string; // "Product", "Patient", "Case"
-  plural: string; // "Products", "Patients", "Cases"
-  fields: {
-    key: string; // "price", "diagnosis", "rent"
-    label: string; // "Price (NGN)", "Medical Diagnosis", "Annual Rent"
-    type: 'string' | 'number' | 'boolean' | 'date' | 'image' | 'enum';
-    options?: string[]; // For enum types
-    required: boolean;
-    description?: string; // Hint for the AI
-  }[];
-}
+export type EntityDefinition = z.infer<typeof EntityDefinitionSchema>;
+
+export const WorkflowDefinitionSchema = z.object({
+  name: z.string(),
+  states: z.array(z.string()),
+  transitions: z.array(z.object({
+    from: z.string(),
+    to: z.string(),
+    action: z.string(),
+    requiredFields: z.array(z.string()).optional()
+  }))
+});
 
 /**
  * Defines the valid states and transitions for a transaction.
  * e.g. Commerce: Pending -> Paid -> Delivered
  * e.g. Health: Triage -> Confirmed -> Completed
  */
-export interface WorkflowDefinition {
-  name: string; // "Order Fulfillment", "Appointment Booking"
-  states: string[]; // ["pending", "paid", "shipped", "delivered"]
-  transitions: {
-    from: string;
-    to: string;
-    action: string; // "mark_paid", "ship_item"
-    requiredFields?: string[]; // Fields required to move to next state (e.g. "tracking_number")
-  }[];
-}
+export type WorkflowDefinition = z.infer<typeof WorkflowDefinitionSchema>;
 
 /**
  * A Sector Pack bundles the Tools, Prompts, and Definitions for a specific industry.
@@ -53,5 +57,5 @@ export interface SectorPack {
   tools: Tool[]; // The specific tools (add_to_cart vs book_appointment)
 
   // Execution Logic (The "Brain")
-  execute?: (toolName: string, args: any, deps: any) => Promise<any>;
+  execute?: (toolName: string, args: Record<string, unknown>, deps: unknown) => Promise<unknown>;
 }
