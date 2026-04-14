@@ -528,10 +528,15 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                         const args = { ...call.args, userId: slmPhone };
                         
                         const toolResult = await executeLifeTool(call.name, args);
+                        
+                        const safeResponse = (typeof toolResult === 'object' && toolResult !== null && !Array.isArray(toolResult)) 
+                            ? toolResult 
+                            : { result: toolResult };
+
                         const followUp = await slmChat.sendMessage([{
                             functionResponse: {
                                 name: call.name,
-                                response: toolResult
+                                response: safeResponse
                             }
                         }]);
                         slmReport = followUp.response.text();
