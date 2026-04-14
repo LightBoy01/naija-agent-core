@@ -84,6 +84,19 @@ async function main() {
     fs.copyFileSync(mcpFetchSrc, path.join(mcpFetchDestDir, 'mcp-fetch.mjs'));
     console.log('✅ Copied mcp-fetch.mjs to apps/worker-life/dist/utils');
   }
+
+  // Ensure prompts are copied
+  const promptsSrcDir = path.join(process.cwd(), 'apps/worker-life/src/prompts');
+  const promptsDestDir = path.join(process.cwd(), 'apps/worker-life/dist/prompts');
+  if (fs.existsSync(promptsSrcDir)) {
+    if (!fs.existsSync(promptsDestDir)) {
+      fs.mkdirSync(promptsDestDir, { recursive: true });
+    }
+    fs.readdirSync(promptsSrcDir).forEach(file => {
+      fs.copyFileSync(path.join(promptsSrcDir, file), path.join(promptsDestDir, file));
+    });
+    console.log('✅ Copied prompts to apps/worker-life/dist/prompts');
+  }
   
   console.log("\n🎉 All apps bundled successfully!");
 }
