@@ -164,7 +164,10 @@ export async function ingestDocument(
     tags: analysis.tags || []
   };
 
-  await getDb().collection('vault').doc(userId).collection('docs').doc(docId).set(doc);
+  // Strip undefined properties to prevent Firestore crash
+  const cleanDoc = JSON.parse(JSON.stringify(doc));
+
+  await getDb().collection('vault').doc(userId).collection('docs').doc(docId).set(cleanDoc);
   logger.info({ userId, docId }, '✅ Saved to Firestore Index');
 
   return doc;
@@ -188,22 +191,28 @@ export async function ingestNote(
   const doc: VaultDocument = {
     id: docId,
     userId,
-    orgId: options?.orgId,
     type: analysis.category || 'Note',
     title: analysis.title || 'Note',
     summary: analysis.summary || 'Saved Note',
     content: content,
-    extractedData: {
-      amount: analysis.amount,
-      currency: analysis.currency,
-      date: analysis.date,
-    },
     mimeType: 'text/plain',
+    extractedData: {
+      amount: analysis.amount || null,
+      currency: analysis.currency || null,
+      date: analysis.date || null,
+    },
     createdAt: new Date().toISOString(),
     tags: analysis.tags || []
   };
 
-  await getDb().collection('vault').doc(userId).collection('docs').doc(docId).set(doc);
+  if (options?.orgId) {
+    doc.orgId = options.orgId;
+  }
+
+  // Strip undefined properties to prevent Firestore crash
+  const cleanDoc = JSON.parse(JSON.stringify(doc));
+
+  await getDb().collection('vault').doc(userId).collection('docs').doc(docId).set(cleanDoc);
   logger.info({ userId, docId }, '✅ Note Saved to Firestore Index');
 
   return doc;
