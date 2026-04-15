@@ -26,15 +26,14 @@ export class StudyBuddyService {
         });
 
         const prompt = `
-        You are an API that ONLY outputs valid JSON arrays. You must not output any markdown formatting, no preambles, and no conversational text. Start directly with '[' and end with ']'.
-        
+        You are a quiz generation API. 
         Generate a 5-question multiple-choice quiz for a Nigerian student.
         Subject: ${subject}
         Topic: ${topic}
         Level: ${level} (e.g. WAEC/JAMB standard)
 
-        Format: JSON Array of objects.
-        Schema:
+        You must output the final JSON array wrapped entirely inside <quiz> and </quiz> tags. Do not put anything else inside those tags.
+        Schema for the array:
         [
           {
             "question": "The question text",
@@ -43,26 +42,43 @@ export class StudyBuddyService {
             "explanation": "Why this is correct"
           }
         ]
-        
-        Ensure questions are relevant to the Nigerian curriculum (WAEC/JAMB syllabus).
         `;
 
         try {
             const result = await model.generateContent(prompt);
             const text = result.response.text();
             
-            // Aggressive JSON extraction
+            // Extract JSON from <quiz> tags
             let cleanedText = text;
-            const jsonMatch = text.match(/\[\s*\{.*\}\s*\]/s);
-            if (jsonMatch) {
-                cleanedText = jsonMatch[0];
+            const startTag = '<quiz>';
+            const endTag = '</quiz>';
+            const startIndex = text.lastIndexOf(startTag);
+            const endIndex = text.lastIndexOf(endTag);
+            
+            if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+                cleanedText = text.substring(startIndex + startTag.length, endIndex).trim();
             } else {
-                cleanedText = text.replace(/```json\n?/gi, '').replace(/```/g, '').trim();
+                // Fallback to finding the last [ and last ]
+                const firstBracket = text.lastIndexOf('[');
+                const lastBracket = text.lastIndexOf(']');
+                if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+                    cleanedText = text.substring(firstBracket, lastBracket + 1);
+                } else {
+                    cleanedText = text.replace(/```json\n?/gi, '').replace(/```/g, '').trim();
+                }
             }
             
-            const quiz = JSON.parse(cleanedText) as QuizQuestion[];
-            return quiz;
+            try {
+                const quiz = JSON.parse(cleanedText) as QuizQuestion[];
+                return quiz;
+            } catch (parseError: any) {
+                logger.error({ text, cleanedText, error: parseError.message }, '❌ Failed to parse quiz JSON');
+                throw new Error("I couldn't generate the quiz right now. Abeg try again.");
+            }
         } catch (error: any) {
+            if (error.message === "I couldn't generate the quiz right now. Abeg try again.") {
+                throw error;
+            }
             logger.error({ error: error.message }, '❌ Failed to generate quiz');
             throw new Error("I couldn't generate the quiz right now. Abeg try again.");
         }
