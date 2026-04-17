@@ -409,8 +409,9 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                         const parsed = JSON.parse(text);
                         text = parsed.whatsapp_message || text;
                     } catch (e) {
-                        logger.warn({ text }, "Failed to parse JSON in main chat");
+                        // Expected if AI drops JSON mode to perform native function calling
                     }
+                    text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
                     // 4. Tool Execution (Function Calling) with SMART ENERGY (BILLING)
                     const functionCalls = response.functionCalls();
