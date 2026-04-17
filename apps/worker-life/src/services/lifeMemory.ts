@@ -1,26 +1,6 @@
 import { getDb } from '@naija-agent/firebase';
-import { AcademicProfile } from '@naija-agent/types';
+import { AcademicProfile, LifeContext } from '@naija-agent/types';
 import { logger } from '../utils/logger.js';
-
-export interface LifeContext {
-  fullName?: string;
-  family?: {
-    children?: { name: string; age?: number; school?: string }[];
-    spouse?: string;
-  };
-  health?: {
-    allergies?: string[];
-    medications?: string[];
-  };
-  goals?: string[]; // e.g., "Japa by 2027", "Buy land in Lekki"
-  preferences?: {
-    market?: string; // e.g., "Mile 12"
-    diet?: string;
-  };
-  academicProfile?: AcademicProfile; // Added for Student Lifecycle
-  lastInteraction?: Date;
-  energyCredits?: number; // Added for the Battery/Energy System
-}
 
 export class LifeMemoryService {
   private collection = 'user_profiles'; // Separate from 'organizations' (BOS)

@@ -98,6 +98,44 @@ export interface Chat {
 
 // --- AELIXXR (Life OS) Schemas ---
 
+export interface LifeContext {
+    fullName?: string;
+    family?: {
+        children?: { name: string; age?: number; school?: string }[];
+        spouse?: string;
+    };
+    health?: {
+        allergies?: string[];
+        medications?: string[];
+    };
+    goals?: string[]; // e.g., "Japa by 2027", "Buy land in Lekki"
+    preferences?: {
+        market?: string; // e.g., "Mile 12"
+        diet?: string;
+    };
+    communicationPreferences?: {
+        tone?: 'formal' | 'pidgin' | 'direct';
+        length?: 'concise' | 'detailed';
+        customRules?: string[]; // e.g. ["Hates being called 'Oga'", "Prefers bullet points"]
+    };
+    academicProfile?: AcademicProfile; // Added for Student Lifecycle
+    lastInteraction?: FirestoreTimestamp | Date;
+    lastFeedbackAt?: FirestoreTimestamp | Date; // Rate limiting for feedback tool
+    energyCredits?: number; // Added for the Battery/Energy System
+}
+
+export interface FeedbackEvent {
+    id: string;
+    userId: string; // Phone ID
+    sessionId: string; // Chat/Session ID
+    timestamp: FirestoreTimestamp | Date;
+    sentiment: 'positive' | 'negative' | 'neutral';
+    feedbackType: 'explicit' | 'implicit';
+    userMessage: string; // Redacted/Sanitized
+    aiContext?: string; // What the AI did before feedback
+    resolved?: boolean;
+}
+
 export interface AcademicProfile {
     level: 'SS3' | 'UNDERGRAD' | 'GRADUATE' | 'NYSC';
     school?: string; 

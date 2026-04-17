@@ -1,6 +1,7 @@
 import { Worker, Job, Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import dotenv from 'dotenv';
+dotenv.config();
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { SystemConfig, formatCurrency } from '@naija-agent/types';
 import { deductBalance, getOrgById, getChatHistory, findOrCreateChat, saveMessage } from '@naija-agent/firebase';
@@ -31,6 +32,8 @@ const TOOL_COSTS: Record<string, number> = {
     'save_note': 0,
     'delete_from_vault': 0,
     'generate_invite': 0,
+    'log_feedback': 0,
+    'update_life_context': 0,
     'web_search': 3000,
 };
 
@@ -92,7 +95,7 @@ let globalLifeTools: any[] | null = null;
   }
 })();
 
-async function getDynamicModels() {
+async function getDynamicModels(systemInstruction?: string) {
   const tools = globalLifeTools || await getLifeTools();
   
   const responseSchema: any = {
@@ -113,13 +116,15 @@ async function getDynamicModels() {
   const primaryModel = genAI.getGenerativeModel({ 
     model: process.env.GEMINI_MODEL_LOS || SystemConfig.MODELS.AELIXXR_PRIMARY,
     tools,
-    generationConfig: { responseMimeType: "application/json", responseSchema }
+    systemInstruction,
+    generationConfig: { responseMimeType: "application/json", responseSchema: responseSchema as any }
   });
 
   const fallbackModel = genAI.getGenerativeModel({ 
     model: SystemConfig.MODELS.AELIXXR_FALLBACK,
     tools,
-    generationConfig: { responseMimeType: "application/json", responseSchema }
+    systemInstruction,
+    generationConfig: { responseMimeType: "application/json", responseSchema: responseSchema as any }
   });
 
   return { primaryModel, fallbackModel };
@@ -191,9 +196,9 @@ const worker = new Worker(
                         - Place your final, conversational message (or exactly "SKIP") in the "whatsapp_message" field.
                         `;
                         
-                        const { primaryModel } = await getDynamicModels();
+                        const { primaryModel } = await getDynamicModels(systemPrompt);
                         const chatSession = primaryModel.startChat({
-                            history: [{ role: 'user', parts: [{ text: systemPrompt }] }]
+                            history: []
                         });
                         
                         const result = await chatSession.sendMessage("Evaluate and generate proactive message or SKIP.");
@@ -341,19 +346,48 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                     const chatId = await findOrCreateChat(orgId || 'naija-agent-master', `${userPhone}_life`, 'User');
                     const history = await getChatHistory(chatId, 10);
                     
-                    const chatHistory = [
-                        { role: 'user', parts: [{ text: systemPrompt }] },
-                        { role: 'model', parts: [{ text: "I understand. I am ready to assist based on this context." }] },
-                        ...history.map((msg: any) => ({
-                            role: msg.role === 'user' ? 'user' : (msg.role === 'system' ? 'user' : 'model'),
-                            parts: [{ text: msg.content }],
-                        }))
-                    ];
+                    // --- STRICT ROLE NORMALIZATION ---
+                    let chatHistory = history.map((msg: any) => ({
+                        role: msg.role === 'assistant' || msg.role === 'model' ? 'model' : 'user',
+                        parts: [{ text: msg.content }],
+                    }));
+
+                    // Remove leading model messages (Gemini/Gemma requirement)
+                    while (chatHistory.length > 0 && chatHistory[0].role === 'model') {
+                        chatHistory.shift();
+                    }
+
+                    // Ensure strictly alternating roles (User -> Model -> User)
+                    const alternatingHistory = [];
+                    let lastRole = null;
+                    for (const msg of chatHistory) {
+                        if (msg.role !== lastRole) {
+                            alternatingHistory.push(msg);
+                            lastRole = msg.role;
+                        } else {
+                            // Merge consecutive same-role messages or skip
+                            alternatingHistory[alternatingHistory.length - 1].parts[0].text += "\n" + msg.parts[0].text;
+                        }
+                    }
+                    
+                    chatHistory = alternatingHistory;
+
+                    // If history ends with user, Gemini will append the new message correctly.
+                    // But if we use sendMessage, we usually want history to be empty or end with model.
+                    // Actually, startChat(history) where history ends with model is best for sendMessage(user).
+                    if (chatHistory.length > 0 && chatHistory[chatHistory.length - 1].role === 'user') {
+                        // We will append the current message to the last user message or just pass empty and let sendMessage handle it.
+                        // Best practice for Gemini: if last is user, pop it and merge with the current message.
+                        const lastUserMsg = chatHistory.pop();
+                        logger.info({ lastMsg: lastUserMsg?.parts[0].text }, 'Merging last user history with current message');
+                    }
+
+                    logger.info({ historyLength: chatHistory.length }, '🚀 Sending normalized chat history to AI');
 
                     // Append ingestion summary and referral summary to user message so AI knows what happened
                     const fullMessage = message + ingestionSummary + referralSummary;
 
-                    const { primaryModel, fallbackModel } = await getDynamicModels();
+                    const { primaryModel, fallbackModel } = await getDynamicModels(systemPrompt);
 
                     try {
                         chatSession = primaryModel.startChat({ history: chatHistory });
@@ -436,8 +470,8 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                                 billingNote += `\n_(-${costInCredits} Energy used for deep search)_`;
                             }
 
-                            // Inject userId for tools that need it (like search_vault)
-                            const args = { ...call.args, userId: userPhone };
+                            // Inject userId and context for tools that need it
+                            const args = { ...call.args, userId: userPhone, sessionId: chatId, originalMessage: message };
                             const toolResult = await executeLifeTool(call.name, args);
                             
                             // Return the tool result to the AI model so it can formulate a final answer
@@ -453,9 +487,10 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                                 const parsed = JSON.parse(followUpText);
                                 text = parsed.whatsapp_message || followUpText;
                             } catch (e) {
-                                logger.warn({ text: followUpText }, "Failed to parse JSON after tool call");
+                                // Expected if AI uses plain text with <think> tags
                                 text = followUpText;
                             }
+                            text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
                         }
                     }
 
@@ -479,6 +514,19 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                     return { success: true, reply: text };
                 } catch (apiError: any) {
                     logger.error({ error: apiError.message }, '❌ Gemini API Call Failed');
+                    
+                    // --- SOVEREIGN SNITCH: Brain Freeze Alert ---
+                    try {
+                        const masterPhone = process.env.MASTER_ADMIN_PHONE || '2347042310893';
+                        const brainSnitch = `🚨 *AELIXXR BRAIN FREEZE*\n\n*User:* ${userPhone}\n*Error:* ${apiError.message}\n\nOga, Gemini is acting up. I've told the user to join the feedback group.`;
+                        await whatsappService.sendText(masterPhone, brainSnitch);
+                    } catch (sErr) {}
+
+                    // --- Community Error Message ---
+                    const communityLink = 'https://chat.whatsapp.com/IOSJQNPgIHPBcamromxjp2';
+                    const errorMsg = `Oga, my tools and brain dey act a bit strange right now. 🔋🧊 I've already alerted the Boss to fix it, but if you want to report it yourself or see when I'm back up, join our Aelixxr Feedback Group here: ${communityLink}\n\nI'll be back online soon!`;
+                    await whatsappService.sendText(userPhone, errorMsg);
+                    
                     throw apiError;
                 }
 
@@ -501,15 +549,56 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                     agentPrompt = `You are an SLM worker for the ${sector}. Execute the instruction. Output valid JSON.`;
                 }
 
+                agentPrompt += `\n\nCRITICAL INSTRUCTION: Once you have completed your research and tool calls, you must output a FINAL REPORT in strictly valid JSON format matching this schema:
+{
+  "status": "success" | "error",
+  "tool_used": "The name of the tool you used",
+  "report": "A comprehensive but concise summary of your research findings or actions.",
+  "data": [ { "title": "...", "content": "...", "metadata": {} } ] // Optional structured data points
+}
+Do not output any text after the JSON block.`;
+
                 const fullInstruction = `
                 [USER_ID]: ${slmPhone}
                 [INSTRUCTION]: ${slmInst}
                 `;
 
+                const slmResponseSchema = {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                        status: {
+                            type: SchemaType.STRING,
+                            description: "The status of the task, e.g., 'success' or 'error'."
+                        },
+                        tool_used: {
+                            type: SchemaType.STRING,
+                            description: "The name of the tool you used to fulfill the instruction."
+                        },
+                        report: {
+                            type: SchemaType.STRING,
+                            description: "A comprehensive but concise summary of your research findings or actions."
+                        },
+                        data: {
+                            type: SchemaType.ARRAY,
+                            items: {
+                                type: SchemaType.OBJECT,
+                                properties: {
+                                    title: { type: SchemaType.STRING },
+                                    content: { type: SchemaType.STRING },
+                                    metadata: { type: SchemaType.OBJECT }
+                                }
+                            },
+                            description: "Optional. Structured data points, search results, or extracted facts."
+                        }
+                    },
+                    required: ["status", "report"]
+                };
+
                 const slmModel = genAI.getGenerativeModel({
                     model: SystemConfig.MODELS.AELIXXR_WORKER, // 4B model for fast/cheap SLM execution
                     tools: globalLifeTools || await getLifeTools(), 
-                    generationConfig: { responseMimeType: "application/json" }
+                    // Remove strict generationConfig to allow the SLM to execute tools naturally before formatting JSON.
+                    // We will ask it to format as JSON in the prompt if it doesn't.
                 });
 
                 const slmChat = slmModel.startChat({
@@ -551,7 +640,12 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                 // Clean JSON aggressively
                 let cleanedReport = slmReport;
                 const jsonMatch = slmReport.match(/\{[\s\S]*\}/);
-                if (jsonMatch) cleanedReport = jsonMatch[0];
+                if (jsonMatch) {
+                    cleanedReport = jsonMatch[0];
+                } else {
+                    logger.warn('SLM failed to output valid JSON. Falling back to error report.');
+                    cleanedReport = JSON.stringify({ status: "error", report: "Sub-agent failed to structure the data correctly." });
+                }
 
                 await lifeQueue.add('life-chat-resume', {
                     userPhone: slmPhone,
@@ -591,20 +685,56 @@ You have set up the following proactive monitors for the user. If they ask about
 ${resumeMonitors.length > 0 ? JSON.stringify(resumeMonitors) : "None currently active."}
 ---
 `;
-                const { primaryModel: resumePrimary } = await getDynamicModels();
+                const { primaryModel: resumePrimary } = await getDynamicModels(resumePrompt);
                 const resumeHistory = await getChatHistory(resumeChatId, 10);
+                
+                // --- STRICT ROLE NORMALIZATION (Resume Block) ---
+                let normalizedResumeHistory = resumeHistory.map((msg: any) => ({
+                    role: msg.role === 'assistant' || msg.role === 'model' ? 'model' : 'user',
+                    parts: [{ text: msg.content }],
+                }));
+
+                while (normalizedResumeHistory.length > 0 && normalizedResumeHistory[0].role === 'model') {
+                    normalizedResumeHistory.shift();
+                }
+
+                const altResumeHistory = [];
+                let lastResumeRole = null;
+                for (const msg of normalizedResumeHistory) {
+                    if (msg.role !== lastResumeRole) {
+                        altResumeHistory.push(msg);
+                        lastResumeRole = msg.role;
+                    } else {
+                        altResumeHistory[altResumeHistory.length - 1].parts[0].text += "\n" + msg.parts[0].text;
+                    }
+                }
+                normalizedResumeHistory = altResumeHistory;
+
+                if (normalizedResumeHistory.length > 0 && normalizedResumeHistory[normalizedResumeHistory.length - 1].role === 'user') {
+                    normalizedResumeHistory.pop(); // Pop so the new message becomes the 'user' turn
+                }
+
                 const resumeChatSession = resumePrimary.startChat({
-                    history: [
-                        { role: 'user', parts: [{ text: resumePrompt }] },
-                        { role: 'model', parts: [{ text: "I understand. I am ready to assist based on this context." }] },
-                        ...resumeHistory.map((msg: any) => ({
-                            role: msg.role === 'user' ? 'user' : (msg.role === 'system' ? 'user' : 'model'),
-                            parts: [{ text: msg.content }],
-                        }))
-                    ]
+                    history: normalizedResumeHistory
                 });
 
-                const resumeMessage = `${resumeOrig}\n\n[SYSTEM UPDATE]: Your specialized sub-agent (${resumeSector}) has returned the following JSON report:\n${resumeRep}\n\nPlease synthesize this report and provide your final empathetic response to the user based on what the SLM found. DO NOT use the delegate_task tool again for this turn. DO NOT mention you are an AI or reading JSON. Just provide the final answer natively.`;
+                const resumeMessage = `
+[USER_MESSAGE]: ${resumeOrig}
+
+[SYSTEM UPDATE]: Your specialized sub-agent (${resumeSector}) has completed its research/task.
+Below is the structured DATA REPORT from the sub-agent. 
+
+[START OF SUB-AGENT REPORT]
+${resumeRep}
+[END OF SUB-AGENT REPORT]
+
+[INSTRUCTION]:
+1. Review the sub-agent's findings above.
+2. Synthesize a warm, empathetic, and professional response to the user's original message.
+3. If the sub-agent found data (like search results or a quiz), present it clearly and conversationally.
+4. DO NOT mention you are an AI, do not mention the sub-agent, and do not mention JSON. 
+5. Maintain your Aelixxr persona.
+`;
                 
                 try {
                     const resumeRes = await resumeChatSession.sendMessage(resumeMessage);
@@ -613,6 +743,9 @@ ${resumeMonitors.length > 0 ? JSON.stringify(resumeMonitors) : "None currently a
                         const parsed = JSON.parse(finalTxt);
                         finalTxt = parsed.whatsapp_message || finalTxt;
                     } catch(e) {}
+                    
+                    // Strip chain-of-thought leaked by Gemma 4
+                    finalTxt = finalTxt.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
                     logger.info({ response: finalTxt }, '🗣️ Life Companion Replying (Post-SLM)');
                     await whatsappService.sendText(resumePhone, finalTxt);
@@ -621,6 +754,19 @@ ${resumeMonitors.length > 0 ? JSON.stringify(resumeMonitors) : "None currently a
                     return { success: true, reply: finalTxt };
                 } catch(e: any) {
                     logger.error('Failed to resume life chat', e);
+                    
+                    // --- SOVEREIGN SNITCH: Brain Freeze Alert (Resume) ---
+                    try {
+                        const masterPhone = process.env.MASTER_ADMIN_PHONE || '2347042310893';
+                        const brainSnitch = `🚨 *AELIXXR BRAIN FREEZE (RESUME)*\n\n*User:* ${resumePhone}\n*Error:* ${e.message}\n\nOga, SLM-to-Aelixxr resume failed.`;
+                        await whatsappService.sendText(masterPhone, brainSnitch);
+                    } catch (sErr) {}
+
+                    // --- Community Error Message ---
+                    const communityLink = 'https://chat.whatsapp.com/IOSJQNPgIHPBcamromxjp2';
+                    const errorMsg = `Oga, I consult my sub-agent finish but my brain freeze for the synthesis! 🔋🧊 I've already alerted the Boss. Join the Feedback Group for more info: ${communityLink}`;
+                    await whatsappService.sendText(resumePhone, errorMsg);
+                    
                     throw e;
                 }
 
@@ -639,6 +785,16 @@ ${resumeMonitors.length > 0 ? JSON.stringify(resumeMonitors) : "None currently a
   }
 );
 
-worker.on('failed', (job, err) => {
+worker.on('failed', async (job, err) => {
   logger.error({ jobId: job?.id, error: err.message }, 'Life Worker Job Failed');
+  
+  // --- SOVEREIGN SNITCH: Critical System Alert ---
+  try {
+     const masterPhone = process.env.MASTER_ADMIN_PHONE || '2347042310893';
+     const snitchMsg = `🚨 *SYSTEM ALERT (Life Worker)*\n\nJob *${job?.name}* (${job?.id}) failed!\n\nError: ${err.message}\n\nOga, please check the logs immediately.`;
+     await whatsappService.sendText(masterPhone, snitchMsg);
+     logger.info({ jobId: job?.id }, '🚨 [SNITCH] Life Worker failure reported to Boss.');
+  } catch (snitchErr: any) {
+     logger.error({ error: snitchErr.message }, 'Failed to snitch worker failure');
+  }
 });

@@ -5,6 +5,32 @@ import { logger } from './utils/logger.js';
 import { searchVault, ingestNote, deleteFromVault } from '@naija-agent/storage';
 import { mcpClient } from './services/mcpClient.js';
 import { heartbeatService } from './services/heartbeat.js';
+import { getDb } from '@naija-agent/firebase';
+import { lifeMemory } from './services/lifeMemory.js';
+import { FeedbackEvent } from '@naija-agent/types';
+import { whatsappService } from './services/whatsapp.js';
+
+// --- Tool Helpers ---
+const redactPII = (text: string): string => {
+  // Redact emails
+  let redacted = text.replace(/[\w.-]+@[\w.-]+\.\w+/gi, '[EMAIL]');
+  // Redact long number sequences (likely accounts/phone numbers)
+  redacted = redacted.replace(/\d{7,15}/g, '[NUMBER]');
+  return redacted;
+};
+
+const sanitizeLearnedRule = (rule: string): string | null => {
+  const dangerousKeywords = [
+    'ignore previous', 'master', 'system prompt', 'you must always', 
+    'override', 'security', 'hack', 'instruction'
+  ];
+  const lowercaseRule = rule.toLowerCase();
+  if (dangerousKeywords.some(kw => lowercaseRule.includes(kw))) {
+    logger.warn({ rule }, '🚫 [FEEDBACK] Rejected dangerous rule injection');
+    return null;
+  }
+  return rule;
+};
 
 // --- Tool Definitions for Gemini ---
 export const STATIC_LIFE_TOOLS: Tool = {
@@ -28,10 +54,9 @@ export const STATIC_LIFE_TOOLS: Tool = {
       parameters: {
         type: SchemaType.OBJECT,
         properties: {
-          query: { type: SchemaType.STRING, description: 'The search term (e.g. "GTBank", "School Fees", "Rent").' },
-          userId: { type: SchemaType.STRING, description: 'The user\'s phone number (Phone ID).' }
+          query: { type: SchemaType.STRING, description: 'The search term (e.g. "GTBank", "School Fees", "Rent").' }
         },
-        required: ['query', 'userId']
+        required: ['query']
       }
     },
     {
@@ -40,10 +65,9 @@ export const STATIC_LIFE_TOOLS: Tool = {
       parameters: {
         type: SchemaType.OBJECT,
         properties: {
-          note: { type: SchemaType.STRING, description: 'The text content to save (e.g. "Gate code is 1234", "Auntie Tope\'s birthday is Oct 5").' },
-          userId: { type: SchemaType.STRING, description: 'The user\'s phone number (Phone ID).' }
+          note: { type: SchemaType.STRING, description: 'The text content to save (e.g. "Gate code is 1234", "Auntie Tope\'s birthday is Oct 5").' }
         },
-        required: ['note', 'userId']
+        required: ['note']
       }
     },
     {
@@ -52,10 +76,9 @@ export const STATIC_LIFE_TOOLS: Tool = {
       parameters: {
         type: SchemaType.OBJECT,
         properties: {
-          docId: { type: SchemaType.STRING, description: 'The unique ID of the document/note to delete.' },
-          userId: { type: SchemaType.STRING, description: 'The user\'s phone number (Phone ID).' }
+          docId: { type: SchemaType.STRING, description: 'The unique ID of the document/note to delete.' }
         },
-        required: ['docId', 'userId']
+        required: ['docId']
       }
     },
     {
@@ -75,9 +98,9 @@ export const STATIC_LIFE_TOOLS: Tool = {
       parameters: {
         type: SchemaType.OBJECT,
         properties: {
-          userId: { type: SchemaType.STRING, description: 'The user\'s phone number (Phone ID).' }
+          action: { type: SchemaType.STRING, description: 'Always pass "generate"' }
         },
-        required: ['userId']
+        required: ['action']
       }
     },
     {
@@ -90,6 +113,62 @@ export const STATIC_LIFE_TOOLS: Tool = {
           instruction: { type: SchemaType.STRING, description: 'Clear, detailed instructions for the sub-agent on what exactly you need them to do or find out.' }
         },
         required: ['sector', 'instruction']
+      }
+    },
+    {
+      name: 'log_feedback',
+      description: 'Use this tool when the user provides explicit feedback (e.g., "Good job", "I hate this", "Make it shorter next time") or when you detect strong frustration in their message.',
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          sentiment: { type: SchemaType.STRING, enum: ['positive', 'negative', 'neutral'], format: "enum", description: 'The overall sentiment of the user feedback.' },
+          feedbackType: { type: SchemaType.STRING, enum: ['explicit', 'implicit'], format: "enum", description: 'Whether the feedback was directly stated or inferred from context.' },
+          learnedRule: { type: SchemaType.STRING, description: 'Optional. A new communication rule to add to the user\'s memory (e.g., "User prefers short answers").' },
+          internalNote: { type: SchemaType.STRING, description: 'Optional. Internal note explaining the reason for logging this feedback.' }
+        },
+        required: ['sentiment', 'feedbackType']
+      }
+    },
+    {
+      name: 'update_life_context',
+      description: 'PERMANENTLY save the user\'s core personal details to long-term memory. Use this IMMEDIATELY whenever the user mentions their name, family members, health conditions, future goals, or personal preferences. This is the only way to ensure you don\'t forget these details in the next session.',
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          fullName: { type: SchemaType.STRING, description: 'The user\'s full name.' },
+          family: {
+            type: SchemaType.OBJECT,
+            properties: {
+              spouse: { type: SchemaType.STRING },
+              children: {
+                type: SchemaType.ARRAY,
+                items: {
+                  type: SchemaType.OBJECT,
+                  properties: {
+                    name: { type: SchemaType.STRING },
+                    age: { type: SchemaType.NUMBER },
+                    school: { type: SchemaType.STRING }
+                  }
+                }
+              }
+            }
+          },
+          health: {
+            type: SchemaType.OBJECT,
+            properties: {
+              allergies: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+              medications: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
+            }
+          },
+          goals: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, description: 'User goals like "Japa by 2027" or "Buy a car".' },
+          preferences: {
+            type: SchemaType.OBJECT,
+            properties: {
+              market: { type: SchemaType.STRING },
+              diet: { type: SchemaType.STRING }
+            }
+          }
+        }
       }
     }
   ],
@@ -117,6 +196,12 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
   logger.info({ tool: name, args }, '🛠️ Executing Life Tool');
 
   try {
+    // --- CONSTITUTIONAL GATEKEEPER (Hallucination Guard) ---
+    if (name === 'delete_from_vault' && (!args.docId || args.docId === 'undefined' || args.docId === 'null' || args.docId.length < 5 || args.docId.includes('document_id'))) {
+        logger.warn({ tool: name, docId: args.docId }, '🚨 Hallucination Guard: Blocked suspicious document ID');
+        return { error: 'Oga, I need the exact Document ID to delete it. Please use the search tool first to find the right ID.' };
+    }
+
     switch (name) {
       case 'generate_quiz':
         return await studyBuddy.generateQuiz(args.subject, args.topic, args.level);
@@ -152,10 +237,12 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
             });
 
             const searchResult = await searchModel.generateContent({
-              contents: [{ role: 'user', parts: [{ text: `Search for: ${args.query}. Summarize the key facts, prices, or news found.` }] }]
+              contents: [{ role: 'user', parts: [{ text: `Search for: ${args.query}. Summarize the key facts, prices, or news found. DO NOT output your search plan, internal reasoning, or introductory filler. Provide ONLY the final summary.` }] }]
             });
             
-            return searchResult.response.text();
+            let text = searchResult.response.text();
+            text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+            return text;
           };
 
           try {
@@ -172,16 +259,101 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
              throw firstTryErr;
           }
         } catch (err: any) {
-          logger.error({ error: err.message }, 'Web Search Failed');
-          return { error: 'Oga, I don search tire for today! I don reach my limit for now.' };
+        logger.error({ error: err.message }, 'Web Search Failed');
+        return { error: 'Oga, I don search tire for today! I don reach my limit for now.' };
         }
-      }
+        }
 
-      default:
+        case 'log_feedback': {
+          const { userId, sessionId, originalMessage, sentiment, feedbackType, learnedRule, internalNote } = args;
+
+          // 1. Rate Limiting Check (Max once per hour)
+          const context = await lifeMemory.getContext(userId);
+
+          // Handle both Firestore Timestamp objects and Date/ISO strings
+          let lastFeedback: Date | null = null;
+          if (context.lastFeedbackAt) {
+             const lfa = context.lastFeedbackAt as any;
+             if (typeof lfa.toDate === 'function') {
+               lastFeedback = lfa.toDate();
+             } else {
+               lastFeedback = new Date(lfa);
+             }
+          }
+
+          const now = new Date();
+
+          if (lastFeedback && !isNaN(lastFeedback.getTime()) && (now.getTime() - lastFeedback.getTime() < 3600000)) {
+             logger.info({ userId }, '⏳ [FEEDBACK] Rate limited, skipping duplicate log.');
+             return { status: 'skipped', reason: 'Rate limited (max 1 per hour)' };
+          }
+        // 2. Redact PII from user message
+        const redactedMessage = redactPII(originalMessage || '');
+
+        // 3. Save Feedback Event to Firestore
+        const db = getDb();
+        const feedbackId = `${userId}_${now.getTime()}`;
+        const feedbackEvent: Partial<FeedbackEvent> = {
+        id: feedbackId,
+        userId,
+        sessionId,
+        timestamp: now,
+        sentiment: sentiment as any,
+        feedbackType: feedbackType as any,
+        userMessage: redactedMessage,
+        aiContext: internalNote || 'Auto-detected sentiment'
+        };
+
+        await db.collection('agent_feedback').doc(feedbackId).set(feedbackEvent);
+
+        // --- SOVEREIGN SNITCH: Negative Feedback Alert ---
+        if (sentiment === 'negative') {
+           try {
+              const masterPhone = process.env.MASTER_ADMIN_PHONE || '2347042310893';
+              const snitchMsg = `⚠️ *AELIXXR NEGATIVE FEEDBACK*\n\n*User:* ${userId}\n*Sentiment:* ${sentiment}\n*Type:* ${feedbackType}\n\n*Message:* ${redactedMessage}\n\nOga, user is frustrated. Please check the chat history.`;
+              await whatsappService.sendText(masterPhone, snitchMsg);
+              logger.info({ userId }, '🚨 [SNITCH] Negative feedback reported to Boss.');
+           } catch (snitchErr: any) {
+              logger.error({ error: snitchErr.message }, 'Failed to snitch negative feedback');
+           }
+        }
+
+        // 4. Update LifeContext (Learned Rule & Rate Limit Timestamp)
+
+        const updates: any = { lastFeedbackAt: now };
+
+        if (learnedRule) {
+         const safeRule = sanitizeLearnedRule(learnedRule);
+         if (safeRule) {
+            const currentRules = context.communicationPreferences?.customRules || [];
+            updates.communicationPreferences = {
+               ...context.communicationPreferences,
+               customRules: Array.from(new Set([...currentRules, safeRule]))
+            };
+         }
+        }
+
+        await lifeMemory.updateContext(userId, updates);
+
+        return { 
+         status: 'success', 
+         message: 'Oga, I don carry your feedback go store. I go adjust for you next time!' 
+        };
+        }
+
+        case 'update_life_context': {
+        const { userId, ...updates } = args;
+        await lifeMemory.updateContext(userId, updates);
+        return { status: 'success', message: 'I have updated my long-term memory of your life context. I will remember this forever!' };
+        }
+
+        default:
         // Try fallback to MCP dynamically loaded tools
+
         logger.info({ tool: name }, 'Tool not found locally, attempting MCP execution');
         return await mcpClient.executeTool(name, args);
-    }
+        }
+
   } catch (error: any) {
     logger.error({ tool: name, error: error.message }, '❌ Tool Execution Failed');
     return { error: error.message };

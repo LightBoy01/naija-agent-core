@@ -20,59 +20,60 @@ export class StudyBuddyService {
     async generateQuiz(subject: string, topic: string, level: string = 'SS3'): Promise<QuizQuestion[]> {
         logger.info({ subject, topic, level }, '📚 Generating Quiz...');
 
+        const quizSchema = {
+            type: SchemaType.ARRAY,
+            description: "A 5-question multiple-choice quiz.",
+            items: {
+                type: SchemaType.OBJECT,
+                properties: {
+                    question: {
+                        type: SchemaType.STRING,
+                        description: "The question text."
+                    },
+                    options: {
+                        type: SchemaType.ARRAY,
+                        description: "The 4 multiple choice options (e.g. ['A) ...', 'B) ...', 'C) ...', 'D) ...']).",
+                        items: { type: SchemaType.STRING }
+                    },
+                    correctAnswer: {
+                        type: SchemaType.STRING,
+                        description: "The correct option letter (e.g., 'A', 'B', 'C', or 'D')."
+                    },
+                    explanation: {
+                        type: SchemaType.STRING,
+                        description: "A brief explanation of why the answer is correct."
+                    }
+                },
+                required: ["question", "options", "correctAnswer", "explanation"]
+            }
+        };
+
         const model = this.genAI.getGenerativeModel({ 
-            model: SystemConfig.MODELS.AELIXXR_WORKER, // Use 4B model for fast/cheap generation
-            generationConfig: { responseMimeType: "application/json" }
+            model: SystemConfig.MODELS.AELIXXR_WORKER, // Use worker model
+            generationConfig: { 
+                responseMimeType: "application/json",
+                responseSchema: quizSchema as any
+            }
         });
 
         const prompt = `
-        You are a quiz generation API. 
         Generate a 5-question multiple-choice quiz for a Nigerian student.
         Subject: ${subject}
         Topic: ${topic}
         Level: ${level} (e.g. WAEC/JAMB standard)
 
-        You must output the final JSON array wrapped entirely inside <quiz> and </quiz> tags. Do not put anything else inside those tags.
-        Schema for the array:
-        [
-          {
-            "question": "The question text",
-            "options": ["A) Option 1", "B) Option 2", "C) Option 3", "D) Option 4"],
-            "correctAnswer": "A",
-            "explanation": "Why this is correct"
-          }
-        ]
+        Ensure questions are relevant to the Nigerian curriculum (WAEC/JAMB syllabus).
         `;
 
         try {
             const result = await model.generateContent(prompt);
             const text = result.response.text();
             
-            // Extract JSON from <quiz> tags
-            let cleanedText = text;
-            const startTag = '<quiz>';
-            const endTag = '</quiz>';
-            const startIndex = text.lastIndexOf(startTag);
-            const endIndex = text.lastIndexOf(endTag);
-            
-            if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
-                cleanedText = text.substring(startIndex + startTag.length, endIndex).trim();
-            } else {
-                // Fallback to finding the last [ and last ]
-                const firstBracket = text.lastIndexOf('[');
-                const lastBracket = text.lastIndexOf(']');
-                if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
-                    cleanedText = text.substring(firstBracket, lastBracket + 1);
-                } else {
-                    cleanedText = text.replace(/```json\n?/gi, '').replace(/```/g, '').trim();
-                }
-            }
-            
             try {
-                const quiz = JSON.parse(cleanedText) as QuizQuestion[];
+                const quiz = JSON.parse(text) as QuizQuestion[];
                 return quiz;
             } catch (parseError: any) {
-                logger.error({ text, cleanedText, error: parseError.message }, '❌ Failed to parse quiz JSON');
+                logger.error({ text, error: parseError.message }, '❌ Failed to parse native quiz JSON');
                 throw new Error("I couldn't generate the quiz right now. Abeg try again.");
             }
         } catch (error: any) {
