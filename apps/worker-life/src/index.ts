@@ -472,12 +472,17 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                             // Inject userId and context for tools that need it
                             const args = { ...call.args, userId: userPhone, sessionId: chatId, originalMessage: message };
                             const toolResult = await executeLifeTool(call.name, args);
+
+                            // 🛡️ API SAFETY: Google Protobuf requires function responses to be Objects, not naked Arrays/Primitives.
+                            const safeResponse = (typeof toolResult === 'object' && toolResult !== null && !Array.isArray(toolResult)) 
+                                ? toolResult 
+                                : { result: toolResult };
                             
                             // Return the tool result to the AI model so it can formulate a final answer
                             const followUpResult = await chatSession.sendMessage([{
                                 functionResponse: {
                                     name: call.name,
-                                    response: toolResult
+                                    response: safeResponse
                                 }
                             }]);
                             
