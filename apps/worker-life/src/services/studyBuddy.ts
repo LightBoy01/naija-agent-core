@@ -67,9 +67,11 @@ export class StudyBuddyService {
 
         try {
             const result = await model.generateContent(prompt);
-            const text = result.response.text();
+            let text = result.response.text();
             
             try {
+                // Strip markdown backticks that some models inject even in JSON mode
+                text = text.replace(/```(json)?/gi, '').trim();
                 const quiz = JSON.parse(text) as QuizQuestion[];
                 return quiz;
             } catch (parseError: any) {
