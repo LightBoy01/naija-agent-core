@@ -116,15 +116,13 @@ async function getDynamicModels(systemInstruction?: string) {
   const primaryModel = genAI.getGenerativeModel({ 
     model: process.env.GEMINI_MODEL_LOS || SystemConfig.MODELS.AELIXXR_PRIMARY,
     tools,
-    systemInstruction,
-    generationConfig: { responseMimeType: "application/json", responseSchema: responseSchema as any }
+    systemInstruction
   });
 
   const fallbackModel = genAI.getGenerativeModel({ 
     model: SystemConfig.MODELS.AELIXXR_FALLBACK,
     tools,
-    systemInstruction,
-    generationConfig: { responseMimeType: "application/json", responseSchema: responseSchema as any }
+    systemInstruction
   });
 
   return { primaryModel, fallbackModel };
