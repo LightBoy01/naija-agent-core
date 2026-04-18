@@ -1,7 +1,6 @@
 import { Worker, Job, Queue } from 'bullmq';
 import { Redis } from 'ioredis';
-import dotenv from 'dotenv';
-dotenv.config();
+import 'dotenv/config';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { SystemConfig, formatCurrency } from '@naija-agent/types';
 import { deductBalance, getOrgById, getChatHistory, findOrCreateChat, saveMessage } from '@naija-agent/firebase';
@@ -474,9 +473,14 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                             const toolResult = await executeLifeTool(call.name, args);
 
                             // 🛡️ API SAFETY: Google Protobuf requires function responses to be Objects, not naked Arrays/Primitives.
-                            const safeResponse = (typeof toolResult === 'object' && toolResult !== null && !Array.isArray(toolResult)) 
+                            let safeResponse = (typeof toolResult === 'object' && toolResult !== null && !Array.isArray(toolResult)) 
                                 ? toolResult 
                                 : { result: toolResult };
+                            
+                            // 🛡️ CONTEXT RE-INJECTION: Prevent hallucination on tool failure
+                            if (safeResponse.error) {
+                                safeResponse.system_context = `The tool execution failed. Please apologize to the user. Remember, their original request was: "${message}".`;
+                            }
                             
                             // Return the tool result to the AI model so it can formulate a final answer
                             const followUpResult = await chatSession.sendMessage([{

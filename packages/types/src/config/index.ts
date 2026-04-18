@@ -33,8 +33,8 @@ export const SystemConfig = {
         ZYNUX_FALLBACK: 'gemini-2.5-flash',
 
         // --- AELIXXR (Life) ---
-        AELIXXR_PRIMARY: 'gemma-4-26b-a4b-it',
-        AELIXXR_WORKER: 'gemma-4-26b-a4b-it',
+        AELIXXR_PRIMARY: 'gemini-2.5-pro',
+        AELIXXR_WORKER: 'gemini-3.1-flash-lite-preview',
         AELIXXR_FALLBACK: 'gemini-2.5-flash',
 
         // --- ROUTER (Gateway) ---

@@ -1,7 +1,5 @@
-import dotenv from 'dotenv';
+import 'dotenv/config';
 import { getLifeTools, executeLifeTool } from '../apps/worker-life/src/tools.js';
-
-dotenv.config();
 
 // ============================================================================
 // 🧪 AELIXXR (LIFE OS) - COMPREHENSIVE TOOL TEST TEMPLATES

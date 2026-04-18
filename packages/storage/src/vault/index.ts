@@ -54,8 +54,9 @@ async function uploadToVault(userId: string, buffer: Buffer, mimeType: string): 
 }
 
 async function extractMetadata(buffer: Buffer, mimeType: string, caption: string | undefined, apiKey: string): Promise<any> {
+  const { SystemConfig } = await import('@naija-agent/types');
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  const model = genAI.getGenerativeModel({ model: SystemConfig.MODELS.AELIXXR_WORKER });
 
   const prompt = `
   You are an expert Document Classification and Extraction AI for a "Life OS" Vault.
@@ -90,8 +91,9 @@ async function extractMetadata(buffer: Buffer, mimeType: string, caption: string
 }
 
 async function extractNoteMetadata(text: string, apiKey: string): Promise<any> {
+  const { SystemConfig } = await import('@naija-agent/types');
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  const model = genAI.getGenerativeModel({ model: SystemConfig.MODELS.AELIXXR_WORKER });
 
   const prompt = `
   You are an expert Document Classification and Extraction AI for a "Life OS" Vault.

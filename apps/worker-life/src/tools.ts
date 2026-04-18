@@ -228,6 +228,7 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
       case 'web_search': {
         try {
           const { GoogleGenerativeAI } = await import('@google/generative-ai');
+          const { SystemConfig } = await import('@naija-agent/types');
           const searchGenAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || '');
           
           const trySearch = async (modelName: string) => {
@@ -246,14 +247,14 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
           };
 
           try {
-            // Tier 1: Primary Gemma 4
-            const summary = await trySearch("gemma-4-26b-a4b-it");
+            // Tier 1: Primary Worker Model
+            const summary = await trySearch(SystemConfig.MODELS.AELIXXR_WORKER);
             return { status: 'success', result: summary };
           } catch (firstTryErr: any) {
-             if (firstTryErr.message.includes('429') || firstTryErr.message.includes('503') || firstTryErr.message.includes('fetch failed') || firstTryErr.message.includes('500')) {
-                logger.warn(`🔄 [LIFE SEARCH FALLBACK] Quota Exceeded or Model Busy. Retrying with Gemini 2.5 Flash...`);
-                // Tier 2: 2.5 Flash (Reliability)
-                const secondSummary = await trySearch("gemini-2.5-flash");
+             if (firstTryErr.message.includes('429') || firstTryErr.message.includes('503') || firstTryErr.message.includes('fetch failed') || firstTryErr.message.includes('500') || firstTryErr.message.includes('limit')) {
+                logger.warn(`🔄 [LIFE SEARCH FALLBACK] Quota Exceeded or Model Busy. Retrying with Fallback...`);
+                // Tier 2: Fallback (Reliability)
+                const secondSummary = await trySearch(SystemConfig.MODELS.AELIXXR_FALLBACK);
                 return { status: 'success', result: secondSummary };
              }
              throw firstTryErr;
