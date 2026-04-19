@@ -384,6 +384,7 @@ ${aelixxrSoulPrompt}
                     
 ---
 [DYNAMIC SYSTEM CONTEXT]:
+- Current Server Time (UTC): ${new Date().toUTCString()}
 - Currency: ${currency.code} (${currency.symbol})
 - Locale: ${currency.locale}
 - Current Energy Credits: ${energyCredits} units left.
