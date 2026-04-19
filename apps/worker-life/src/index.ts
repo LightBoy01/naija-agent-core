@@ -11,6 +11,7 @@ import { lifeMemory } from './services/lifeMemory.js';
 import { getLifeTools, executeLifeTool } from './tools.js';
 import { whatsappService } from './services/whatsapp.js';
 import { heartbeatService } from './services/heartbeat.js';
+import { proactiveService } from './services/proactive.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -96,21 +97,6 @@ let globalLifeTools: any[] | null = null;
 
 async function getDynamicModels(systemInstruction?: string) {
   const tools = globalLifeTools || await getLifeTools();
-  
-  const responseSchema: any = {
-    type: SchemaType.OBJECT,
-    properties: {
-      internal_thoughts: {
-        type: SchemaType.STRING,
-        description: "Your private chain-of-thought, reasoning, or planning process. This will NOT be shown to the user."
-      },
-      whatsapp_message: {
-        type: SchemaType.STRING,
-        description: "The final, formatted conversational message to send to the user (or 'SKIP' for heartbeats)."
-      }
-    },
-    required: ["internal_thoughts", "whatsapp_message"]
-  };
 
   const primaryModel = genAI.getGenerativeModel({ 
     model: process.env.GEMINI_MODEL_LOS || SystemConfig.MODELS.AELIXXR_PRIMARY,
@@ -138,6 +124,74 @@ const worker = new Worker(
 
     try {
         switch (job.name) {
+            case 'proactive-nudge':
+                logger.info('🤝 Processing Proactive Nudge (AI4Service Phase)...');
+                const staleUsers = await proactiveService.getUsersNeedingNudge(48); // 48 hours
+                logger.info({ count: staleUsers.length }, 'Found users needing a proactive nudge');
+                
+                for (const userId of staleUsers) {
+                    await worker.rateLimit(10);
+                    
+                    const evalJobData = {
+                        userId,
+                        timestamp: Date.now()
+                    };
+                    
+                    await lifeQueue.add('evaluate-nudge', evalJobData, {
+                        jobId: `nudge-${userId}-${Date.now()}`,
+                        removeOnComplete: true,
+                        removeOnFail: false
+                    });
+                    logger.info({ userId }, 'Queued evaluate-nudge job');
+                }
+                return { success: true, queuedUsers: staleUsers.length };
+
+            case 'evaluate-nudge':
+                logger.info('🔍 Evaluating Individual Proactive Nudge...');
+                const nudgeUserId = job.data.userId;
+                
+                try {
+                    const context = await lifeMemory.getContext(nudgeUserId);
+                    const episodic = await lifeMemory.getRecentEpisodicEvents(nudgeUserId, 3);
+                    
+                    const systemPrompt = `
+                    You are "Aelixxr", the Life Companion.
+                    This is a PROACTIVE NUDGE. The user hasn't spoken to you in 48 hours.
+                    User Context:
+                    - Family: ${JSON.stringify(context.family || {})}
+                    - Goals: ${JSON.stringify(context.goals || [])}
+                    - Recent Events (Vault): ${JSON.stringify(episodic)}
+                    
+                    Your Goal: You must act with "Proactive Agency". Draft a warm, contextual message checking in on them. Reference their recent events or goals if relevant. DO NOT be sycophantic. Be a true companion checking in.
+                    
+                    [RESPONSE FORMATTING - CRITICAL]:
+                    - Wrap all internal thoughts inside <think> ... </think> tags.
+                    - Only output the final conversational message outside the tags.
+                    - Do NOT output 'SKIP'. You MUST send a message.
+                    `;
+                    
+                    const { primaryModel } = await getDynamicModels(systemPrompt);
+                    const chatSession = primaryModel.startChat({ history: [] });
+                    const result = await chatSession.sendMessage("Generate proactive nudge message.");
+                    
+                    let text = result.response.text().trim();
+                    text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+                    if (text.includes('<think>')) {
+                        text = text.split('<think>')[0].trim();
+                    }
+                    
+                    if (text !== '') {
+                        logger.info({ userId: nudgeUserId }, 'Proactive nudge generated');
+                        await whatsappService.sendText(nudgeUserId, text);
+                        // Update semantic memory so we don't spam them immediately again
+                        await lifeMemory.updateContext(nudgeUserId, {}); 
+                    }
+                } catch (err: any) {
+                    logger.error({ userId: nudgeUserId, err: err.message }, 'Failed to evaluate nudge');
+                    throw err;
+                }
+                return { success: true };
+
             case 'life-heartbeat':
                 logger.info('💓 Processing Life Heartbeat (Fan-out Phase)...');
                 const activeUsers = await heartbeatService.getAllActiveUsers();
@@ -188,9 +242,9 @@ const worker = new Worker(
                         If no alert is needed, you MUST reply with exactly "SKIP" and nothing else.
 
                         [RESPONSE FORMATTING - CRITICAL]:
-                        - The API enforces structured JSON output. 
-                        - Place all your internal reasoning in the "internal_thoughts" field.
-                        - Place your final, conversational message (or exactly "SKIP") in the "whatsapp_message" field.
+                        - Wrap all internal thoughts and reasoning inside <think> ... </think> tags.
+                        - Only output the final conversational message outside the tags.
+                        - If you decide not to send a message, output exactly "SKIP" outside the tags.
                         `;
                         
                         const { primaryModel } = await getDynamicModels(systemPrompt);
@@ -201,15 +255,13 @@ const worker = new Worker(
                         const result = await chatSession.sendMessage("Evaluate and generate proactive message or SKIP.");
                         let text = result.response.text().trim();
                         
-                        try {
-                            const parsed = JSON.parse(text);
-                            text = parsed.whatsapp_message || "SKIP";
-                        } catch (e) {
-                            logger.warn({ text }, "Failed to parse JSON in heartbeat");
-                            text = "SKIP"; // Fail safe
-                        }
+                        // Extract everything outside <think> tags
+                        text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+                    if (text.includes('<think>')) {
+                        text = text.split('<think>')[0].trim();
+                    }
                         
-                        if (text !== 'SKIP') {
+                        if (text !== 'SKIP' && text !== '') {
                             logger.info({ userId }, 'Proactive heartbeat message generated');
                             await whatsappService.sendText(userId, text);
                         } else {
@@ -273,6 +325,9 @@ const worker = new Worker(
                 // 1. Retrieve Long-Term Memory & Energy Balance (Triggers Welcome Bonus if new)
                 const context = await lifeMemory.getContext(userPhone);
                 const energyCredits = context.energyCredits ?? 0;
+                
+                // Keep them marked as active to prevent proactive nudges
+                await lifeMemory.updateContext(userPhone, {});
 
                 // --- SHORT CIRCUIT: BATTERY DEAD ---
                 if (energyCredits <= -2) {
@@ -307,6 +362,14 @@ const worker = new Worker(
                            });
                            ingestionSummary = `\n\n[SYSTEM UPDATE]: I have saved this document to your Vault.\nTitle: ${doc.title}\nCategory: ${doc.type}\nSummary: ${doc.summary}\nID: ${doc.id}`;
                            logger.info({ docId: doc.id }, '✅ Saved to Vault');
+
+                           // (SEEM Architecture): Log the ingestion as an episodic event
+                           await lifeMemory.saveEpisodicEvent(
+                               userPhone,
+                               `Vault Ingestion: ${doc.type}`,
+                               `User uploaded a document/image titled "${doc.title}". AI Summary: ${doc.summary}`,
+                               'neutral'
+                           );
                         } catch (ingestErr: any) {
                            logger.error({ error: ingestErr.message }, '❌ Vault Ingestion Failed');
                            ingestionSummary = `\n\n[SYSTEM ERROR]: I tried to save this to your Vault but failed. Error: ${ingestErr.message}`;
@@ -409,6 +472,9 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                         // Expected if AI drops JSON mode to perform native function calling
                     }
                     text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+                    if (text.includes('<think>')) {
+                        text = text.split('<think>')[0].trim();
+                    }
 
                     // 4. Tool Execution (Function Calling) with SMART ENERGY (BILLING)
                     const functionCalls = response.functionCalls();
@@ -499,6 +565,9 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                                 text = followUpText;
                             }
                             text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+                    if (text.includes('<think>')) {
+                        text = text.split('<think>')[0].trim();
+                    }
                         }
                     }
 
@@ -754,6 +823,9 @@ ${resumeRep}
                     
                     // Strip chain-of-thought leaked by Gemma 4
                     finalTxt = finalTxt.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+                    if (finalTxt.includes('<think>')) {
+                        finalTxt = finalTxt.split('<think>')[0].trim();
+                    }
 
                     logger.info({ response: finalTxt }, '🗣️ Life Companion Replying (Post-SLM)');
                     await whatsappService.sendText(resumePhone, finalTxt);

@@ -122,9 +122,45 @@ export class LifeMemoryService {
         lastInteraction: new Date()
       }, { merge: true });
       
-      logger.info({ phone, updates }, '💾 Updated Life Memory');
+      logger.info({ phone, updates }, '💾 Updated Life Memory (Semantic)');
     } catch (error: any) {
       logger.error({ phone, error: error.message }, 'Failed to update Life Context');
+    }
+  }
+
+  /**
+   * (SEEM Architecture)
+   * Saves an Episodic Event: A chronological narrative event.
+   */
+  async saveEpisodicEvent(phone: string, title: string, details: string, emotionalValence: string = 'neutral'): Promise<void> {
+    try {
+      const db = getDb();
+      const event = {
+        title,
+        details,
+        emotionalValence,
+        timestamp: new Date()
+      };
+      await db.collection(this.collection).doc(phone).collection('episodic_events').add(event);
+      logger.info({ phone, title, emotionalValence }, '📖 Saved Episodic Event to Vault History');
+    } catch (error: any) {
+      logger.error({ phone, error: error.message }, 'Failed to save Episodic Event');
+    }
+  }
+
+  /**
+   * (SEEM Architecture)
+   * Fetches recent Episodic Events to provide temporal narrative context to Aelixxr.
+   */
+  async getRecentEpisodicEvents(phone: string, limit: number = 5): Promise<any[]> {
+    try {
+      const db = getDb();
+      const snapshot = await db.collection(this.collection).doc(phone).collection('episodic_events')
+        .orderBy('timestamp', 'desc').limit(limit).get();
+      return snapshot.docs.map(doc => doc.data()).reverse();
+    } catch (error: any) {
+      logger.error({ phone, error: error.message }, 'Failed to fetch Episodic Events');
+      return [];
     }
   }
 }
