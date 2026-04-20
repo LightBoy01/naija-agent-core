@@ -42,7 +42,7 @@ async function main() {
   if (playground.exists) {
       console.log('\n--- Test Bot (Playground) Status ---');
       console.log(`Phone ID: ${playground.data()?.whatsappPhoneId}`);
-      console.log(`(Should be: 1055456180990710)`);
+      console.log(`(Should be: 1189172570934595)`);
   }
 }
 

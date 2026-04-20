@@ -7,7 +7,7 @@ dotenv.config();
 async function completeTest() {
   const targetPhone = '2347055229084';
   const tenantId = 'test_empire_084';
-  const phoneId = '1055456180990710';
+  const phoneId = '1189172570934595';
   const token = process.env.WHATSAPP_API_TOKEN || '';
 
   console.log(`🚀 [FINALIZE TEST] Activating ${tenantId}...`);

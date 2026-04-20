@@ -20,7 +20,7 @@ const db = getFirestore();
 async function seedPlayground() {
   console.log(`🎮 Seeding PLAYGROUND BOT (Old Number)...`);
 
-  const OLD_PHONE_ID = '1055456180990710';
+  const OLD_PHONE_ID = '1189172570934595';
   const PLAYGROUND_ID = 'naija-agent-playground';
 
   try {
