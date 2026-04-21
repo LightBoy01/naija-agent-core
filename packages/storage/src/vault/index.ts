@@ -192,7 +192,10 @@ async function getMultimodalEmbedding(
             { text: textContext },
             gcsUri ? { fileData: { fileUri: gcsUri, mimeType } } : { inlineData: { data: buffer.toString('base64'), mimeType } }
           ]
-        }]
+        }],
+        config: {
+            outputDimensionality: 768
+        }
       });
       
       return result.embeddings?.[0]?.values || [];
