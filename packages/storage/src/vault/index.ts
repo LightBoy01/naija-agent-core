@@ -1,4 +1,5 @@
 import { Storage } from '@google-cloud/storage';
+import { v2 as cloudinary } from 'cloudinary';
 import { getDb } from '@naija-agent/firebase';
 import { GoogleGenAI } from '@google/genai';
 import { v4 as uuidv4 } from 'uuid';
@@ -7,6 +8,11 @@ import pino from 'pino';
 import { safeParseJSON } from '../utils/json.js';
 
 const logger = pino({ name: 'vault-service' });
+
+// --- Cloudinary Configuration (The "Bridge" - No credit card needed) ---
+if (process.env.CLOUDINARY_URL) {
+  cloudinary.config(process.env.CLOUDINARY_URL);
+}
 
 // --- GCS Configuration with Sanitization ---
 function getStorageClient() {
@@ -17,14 +23,8 @@ function getStorageClient() {
     try {
       const cleanBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64.replace(/[^A-Za-z0-9+/=]/g, '');
       const decoded = Buffer.from(cleanBase64, 'base64').toString('utf8');
-      credentials = JSON.parse(decoded);
-    } catch (e) {}
-  } else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    try {
-      const raw = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
-      const startIndex = raw.indexOf('{');
-      const jsonStr = startIndex === -1 ? raw.replace(/[^\x00-\x7F]/g, "") : raw.substring(startIndex).replace(/[^\x00-\x7F]/g, "");
-      credentials = JSON.parse(jsonStr);
+      const sanitized = decoded.replace(/[\n\r]/g, '');
+      credentials = JSON.parse(sanitized);
     } catch (e) {}
   }
 
@@ -41,91 +41,97 @@ const BUCKET_NAME = process.env.FIREBASE_STORAGE_BUCKET || 'naija-agent-core.fir
 export const VaultDocumentSchema = z.object({
   id: z.string(),
   userId: z.string(), // WhatsApp Phone ID
-  orgId: z.string().optional(), // Added orgId context
-  type: z.string(), // Extracted category: [Receipt, Invoice, ..., Voice_Note, Video_Clip]
+  orgId: z.string().optional(),
+  type: z.string(), 
   title: z.string().optional(),
-  summary: z.string(), // "GTBank Transfer of 50k to Tunde"
-  content: z.string().optional(), // Full text content or transcription
+  summary: z.string(),
+  content: z.string().optional(),
   extractedData: z.object({
     amount: z.number().optional(),
     currency: z.string().optional(),
-    date: z.string().optional(), // ISO String
-    issuer: z.string().optional(), // Renamed from sender for broader context
+    date: z.string().optional(),
+    issuer: z.string().optional(),
     receiver: z.string().optional(),
     reference: z.string().optional(),
-    duration: z.number().optional(), // For Audio/Video (seconds)
+    duration: z.number().optional(),
   }),
-  storageUrl: z.string().optional(), // Public/Signed URL
-  gcsUri: z.string().optional(), // gs://bucket/path for Gemini processing
+  storageUrl: z.string().optional(), // Public/Signed URL (Cloudinary or GCS)
+  gcsUri: z.string().optional(), // gs:// path if on GCS
+  provider: z.enum(['cloudinary', 'gcs']).optional(),
   originalMediaId: z.string().optional(),
-  mimeType: z.string(), // 'text/plain', 'image/png', 'audio/ogg', 'video/mp4'
+  mimeType: z.string(),
   caption: z.string().optional(),
-  createdAt: z.string(), // ISO String
-  tags: z.array(z.string()), // ["school_fees", "gtbank", "2026"]
-  embedding: z.array(z.number()).optional(), // Multimodal vector
+  createdAt: z.string(),
+  tags: z.array(z.string()),
+  embedding: z.array(z.number()).optional(),
 });
 
 export type VaultDocument = z.infer<typeof VaultDocumentSchema>;
 
 // --- Helper Functions ---
 
-async function getMultimodalEmbedding(gcsUri: string, mimeType: string, textContext: string, apiKey: string): Promise<number[]> {
-  const genAI = new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      baseUrl: 'https://aiplatform.googleapis.com',
-      apiVersion: 'v1/publishers/google'
-    }
-  });
-
-  try {
-    // Note: 'gemini-embedding-2-preview' supports multimodal inputs
-    // We use MRL to request 768 dimensions for efficiency
-    const result = await genAI.models.embedContent({
-      model: 'models/gemini-embedding-2-preview',
-      contents: [{
-        parts: [
-          { text: textContext },
-          { fileData: { fileUri: gcsUri, mimeType } }
-        ]
-      }]
+async function uploadToGCS(userId: string, buffer: Buffer, mimeType: string): Promise<{ url: string; gcsUri: string; provider: 'gcs' }> {
+    const bucket = storage.bucket(BUCKET_NAME);
+    const fileId = uuidv4();
+    const extension = mimeType.split('/')[1] || 'bin';
+    const filePath = `vault/${userId}/${fileId}.${extension}`;
+    const file = bucket.file(filePath);
+  
+    await file.save(buffer, {
+      contentType: mimeType,
+      public: true,
+      metadata: { userId, type: 'vault_doc' }
     });
-    
-    return result.embeddings?.[0]?.values || [];
-  } catch (e: any) {
-    logger.error({ error: e.message }, 'Failed to generate multimodal embedding');
-    return [];
-  }
+  
+    return {
+      url: `https://storage.googleapis.com/${BUCKET_NAME}/${filePath}`,
+      gcsUri: `gs://${BUCKET_NAME}/${filePath}`,
+      provider: 'gcs'
+    };
 }
 
-async function uploadToVault(userId: string, buffer: Buffer, mimeType: string): Promise<{ url: string; gcsUri: string }> {
-  const bucket = storage.bucket(BUCKET_NAME);
-  const fileId = uuidv4();
-  const extension = mimeType.split('/')[1] || 'bin';
-  const filePath = `vault/${userId}/${fileId}.${extension}`;
-  const file = bucket.file(filePath);
-
-  await file.save(buffer, {
-    contentType: mimeType,
-    public: true, // For now, keep it public for easy retrieval
-    metadata: { userId, type: 'vault_doc' }
-  });
-
-  return {
-    url: `https://storage.googleapis.com/${BUCKET_NAME}/${filePath}`,
-    gcsUri: `gs://${BUCKET_NAME}/${filePath}`
-  };
-}
-
-async function extractMultimodalMetadata(gcsUri: string, mimeType: string, caption: string | undefined, apiKey: string): Promise<any> {
-  const { SystemConfig } = await import('@naija-agent/types');
-  const genAI = new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      baseUrl: 'https://aiplatform.googleapis.com',
-      apiVersion: 'v1/publishers/google'
+async function uploadToVault(userId: string, buffer: Buffer, mimeType: string): Promise<{ url: string; gcsUri?: string; provider: 'cloudinary' | 'gcs' }> {
+  // 1. Primary: Cloudinary (Free & Scalable "Bridge")
+  if (process.env.CLOUDINARY_URL) {
+    logger.info({ userId }, '☁️ Uploading to Cloudinary Bridge...');
+    try {
+        const result: any = await new Promise((resolve, reject) => {
+            const uploadStream = cloudinary.uploader.upload_stream(
+              {
+                folder: `aelixxr/vault/${userId}`,
+                resource_type: 'auto',
+                tags: [userId, 'aelixxr-vault']
+              },
+              (error, result) => {
+                if (error) return reject(error);
+                resolve(result);
+              }
+            );
+            uploadStream.end(buffer);
+          });
+          return {
+            url: result.secure_url,
+            provider: 'cloudinary'
+          };
+    } catch (error: any) {
+        logger.warn({ error: error.message }, '⚠️ Cloudinary upload failed, falling back to GCS...');
+        return uploadToGCS(userId, buffer, mimeType);
     }
-  });
+  }
+
+  // 2. Fallback: GCS (Native / Blaze Plan)
+  return uploadToGCS(userId, buffer, mimeType);
+}
+
+async function extractMultimodalMetadata(
+    buffer: Buffer, 
+    mimeType: string, 
+    gcsUri: string | undefined, 
+    caption: string | undefined, 
+    apiKey: string
+): Promise<any> {
+  const { SystemConfig } = await import('@naija-agent/types');
+  const genAI = new GoogleGenAI({ apiKey });
 
   const prompt = `
   You are an expert Document Classification and Extraction AI for a "Life OS" Vault.
@@ -133,17 +139,17 @@ async function extractMultimodalMetadata(gcsUri: string, mimeType: string, capti
   
   Extract the following JSON structure:
   {
-    "title": "A concise, descriptive title for this file (e.g., 'Lagos Market Voice Note', 'GTBank Receipt Photo')",
-    "summary": "A brief 1-2 sentence summary of the file's contents and purpose.",
+    "title": "A concise, descriptive title for this file",
+    "summary": "A brief 1-2 sentence summary.",
     "category": "Must be one of: [Receipt, Invoice, Utility_Bill, Contract, Identity_Doc, Medical_Record, Official_Letter, Ticket, Voice_Note, Video_Clip, Other]",
     "content": "A detailed transcription (if audio) or text OCR/description (if image/video/pdf).",
-    "amount": Number or null (extract any total amount found),
-    "currency": "String or null (e.g., NGN, USD, GBP)",
-    "date": "YYYY-MM-DD or null (the date on the file, or the transaction date)",
-    "issuer": "Name of the issuing authority or sender or null",
+    "amount": Number or null,
+    "currency": "String or null",
+    "date": "YYYY-MM-DD or null",
+    "issuer": "Name of the issuer or null",
     "receiver": "Name of the recipient or null",
-    "reference": "Any transaction ID, invoice number, or reference code found or null",
-    "duration": Number or null (seconds, if audio/video),
+    "reference": "Any ID or reference found or null",
+    "duration": Number or null,
     "tags": ["List", "of", "5-10", "search", "keywords"]
   }
   RETURN JSON ONLY, no markdown formatting blocks.
@@ -153,60 +159,48 @@ async function extractMultimodalMetadata(gcsUri: string, mimeType: string, capti
   try {
     const result = await genAI.models.generateContent({
       model: SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-2.0-flash',
-      contents: [
-        { text: prompt },
-        { fileData: { fileUri: gcsUri, mimeType: mimeType } }
-      ]
+      contents: [{
+        parts: [
+          { text: prompt },
+          // Strategy: Use fileUri if on GCS (Efficient), otherwise send raw bytes (Bridge)
+          gcsUri ? { fileData: { fileUri: gcsUri, mimeType } } : { inlineData: { data: buffer.toString('base64'), mimeType } }
+        ]
+      }]
     });
-    
     const text = result.text || "";
     return safeParseJSON(text) || { summary: 'Processed File', category: 'Other', tags: [] };
   } catch (e: any) {
-    logger.error({ error: e.message, gcsUri }, 'Multimodal metadata extraction failed');
+    logger.error({ error: e.message }, 'Multimodal metadata extraction failed');
     return { summary: 'Unprocessed File', category: 'Other', tags: [] };
   }
 }
 
-async function extractNoteMetadata(text: string, apiKey: string): Promise<any> {
-  const { SystemConfig } = await import('@naija-agent/types');
-  const genAI = new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      baseUrl: 'https://aiplatform.googleapis.com',
-      apiVersion: 'v1/publishers/google'
+async function getMultimodalEmbedding(
+    buffer: Buffer, 
+    mimeType: string, 
+    gcsUri: string | undefined, 
+    textContext: string, 
+    apiKey: string
+): Promise<number[]> {
+    const genAI = new GoogleGenAI({ apiKey });
+  
+    try {
+      const result = await genAI.models.embedContent({
+        model: 'models/gemini-embedding-2-preview',
+        contents: [{
+          parts: [
+            { text: textContext },
+            gcsUri ? { fileData: { fileUri: gcsUri, mimeType } } : { inlineData: { data: buffer.toString('base64'), mimeType } }
+          ]
+        }]
+      });
+      
+      return result.embeddings?.[0]?.values || [];
+    } catch (e: any) {
+      logger.error({ error: e.message }, 'Failed to generate multimodal embedding');
+      return [];
     }
-  });
-
-  const prompt = `
-  You are an expert Document Classification and Extraction AI for a "Life OS" Vault.
-  Analyze this text note. Extract structured data for "The Vault".
-  
-  {
-    "title": "A concise, descriptive title for this note",
-    "summary": "A brief 1-2 sentence summary.",
-    "category": "Must be 'Note'",
-    "amount": Number or null (if financial data is present),
-    "currency": "String or null",
-    "date": "YYYY-MM-DD or null (if a specific date is mentioned)",
-    "tags": ["List", "of", "3-5", "search", "keywords"]
   }
-  
-  Text: "${text}"
-  RETURN JSON ONLY, no markdown formatting blocks.
-  `;
-
-  try {
-    const result = await genAI.models.generateContent({
-      model: SystemConfig.MODELS.AELIXXR_WORKER,
-      contents: prompt
-    });
-    const responseText = result.text || "";
-    return safeParseJSON(responseText) || { summary: 'Saved Note', category: 'Note', tags: [] };
-  } catch (e: any) {
-    logger.error({ error: e.message }, 'Note metadata extraction failed');
-    return { summary: 'Saved Note', category: 'Note', tags: [] };
-  }
-}
 
 // --- Main: Ingest Document ---
 export async function ingestDocument(
@@ -216,18 +210,18 @@ export async function ingestDocument(
   apiKey: string,
   options?: { orgId?: string; caption?: string; originalMediaId?: string }
 ): Promise<VaultDocument> {
-  logger.info({ userId, mimeType }, '📥 Ingesting multimodal file into Vault...');
+  logger.info({ userId, mimeType }, '📥 Ingesting file into Multi-Modal Vault...');
 
-  // 1. Upload to Cloud (GCS Directly)
-  const { url, gcsUri } = await uploadToVault(userId, buffer, mimeType);
-  logger.info({ userId, gcsUri }, '☁️ Uploaded to GCS');
+  // 1. Upload to Cloud (Bridge Strategy)
+  const { url, gcsUri, provider } = await uploadToVault(userId, buffer, mimeType);
+  logger.info({ userId, provider, url }, '☁️ Uploaded to Cloud Provider');
 
-  // 2. Extract Data (Using Multimodal fileUri)
-  const analysis = await extractMultimodalMetadata(gcsUri, mimeType, options?.caption, apiKey);
-  logger.info({ userId, category: analysis.category }, '🧠 Extracted Multimodal Intelligence');
+  // 2. Extract Data (Using GCS URI or Raw Buffer)
+  const analysis = await extractMultimodalMetadata(buffer, mimeType, gcsUri, options?.caption, apiKey);
+  logger.info({ userId, category: analysis.category }, '🧠 extracted metadata');
 
-  // 3. Generate Embedding (The "Memory Vector")
-  const embedding = await getMultimodalEmbedding(gcsUri, mimeType, analysis.summary, apiKey);
+  // 3. Generate Embedding
+  const embedding = await getMultimodalEmbedding(buffer, mimeType, gcsUri, analysis.summary, apiKey);
 
   // 4. Save to Database (The "Index")
   const docId = uuidv4();
@@ -250,6 +244,7 @@ export async function ingestDocument(
     },
     storageUrl: url,
     gcsUri,
+    provider,
     originalMediaId: options?.originalMediaId,
     mimeType,
     caption: options?.caption,
@@ -258,9 +253,7 @@ export async function ingestDocument(
     embedding
   };
 
-  // Strip undefined properties to prevent Firestore crash
   const cleanDoc = JSON.parse(JSON.stringify(doc));
-
   await getDb().collection('vault').doc(userId).collection('docs').doc(docId).set(cleanDoc);
   logger.info({ userId, docId }, '✅ Saved to Multi-Tenant Vault Index');
 
@@ -277,37 +270,44 @@ export async function ingestNote(
   logger.info({ userId }, '📝 Ingesting note into Vault...');
 
   // 1. Extract Metadata (The "Intelligence")
-  const analysis = await extractNoteMetadata(content, apiKey);
-  logger.info({ userId, summary: analysis.summary }, '🧠 extracted note metadata');
+  const { SystemConfig } = await import('@naija-agent/types');
+  const genAI = new GoogleGenAI({ apiKey });
 
-  // 2. Save to Database (The "Index")
+  const prompt = `
+  Analyze this text note for a Life OS Vault.
+  RETURN JSON ONLY: { "title": "...", "summary": "...", "category": "Note", "tags": [] }
+  Text: "${content}"
+  `;
+
+  let analysis = { title: 'Note', summary: 'Saved Note', category: 'Note', tags: [] };
+  try {
+    const result = await genAI.models.generateContent({
+        model: SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-2.0-flash',
+        contents: prompt
+    });
+    analysis = safeParseJSON(result.text || "") || analysis;
+  } catch (e) {}
+
+  // 2. Save to Database
   const docId = uuidv4();
   const doc: VaultDocument = {
     id: docId,
     userId,
-    type: analysis.category || 'Note',
-    title: analysis.title || 'Note',
-    summary: analysis.summary || 'Saved Note',
+    type: 'Note',
+    title: analysis.title,
+    summary: analysis.summary,
     content: content,
     mimeType: 'text/plain',
-    extractedData: {
-      amount: analysis.amount || null,
-      currency: analysis.currency || null,
-      date: analysis.date || null,
-    },
+    extractedData: {},
     createdAt: new Date().toISOString(),
     tags: analysis.tags || []
   };
 
-  if (options?.orgId) {
-    doc.orgId = options.orgId;
-  }
+  if (options?.orgId) doc.orgId = options.orgId;
 
-  // Strip undefined properties to prevent Firestore crash
   const cleanDoc = JSON.parse(JSON.stringify(doc));
-
   await getDb().collection('vault').doc(userId).collection('docs').doc(docId).set(cleanDoc);
-  logger.info({ userId, docId }, '✅ Note Saved to Firestore Index');
+  logger.info({ userId, docId }, '✅ Note Saved to Index');
 
   return doc;
 }
@@ -316,12 +316,10 @@ export async function ingestNote(
 export async function searchVault(userId: string, query: string): Promise<VaultDocument[]> {
     const snapshot = await getDb().collection('vault').doc(userId).collection('docs')
         .orderBy('createdAt', 'desc')
-        .limit(100) // Increased limit for LLM processing
+        .limit(100)
         .get();
 
     const results = snapshot.docs.map(d => d.data() as VaultDocument);
-    
-    // Basic fallback matching. LLM in worker will refine this further.
     const lowerQuery = query.toLowerCase();
     return results.filter((d: VaultDocument) => 
         (d.title && d.title.toLowerCase().includes(lowerQuery)) ||
