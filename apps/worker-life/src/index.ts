@@ -71,11 +71,7 @@ if (!apiKey) {
 }
 
 const genAI = new GoogleGenAI({
-  apiKey: apiKey || 'mock-key',
-  httpOptions: {
-    baseUrl: 'https://aiplatform.googleapis.com',
-    apiVersion: 'v1/publishers/google'
-  }
+  apiKey: apiKey || 'mock-key'
 });
 
 // --- Bootstrapping MCP Server (Phase 1) ---

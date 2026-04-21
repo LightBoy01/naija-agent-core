@@ -15,14 +15,7 @@ export class StudyBuddyService {
 
     constructor() {
         const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || 'mock';
-        this.ai = new GoogleGenAI({ 
-            apiKey,
-            httpOptions: {
-                baseUrl: 'https://aiplatform.googleapis.com',
-                apiVersion: 'v1/publishers/google'
-            }
-        });
-    }
+        this.ai = new GoogleGenAI({ apiKey });    }
 
     async generateQuiz(subject: string, topic: string, level: string = 'SS3'): Promise<QuizQuestion[]> {
         logger.info({ subject, topic, level }, '📚 Generating Quiz...');

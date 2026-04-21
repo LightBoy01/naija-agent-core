@@ -85,13 +85,7 @@ If there is nothing new to learn, output an empty object {}.
                 return;
             }
 
-            const genAI = new GoogleGenAI({
-                apiKey: apiKey,
-                httpOptions: {
-                    baseUrl: 'https://aiplatform.googleapis.com',
-                    apiVersion: 'v1/publishers/google'
-                }
-            });
+            const genAI = new GoogleGenAI({ apiKey });
 
             const model = genAI.models.generateContent({
                 model: SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-2.5-flash',

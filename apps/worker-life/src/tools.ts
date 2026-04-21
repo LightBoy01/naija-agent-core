@@ -146,18 +146,18 @@ export const STATIC_LIFE_TOOLS: Tool = {
 export const LIFE_TOOLS: Tool[] = [STATIC_LIFE_TOOLS];
 
 export async function getLifeTools(): Promise<Tool[]> {
-  const tools = [STATIC_LIFE_TOOLS];
+  const allFunctions = [...(STATIC_LIFE_TOOLS.functionDeclarations || [])];
   
   try {
     const mcpTools = await mcpClient.getGeminiTools();
     if (mcpTools && mcpTools.length > 0) {
-      tools.push({ functionDeclarations: mcpTools });
+      allFunctions.push(...mcpTools);
     }
   } catch (error: any) {
     logger.error({ error: error.message }, 'Failed to append MCP tools');
   }
 
-  return tools;
+  return [{ functionDeclarations: allFunctions }];
 }
 
 // --- Tool Execution Logic ---
@@ -213,14 +213,7 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
             return { error: "I no fit search right now, my access key dey missing." };
           }
 
-          // Use the global endpoint bypass to get preview models via Vertex without OAuth
-          const searchGenAI = new GoogleGenAI({ 
-            apiKey,
-            httpOptions: {
-              baseUrl: 'https://aiplatform.googleapis.com',
-              apiVersion: 'v1/publishers/google'
-            }
-          });
+          const searchGenAI = new GoogleGenAI({ apiKey });
           
           const trySearch = async (modelName: string) => {
             const searchResult = await searchGenAI.models.generateContent({
