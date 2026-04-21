@@ -1,4 +1,4 @@
-import { Tool, SchemaType } from '@google/generative-ai';
+import { Type } from '@google/genai';
 import { SectorPack } from '@naija-agent/types';
 import { CountryCode } from 'libphonenumber-js';
 import { saveEntity, queryEntity } from '@naija-agent/firebase';
@@ -28,17 +28,17 @@ export function getPropertyPack(currency: { code: string, symbol: string }, regi
     ]
   } as const;
 
-  const propertyTools: Tool[] = [{
+  const propertyTools: any[] = [{
     functionDeclarations: [
       {
         name: "search_properties",
         description: "Search for available properties based on location, type, or max budget.",
         parameters: {
-          type: SchemaType.OBJECT,
+          type: Type.OBJECT,
           properties: { 
-            location: { type: SchemaType.STRING, description: "e.g., Lekki, Ikeja, Abuja" },
-            type: { type: SchemaType.STRING, description: "Rent, Sale, or Shortlet" },
-            maxBudget: { type: SchemaType.NUMBER, description: "Maximum price the client can afford" }
+            location: { type: Type.STRING, description: "e.g., Lekki, Ikeja, Abuja" },
+            type: { type: Type.STRING, description: "Rent, Sale, or Shortlet" },
+            maxBudget: { type: Type.NUMBER, description: "Maximum price the client can afford" }
           },
         }
       },
@@ -46,13 +46,13 @@ export function getPropertyPack(currency: { code: string, symbol: string }, regi
         name: "schedule_viewing",
         description: "Schedule a physical or virtual viewing for a property.",
         parameters: {
-          type: SchemaType.OBJECT,
+          type: Type.OBJECT,
           properties: {
-            propertyId: { type: SchemaType.STRING, description: "The ID of the property to view" },
-            clientName: { type: SchemaType.STRING, description: "Full Name of the client" },
-            clientPhone: { type: SchemaType.STRING, description: "Phone Number of the client" },
-            date: { type: SchemaType.STRING, description: "YYYY-MM-DD" },
-            time: { type: SchemaType.STRING, description: "HH:MM (24hr)" }
+            propertyId: { type: Type.STRING, description: "The ID of the property to view" },
+            clientName: { type: Type.STRING, description: "Full Name of the client" },
+            clientPhone: { type: Type.STRING, description: "Phone Number of the client" },
+            date: { type: Type.STRING, description: "YYYY-MM-DD" },
+            time: { type: Type.STRING, description: "HH:MM (24hr)" }
           },
           required: ["propertyId", "clientName", "clientPhone", "date", "time"]
         }
@@ -100,8 +100,7 @@ export function getPropertyPack(currency: { code: string, symbol: string }, regi
              properties = properties.filter((p: any) => String(p.type || '').toLowerCase() === type);
           }
           if (args.maxBudget && typeof args.maxBudget === 'number') {
-             properties = properties.filter((p: any) => (p.price || 0) <= args.maxBudget);
-          }
+             properties = properties.filter((p: any) => (p.price || 0) <= (args as any).maxBudget);          }
 
           return {
             resultsFound: properties.length,

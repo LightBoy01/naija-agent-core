@@ -16,6 +16,7 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@google/genai": "^1.50.1",
     "libphonenumber-js": "^1.12.40",
     "zod": "^3.22.4"
   }

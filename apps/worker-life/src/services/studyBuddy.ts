@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { SystemConfig } from '@naija-agent/types';
 import { logger } from '../utils/logger.js';
 
@@ -11,40 +11,46 @@ export interface QuizQuestion {
 }
 
 export class StudyBuddyService {
-    private genAI: GoogleGenerativeAI;
+    private ai: GoogleGenAI;
 
     constructor() {
         const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || 'mock';
-        this.genAI = new GoogleGenerativeAI(apiKey);
+        this.ai = new GoogleGenAI({ 
+            apiKey,
+            httpOptions: {
+                baseUrl: 'https://aiplatform.googleapis.com',
+                apiVersion: 'v1/publishers/google'
+            }
+        });
     }
 
     async generateQuiz(subject: string, topic: string, level: string = 'SS3'): Promise<QuizQuestion[]> {
         logger.info({ subject, topic, level }, '📚 Generating Quiz...');
 
         const quizSchema = {
-            type: SchemaType.OBJECT,
+            type: Type.OBJECT,
             properties: {
                 questions: {
-                    type: SchemaType.ARRAY,
+                    type: Type.ARRAY,
                     description: "An array of 5 multiple-choice questions.",
                     items: {
-                        type: SchemaType.OBJECT,
+                        type: Type.OBJECT,
                         properties: {
                             question: {
-                                type: SchemaType.STRING,
+                                type: Type.STRING,
                                 description: "The question text."
                             },
                             options: {
-                                type: SchemaType.ARRAY,
+                                type: Type.ARRAY,
                                 description: "The 4 multiple choice options (e.g. ['A) ...', 'B) ...', 'C) ...', 'D) ...']).",
-                                items: { type: SchemaType.STRING }
+                                items: { type: Type.STRING }
                             },
                             correctAnswer: {
-                                type: SchemaType.STRING,
+                                type: Type.STRING,
                                 description: "The correct option letter (e.g., 'A', 'B', 'C', or 'D')."
                             },
                             explanation: {
-                                type: SchemaType.STRING,
+                                type: Type.STRING,
                                 description: "A brief explanation of why the answer is correct."
                             }
                         },
@@ -54,14 +60,6 @@ export class StudyBuddyService {
             },
             required: ["questions"]
         };
-
-        let model = this.genAI.getGenerativeModel({ 
-            model: SystemConfig.MODELS.AELIXXR_WORKER, // Use worker model
-            generationConfig: { 
-                responseMimeType: "application/json",
-                responseSchema: quizSchema as any
-            }
-        });
 
         const prompt = `
         Generate a 5-question multiple-choice quiz for a Nigerian student. 
@@ -77,24 +75,31 @@ export class StudyBuddyService {
         try {
             let result;
             try {
-                result = await model.generateContent(prompt);
+                result = await this.ai.models.generateContent({
+                    model: SystemConfig.MODELS.AELIXXR_WORKER,
+                    contents: prompt,
+                    config: {
+                        responseMimeType: "application/json",
+                        responseSchema: quizSchema as any
+                    }
+                });
             } catch (primaryError: any) {
-                if (primaryError.message.includes('429') || primaryError.message.includes('503') || primaryError.message.includes('fetch failed') || primaryError.message.includes('500')) {
+                if (primaryError.message.includes('429') || primaryError.message.includes('503') || primaryError.message.includes('fetch failed') || primaryError.message.includes('500') || primaryError.message.includes('Quota')) {
                     logger.warn('⚠️ Primary Worker Model Failed. Switching to Fallback for Quiz Generation.');
-                    model = this.genAI.getGenerativeModel({ 
+                    result = await this.ai.models.generateContent({
                         model: SystemConfig.MODELS.AELIXXR_FALLBACK,
-                        generationConfig: { 
+                        contents: prompt,
+                        config: {
                             responseMimeType: "application/json",
                             responseSchema: quizSchema as any
                         }
                     });
-                    result = await model.generateContent(prompt);
                 } else {
                     throw primaryError;
                 }
             }
             
-            let text = result.response.text();
+            let text = result.text || "";
             
             try {
                 // Strip markdown backticks that some models inject even in JSON mode

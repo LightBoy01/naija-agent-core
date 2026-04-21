@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { logger } from '../utils/logger.js';
-import { SchemaType } from '@google/generative-ai';
+import { Type } from '@google/genai';
 
 /**
  * Service to manage connections to Model Context Protocol (MCP) servers.
@@ -66,11 +66,11 @@ class MCPClientService {
   }
 
   /**
-   * Helper to map JSON Schema from MCP to Gemini SchemaType
+   * Helper to map JSON Schema from MCP to Gemini Type
    */
   private mapJsonSchemaToGemini(jsonSchema: any): any {
     if (!jsonSchema || jsonSchema.type !== 'object') {
-      return { type: SchemaType.OBJECT, properties: {} };
+      return { type: Type.OBJECT, properties: {} };
     }
 
     const properties: Record<string, any> = {};
@@ -89,21 +89,21 @@ class MCPClientService {
     }
 
     return {
-      type: SchemaType.OBJECT,
+      type: Type.OBJECT,
       properties,
       required: jsonSchema.required || []
     };
   }
 
-  private getGeminiType(jsonType: string): SchemaType {
+  private getGeminiType(jsonType: string): any {
     switch (jsonType) {
-      case 'string': return SchemaType.STRING;
-      case 'number': return SchemaType.NUMBER;
-      case 'integer': return SchemaType.INTEGER;
-      case 'boolean': return SchemaType.BOOLEAN;
-      case 'array': return SchemaType.ARRAY;
-      case 'object': return SchemaType.OBJECT;
-      default: return SchemaType.STRING;
+      case 'string': return Type.STRING;
+      case 'number': return Type.NUMBER;
+      case 'integer': return Type.INTEGER;
+      case 'boolean': return Type.BOOLEAN;
+      case 'array': return Type.ARRAY;
+      case 'object': return Type.OBJECT;
+      default: return Type.STRING;
     }
   }
 

@@ -1,7 +1,7 @@
 import { Job } from 'bullmq';
 import { JobData, OnboardingConfig, OnboardingData, SystemConfig, ONBOARDING_PROMPTS } from '@naija-agent/types';
 import { WhatsAppService } from '../services/whatsapp.js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { 
   getOrgById, 
   setOrgOnboarding, 
@@ -239,13 +239,21 @@ export async function handleOnboarding(
       // --- PHASE 7.4: GREEDY SEMANTIC EXTRACTION ---
       if ((text === '#setup' || nextStep === 'NAME' || nextStep === 'START') && text.length > 10) {
          try {
-            const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-            const model = genAI.getGenerativeModel({ model: SystemConfig.MODELS.FALLBACK_L2 }); // Flash-Lite for speed
+            const genAI = new GoogleGenAI({
+               apiKey: process.env.GEMINI_API_KEY || '',
+               httpOptions: {
+                  baseUrl: 'https://aiplatform.googleapis.com',
+                  apiVersion: 'v1/publishers/google'
+               }
+            });
             
             const extractionPrompt = `${ONBOARDING_PROMPTS.GREEDY_EXTRACTION}: "${text}"`;
             
-            const result = await model.generateContent(extractionPrompt);
-            const extracted = JSON.parse(result.response.text().replace(/```json|```/g, '').trim());
+            const result = await genAI.models.generateContent({
+               model: SystemConfig.MODELS.ZYNUX_FALLBACK,
+               contents: extractionPrompt
+            });
+            const extracted = JSON.parse((result.text || "").replace(/```json|```/g, '').trim());
             
             logger.info({ orgId, extracted }, '🧠 [GREEDY EXTRACTION] AI Extraction Result');
 

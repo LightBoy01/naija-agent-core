@@ -1,7 +1,7 @@
 import { Worker, Job, Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import 'dotenv/config';
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { SystemConfig, formatCurrency } from '@naija-agent/types';
 import { deductBalance, getOrgById, getChatHistory, findOrCreateChat, saveMessage } from '@naija-agent/firebase';
 import { ingestDocument } from '@naija-agent/storage';
@@ -32,8 +32,8 @@ const TOOL_COSTS: Record<string, number> = {
     'save_note': 0,
     'delete_from_vault': 0,
     'generate_invite': 0,
+    'get_recharge_details': 0,
     'log_feedback': 0,
-    'update_life_context': 0,
     'web_search': 3000,
 };
 
@@ -70,7 +70,13 @@ if (!apiKey) {
   logger.info('🔑 Gemini API Key found.');
 }
 
-const genAI = new GoogleGenerativeAI(apiKey || 'mock-key');
+const genAI = new GoogleGenAI({
+  apiKey: apiKey || 'mock-key',
+  httpOptions: {
+    baseUrl: 'https://aiplatform.googleapis.com',
+    apiVersion: 'v1/publishers/google'
+  }
+});
 
 // --- Bootstrapping MCP Server (Phase 1) ---
 import { mcpClient } from './services/mcpClient.js';
@@ -98,19 +104,12 @@ let globalLifeTools: any[] | null = null;
 async function getDynamicModels(systemInstruction?: string) {
   const tools = globalLifeTools || await getLifeTools();
 
-  const primaryModel = genAI.getGenerativeModel({ 
-    model: process.env.GEMINI_MODEL_LOS || SystemConfig.MODELS.AELIXXR_PRIMARY,
+  return { 
+    primaryModel: process.env.GEMINI_MODEL_LOS || SystemConfig.MODELS.AELIXXR_PRIMARY,
+    fallbackModel: SystemConfig.MODELS.AELIXXR_FALLBACK,
     tools,
     systemInstruction
-  });
-
-  const fallbackModel = genAI.getGenerativeModel({ 
-    model: SystemConfig.MODELS.AELIXXR_FALLBACK,
-    tools,
-    systemInstruction
-  });
-
-  return { primaryModel, fallbackModel };
+  };
 }
 
 // --- Queue Setup ---
@@ -170,11 +169,14 @@ const worker = new Worker(
                     - Do NOT output 'SKIP'. You MUST send a message.
                     `;
                     
-                    const { primaryModel } = await getDynamicModels(systemPrompt);
-                    const chatSession = primaryModel.startChat({ history: [] });
-                    const result = await chatSession.sendMessage("Generate proactive nudge message.");
+                    const { primaryModel, tools } = await getDynamicModels(systemPrompt);
+                    const chatSession = genAI.chats.create({
+                        model: primaryModel,
+                        config: { systemInstruction: systemPrompt, tools }
+                    });
+                    const result = await chatSession.sendMessage({ message: "Generate proactive nudge message." });
                     
-                    let text = result.response.text().trim();
+                    let text = result.text?.trim() || "";
                     text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
                     if (text.includes('<think>')) {
                         text = text.split('<think>')[0].trim();
@@ -247,13 +249,14 @@ const worker = new Worker(
                         - If you decide not to send a message, output exactly "SKIP" outside the tags.
                         `;
                         
-                        const { primaryModel } = await getDynamicModels(systemPrompt);
-                        const chatSession = primaryModel.startChat({
-                            history: []
+                        const { primaryModel, tools } = await getDynamicModels(systemPrompt);
+                        const chatSession = genAI.chats.create({
+                            model: primaryModel,
+                            config: { systemInstruction: systemPrompt, tools }
                         });
                         
-                        const result = await chatSession.sendMessage("Evaluate and generate proactive message or SKIP.");
-                        let text = result.response.text().trim();
+                        const result = await chatSession.sendMessage({ message: "Evaluate and generate proactive message or SKIP." });
+                        let text = result.text || "";
                         
                         // Extract everything outside <think> tags
                         text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
@@ -282,8 +285,8 @@ const worker = new Worker(
                 return { success: true, prices };
             
             case 'life-chat':
-                const { userPhone, message, orgId, imageId, documentId } = job.data; 
-                logger.info({ userPhone, orgId, hasImage: !!imageId, hasDoc: !!documentId }, '🧠 Thinking about Life...');
+                const { userPhone, message, orgId, imageId, documentId, audioId } = job.data; 
+                logger.info({ userPhone, orgId, hasImage: !!imageId, hasDoc: !!documentId, hasAudio: !!audioId }, '🧠 Thinking about Life...');
 
                 const org = orgId ? await getOrgById(orgId) : null;
                 const currency = org?.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
@@ -347,32 +350,60 @@ const worker = new Worker(
                 }
 
                 try {
-                    // 0. AUTO-INGESTION (The Vault)
+                    // 0. AUTO-INGESTION (The Vault & Voice Notes)
                     let ingestionSummary = "";
-                    if (imageId || documentId) {
+                    let audioTranscript = "";
+                    
+                    if (imageId || documentId || audioId) {
                         try {
-                           logger.info('📥 Auto-Ingesting Media to Vault...');
-                           const mediaId = imageId || documentId;
+                           logger.info('📥 Downloading Media...');
+                           const mediaId = imageId || documentId || audioId;
                            const { buffer, mimeType } = await whatsappService.downloadMedia(mediaId);
                            
-                           const doc = await ingestDocument(userPhone, buffer, mimeType, apiKey, {
-                               orgId,
-                               caption: message, // Use the user's message as the caption for context
-                               originalMediaId: mediaId
-                           });
-                           ingestionSummary = `\n\n[SYSTEM UPDATE]: I have saved this document to your Vault.\nTitle: ${doc.title}\nCategory: ${doc.type}\nSummary: ${doc.summary}\nID: ${doc.id}`;
-                           logger.info({ docId: doc.id }, '✅ Saved to Vault');
+                           // Handle Voice Notes (Ingest to Vault + Transcribe)
+                           if (audioId) {
+                               logger.info('🎙️ Vaulting & Transcribing Voice Note...');
+                               
+                               // 1. Ingest to Vault for permanent record
+                               const doc = await ingestDocument(userPhone, buffer, mimeType || 'audio/ogg', apiKey, {
+                                   orgId,
+                                   caption: message,
+                                   originalMediaId: mediaId
+                               });
+                               audioTranscript = doc.content || ""; // IngestDocument now returns the AI transcription in 'content'
+                               
+                               ingestionSummary = `\n\n[SYSTEM UPDATE]: I have saved this Voice Note to your Vault.\nSummary: ${doc.summary}\nID: ${doc.id}`;
+                               logger.info({ docId: doc.id }, '✅ Voice Note Vaulted');
 
-                           // (SEEM Architecture): Log the ingestion as an episodic event
-                           await lifeMemory.saveEpisodicEvent(
-                               userPhone,
-                               `Vault Ingestion: ${doc.type}`,
-                               `User uploaded a document/image titled "${doc.title}". AI Summary: ${doc.summary}`,
-                               'neutral'
-                           );
+                               // (SEEM Architecture): Log as episodic event
+                               await lifeMemory.saveEpisodicEvent(
+                                   userPhone,
+                                   `Voice Memo`,
+                                   `User sent a voice note. Summary: ${doc.summary}`,
+                                   'neutral'
+                               );
+                           } 
+                           // Handle Images/Documents via Vault
+                           else {
+                               logger.info('📥 Auto-Ingesting Media to Vault...');
+                               const doc = await ingestDocument(userPhone, buffer, mimeType, apiKey, {
+                                   orgId,
+                                   caption: message, 
+                                   originalMediaId: mediaId
+                               });
+                               ingestionSummary = `\n\n[SYSTEM UPDATE]: I have saved this document to your Vault.\nTitle: ${doc.title}\nCategory: ${doc.type}\nSummary: ${doc.summary}\nID: ${doc.id}`;
+                               logger.info({ docId: doc.id }, '✅ Saved to Vault');
+
+                               await lifeMemory.saveEpisodicEvent(
+                                   userPhone,
+                                   `Vault Ingestion: ${doc.type}`,
+                                   `User uploaded a document/image titled "${doc.title}". AI Summary: ${doc.summary}`,
+                                   'neutral'
+                               );
+                           }
                         } catch (ingestErr: any) {
-                           logger.error({ error: ingestErr.message }, '❌ Vault Ingestion Failed');
-                           ingestionSummary = `\n\n[SYSTEM ERROR]: I tried to save this to your Vault but failed. Error: ${ingestErr.message}`;
+                           logger.error({ error: ingestErr.message }, '❌ Media Processing Failed');
+                           ingestionSummary = `\n\n[SYSTEM ERROR]: I tried to process the file/audio you sent but failed. Error: ${ingestErr.message}`;
                         }
                     }
 
@@ -445,26 +476,37 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
 
                     logger.info({ historyLength: chatHistory.length }, '🚀 Sending normalized chat history to AI');
 
-                    // Append ingestion summary and referral summary to user message so AI knows what happened
-                    const fullMessage = message + ingestionSummary + referralSummary;
+                    // Append ingestion summary, referral summary, and audio transcript to user message so AI knows what happened
+                    let fullMessage = message || "";
+                    if (audioTranscript) {
+                        fullMessage = `[VOICE NOTE TRANSCRIPT]: "${audioTranscript}"\n\n` + fullMessage;
+                    }
+                    fullMessage = fullMessage + ingestionSummary + referralSummary;
 
-                    const { primaryModel, fallbackModel } = await getDynamicModels(systemPrompt);
+                    const { primaryModel, fallbackModel, tools, systemInstruction } = await getDynamicModels(systemPrompt);
 
                     try {
-                        chatSession = primaryModel.startChat({ history: chatHistory });
-                        result = await chatSession.sendMessage(fullMessage);
+                        chatSession = genAI.chats.create({
+                            model: primaryModel,
+                            config: { systemInstruction, tools },
+                            history: chatHistory
+                        });
+                        result = await chatSession.sendMessage({ message: fullMessage });
                     } catch (primaryError: any) {
-                        if (primaryError.message.includes('429') || primaryError.message.includes('503') || primaryError.message.includes('fetch failed') || primaryError.message.includes('500')) {
+                        if (primaryError.message.includes('429') || primaryError.message.includes('503') || primaryError.message.includes('fetch failed') || primaryError.message.includes('500') || primaryError.message.includes('Quota')) {
                             logger.warn('⚠️ Primary Life Model Failed. Switching to Fallback.');
-                            chatSession = fallbackModel.startChat({ history: chatHistory });
-                            result = await chatSession.sendMessage(fullMessage);
+                            chatSession = genAI.chats.create({
+                                model: fallbackModel,
+                                config: { systemInstruction, tools },
+                                history: chatHistory
+                            });
+                            result = await chatSession.sendMessage({ message: fullMessage });
                         } else {
                             throw primaryError;
                         }
                     }
 
-                    const response = result.response;
-                    let text = response.text();
+                    let text = result.text || "";
                     
                     try {
                         const parsed = JSON.parse(text);
@@ -478,12 +520,14 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                     }
 
                     // 4. Tool Execution (Function Calling) with SMART ENERGY (BILLING)
-                    const functionCalls = response.functionCalls();
+                    const functionCalls = result.functionCalls;
                     let billingNote = "";
 
                     if (functionCalls && functionCalls.length > 0) {
                         logger.info('🛠️ AI requested tools...');
                         for (const call of functionCalls) {
+                            if (!call.name) continue;
+
                             // --- SUPERVISOR DELEGATION INTERCEPTOR ---
                             if (call.name === 'delegate_task') {
                                 const args = call.args as any;
@@ -503,7 +547,7 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                                 const interimMsg = `I'm on it! Let me consult my ${args.sector?.replace('Pack', '') || 'expert'} to handle that for you... ⏳`;
                                 await whatsappService.sendText(userPhone, interimMsg);
                                 
-                                await saveMessage(chatId, { role: 'user', content: message, type: 'text' });
+                                await saveMessage(chatId, { role: 'user', content: fullMessage, type: 'text' });
                                 await lifeMemory.deductEnergy(userPhone, 1);
                                 
                                 return { success: true, delegated: true, interimMsg };
@@ -513,7 +557,7 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                             // If a tool is not explicitly defined in TOOL_COSTS, we assume it is a 3rd-party MCP tool 
                             // and charge a default execution cost (e.g. 3000 Kobo = 3 Credits) to prevent API drain.
                             const isUnknownMcpTool = !(call.name in TOOL_COSTS);
-                            const cost = isUnknownMcpTool ? 3000 : TOOL_COSTS[call.name];
+                            const cost = isUnknownMcpTool ? 3000 : (TOOL_COSTS[call.name] || 0);
                             const costInCredits = cost / 1000;
                             
                             // 🛡️ SECURITY: Enforce Billing Identity
@@ -550,14 +594,16 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                             }
                             
                             // Return the tool result to the AI model so it can formulate a final answer
-                            const followUpResult = await chatSession.sendMessage([{
-                                functionResponse: {
-                                    name: call.name,
-                                    response: safeResponse
-                                }
-                            }]);
+                            const followUpResult = await chatSession.sendMessage({
+                                message: [{
+                                    functionResponse: {
+                                        name: call.name,
+                                        response: safeResponse
+                                    }
+                                }]
+                            });
                             
-                            let followUpText = followUpResult.response.text(); 
+                            let followUpText = followUpResult.text || ""; 
                             try {
                                 const parsed = JSON.parse(followUpText);
                                 text = parsed.whatsapp_message || followUpText;
@@ -582,11 +628,22 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                     await whatsappService.sendText(userPhone, text);
 
                     // Save conversation history to the database
+                    // Use fullMessage to include transcription for Sleep Cycle context
                     await saveMessage(chatId, { 
-                        role: 'user', content: message, type: 'text' 
+                        role: 'user', content: fullMessage, type: 'text' 
                     });
                     await saveMessage(chatId, { 
                         role: 'assistant', content: text, type: 'text' 
+                    });
+                    
+                    // --- TRIGGER SLEEP CYCLE (Memory Consolidation) ---
+                    // Enqueue a delayed job to process implicit memories 30 minutes from now.
+                    const windowId = Math.floor(Date.now() / (1000 * 60 * 30)); 
+                    await lifeQueue.add('consolidate-memory', { userId: userPhone, orgId }, {
+                        jobId: `sleep-${userPhone}-${windowId}`,
+                        delay: 1000 * 60 * 30, // 30 minutes
+                        removeOnComplete: true,
+                        removeOnFail: false
                     });
                     
                     return { success: true, reply: text };
@@ -642,28 +699,28 @@ Do not output any text after the JSON block.`;
                 `;
 
                 const slmResponseSchema = {
-                    type: SchemaType.OBJECT,
+                    type: Type.OBJECT,
                     properties: {
                         status: {
-                            type: SchemaType.STRING,
+                            type: Type.STRING,
                             description: "The status of the task, e.g., 'success' or 'error'."
                         },
                         tool_used: {
-                            type: SchemaType.STRING,
+                            type: Type.STRING,
                             description: "The name of the tool you used to fulfill the instruction."
                         },
                         report: {
-                            type: SchemaType.STRING,
+                            type: Type.STRING,
                             description: "A comprehensive but concise summary of your research findings or actions."
                         },
                         data: {
-                            type: SchemaType.ARRAY,
+                            type: Type.ARRAY,
                             items: {
-                                type: SchemaType.OBJECT,
+                                type: Type.OBJECT,
                                 properties: {
-                                    title: { type: SchemaType.STRING },
-                                    content: { type: SchemaType.STRING },
-                                    metadata: { type: SchemaType.OBJECT }
+                                    title: { type: Type.STRING },
+                                    content: { type: Type.STRING },
+                                    metadata: { type: Type.OBJECT }
                                 }
                             },
                             description: "Optional. Structured data points, search results, or extracted facts."
@@ -672,43 +729,42 @@ Do not output any text after the JSON block.`;
                     required: ["status", "report"]
                 };
 
-                const slmModel = genAI.getGenerativeModel({
-                    model: SystemConfig.MODELS.AELIXXR_WORKER, // 4B model for fast/cheap SLM execution
-                    tools: globalLifeTools || await getLifeTools(), 
-                    // Remove strict generationConfig to allow the SLM to execute tools naturally before formatting JSON.
-                    // We will ask it to format as JSON in the prompt if it doesn't.
-                });
-
-                const slmChat = slmModel.startChat({
-                    history: [{ role: 'user', parts: [{ text: agentPrompt }] }]
+                const slmChat = genAI.chats.create({
+                    model: SystemConfig.MODELS.AELIXXR_WORKER,
+                    config: {
+                        tools: globalLifeTools || await getLifeTools(),
+                        systemInstruction: agentPrompt
+                    }
                 });
 
                 let slmReport = "SLM Task Failed to generate a report.";
                 try {
-                    const result = await slmChat.sendMessage(fullInstruction);
-                    const response = result.response;
+                    const result = await slmChat.sendMessage({ message: fullInstruction });
                     
-                    const slmCalls = response.functionCalls();
+                    const slmCalls = result.functionCalls;
                     if (slmCalls && slmCalls.length > 0) {
                         logger.info({ tool: slmCalls[0].name }, 'SLM Requested Tool...');
                         const call = slmCalls[0];
-                        const args = { ...call.args, userId: slmPhone };
-                        
-                        const toolResult = await executeLifeTool(call.name, args);
-                        
-                        const safeResponse = (typeof toolResult === 'object' && toolResult !== null && !Array.isArray(toolResult)) 
-                            ? toolResult 
-                            : { result: toolResult };
+                        if (call.name) {
+                            const args = { ...call.args, userId: slmPhone };
+                            const toolResult = await executeLifeTool(call.name, args);
+                            
+                            const safeResponse = (typeof toolResult === 'object' && toolResult !== null && !Array.isArray(toolResult)) 
+                                ? toolResult 
+                                : { result: toolResult };
 
-                        const followUp = await slmChat.sendMessage([{
-                            functionResponse: {
-                                name: call.name,
-                                response: safeResponse
-                            }
-                        }]);
-                        slmReport = followUp.response.text();
+                            const followUp = await slmChat.sendMessage({
+                                message: [{
+                                    functionResponse: {
+                                        name: call.name,
+                                        response: safeResponse
+                                    }
+                                }]
+                            });
+                            slmReport = followUp.text || "";
+                        }
                     } else {
-                        slmReport = response.text();
+                        slmReport = result.text || "";
                     }
                 } catch (e: any) {
                     logger.error({ error: e.message }, 'SLM Worker Failed');
@@ -734,6 +790,12 @@ Do not output any text after the JSON block.`;
                 }, { removeOnComplete: true, removeOnFail: false });
 
                 return { success: true, slmReport: cleanedReport };
+
+            case 'consolidate-memory':
+                logger.info('💤 Running Sleep Cycle (Memory Consolidation)...');
+                const { sleepCycle } = await import('./services/sleepCycle.js');
+                await sleepCycle.consolidateMemory(job.data.userId, job.data.orgId);
+                return { success: true };
 
             case 'life-chat-resume':
                 logger.info('🧠 Resuming Aelixxr Orchestration...');
@@ -763,7 +825,7 @@ You have set up the following proactive monitors for the user. If they ask about
 ${resumeMonitors.length > 0 ? JSON.stringify(resumeMonitors) : "None currently active."}
 ---
 `;
-                const { primaryModel: resumePrimary } = await getDynamicModels(resumePrompt);
+                const { primaryModel: resumePrimary, tools: resumeTools } = await getDynamicModels(resumePrompt);
                 const resumeHistory = await getChatHistory(resumeChatId, 10);
                 
                 // --- STRICT ROLE NORMALIZATION (Resume Block) ---
@@ -792,7 +854,9 @@ ${resumeMonitors.length > 0 ? JSON.stringify(resumeMonitors) : "None currently a
                     normalizedResumeHistory.pop(); // Pop so the new message becomes the 'user' turn
                 }
 
-                const resumeChatSession = resumePrimary.startChat({
+                const resumeChatSession = genAI.chats.create({
+                    model: resumePrimary,
+                    config: { systemInstruction: resumePrompt, tools: resumeTools },
                     history: normalizedResumeHistory
                 });
 
@@ -815,8 +879,8 @@ ${resumeRep}
 `;
                 
                 try {
-                    const resumeRes = await resumeChatSession.sendMessage(resumeMessage);
-                    let finalTxt = resumeRes.response.text();
+                    const resumeRes = await resumeChatSession.sendMessage({ message: resumeMessage });
+                    let finalTxt = resumeRes.text || "";
                     try {
                         const parsed = JSON.parse(finalTxt);
                         finalTxt = parsed.whatsapp_message || finalTxt;

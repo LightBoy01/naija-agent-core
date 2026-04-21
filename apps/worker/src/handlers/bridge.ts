@@ -1,7 +1,7 @@
 import { Job, Queue } from 'bullmq';
 import { JobData } from '@naija-agent/types';
 import { WhatsAppService } from '../services/whatsapp.js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { 
   getOrgById, 
   findPendingTransaction, 
@@ -50,7 +50,7 @@ function extractAmountFromSMS(body: string): number | null {
 export async function handleSmsBridge(
   job: Job<JobData>,
   whatsappQueue: Queue,
-  genAI: GoogleGenerativeAI,
+  genAI: GoogleGenAI,
   defaultWhatsAppService: WhatsAppService
 ): Promise<{ success: boolean, alertId?: string }> {
   const { from: smsSender, orgId, content, timestamp: smsTimestamp } = job.data;
@@ -89,13 +89,16 @@ export async function handleSmsBridge(
   if (amount === null && process.env.GEMINI_API_KEY) {
      logger.info({ orgId }, '🔍 [SMS BRIDGE WORKER] Regex failed. Calling Gemini...');
      try {
-       const model = genAI.getGenerativeModel({ model: "gemini-flash-lite-latest" });
        const prompt = `Extract the transaction amount as a number only from this Nigerian bank SMS. 
        If no amount is found, return "NULL". 
        SMS: "${body}"`;
        
-       const aiResult = await model.generateContent(prompt);
-       const aiText = aiResult.response.text().trim();
+       const aiResult = await genAI.models.generateContent({
+         model: "gemini-3.1-flash-lite-preview",
+         contents: prompt
+       });
+       
+       const aiText = (aiResult.text || "").trim();
        if (aiText !== "NULL") {
           const parsed = parseFloat(aiText.replace(/[^0-9.]/g, ''));
           if (!isNaN(parsed)) {

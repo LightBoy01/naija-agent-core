@@ -12,7 +12,7 @@ import {
   logSystemEvent,
   Organization
 } from '@naija-agent/firebase';
-import { GoogleGenerativeAI, Tool, SchemaType } from '@google/generative-ai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { PaymentProvider } from '@naija-agent/payments';
 import { Redis } from 'ioredis';
 import { handleToolCall } from '../tool-handlers.js';
@@ -30,9 +30,9 @@ export interface MessagingDependencies {
   staffData: StaffData | null;
   tenantWhatsAppService: WhatsAppService;
   tenantPaymentProvider: PaymentProvider | null;
-  genAI: GoogleGenerativeAI;
+  genAI: GoogleGenAI;
   redisClient: Redis;
-  tenantTools: Tool[];
+  tenantTools: any[];
   sectorPack?: SectorPack;
 }
 export async function handleMessage(
@@ -262,46 +262,67 @@ export async function handleMessage(
   }
 
   const responseSchema = {
-    type: SchemaType.OBJECT,
+    type: Type.OBJECT,
     properties: {
       internal_thoughts: {
-        type: SchemaType.STRING,
+        type: Type.STRING,
         description: "Your private chain-of-thought, reasoning, or planning process. This will NOT be shown to the user."
       },
       whatsapp_message: {
-        type: SchemaType.STRING,
+        type: Type.STRING,
         description: "The final, formatted conversational message to send to the user."
       }
     },
     required: ["internal_thoughts", "whatsapp_message"]
   };
 
-  // 3. Model Setup - Use Zynux (Business) Primary Model
+  // 3. Model Name Resolution
   const tenantModelName = org.config?.model || SystemConfig.MODELS.ZYNUX_PRIMARY;
-  const model = genAI.getGenerativeModel({ 
-    model: tenantModelName,
-    tools: tenantTools.length > 0 ? tenantTools : undefined,
-    generationConfig: { responseMimeType: "application/json", responseSchema }
-  });
 
-  // 4. Chat Session & History
+  // 4. Chat Session & History Normalization
   const chatId = await findOrCreateChat(orgId, from, job.data.name || 'User');
   const history = await getChatHistory(chatId, 10);
   const isAuth = isAdmin ? await verifyAdminSession(orgId, from) : false;
   const balanceContext = isManager ? `\n\n[CONTEXT] Current Business Credit Balance: ${formatCurrency(org.balance / 100, currency.locale, currency.code)}\nAdmin Auth Status: ${isAdmin ? (isAuth ? 'AUTHENTICATED' : 'LOCKED') : 'STAFF_AUTHORIZED'}` : "";
 
-  const chatHistory = [
-    { role: "user", parts: [{ text: `System Instruction: ${systemPrompt}${balanceContext}` }] },
-    { role: "model", parts: [{ text: "Understood. I am ready to assist." }] },
-    ...history.map((msg: any) => ({
-      role: msg.role === 'user' ? 'user' : (msg.role === 'system' ? 'user' : 'model'),
-      parts: [{ text: msg.content }],
-    })),
-  ];
+  // Normalization for @google/genai (Sovereign 1.1.0 logic)
+  let chatHistory = history.map((msg: any) => ({
+    role: msg.role === 'user' ? 'user' : (msg.role === 'assistant' ? 'model' : 'model'),
+    parts: [{ text: msg.content }],
+  }));
 
-  const chatSession = model.startChat({
-    history: chatHistory,
-  });
+  // Ensure alternating roles and remove leading model message
+  while (chatHistory.length > 0 && chatHistory[0].role === 'model') {
+    chatHistory.shift();
+  }
+
+  const alternatingHistory: any[] = [];
+  let lastRole: string | null = null;
+  for (const msg of chatHistory) {
+    if (msg.role !== lastRole) {
+      alternatingHistory.push(msg);
+      lastRole = msg.role;
+    } else {
+      alternatingHistory[alternatingHistory.length - 1].parts[0].text += "\n" + msg.parts[0].text;
+    }
+  }
+
+  const systemInstruction = `System Instruction: ${systemPrompt}${balanceContext}`;
+
+  const createChatSession = (modelName: string) => {
+    return genAI.chats.create({
+      model: modelName,
+      config: { 
+        systemInstruction, 
+        tools: tenantTools.length > 0 ? tenantTools : undefined,
+        responseMimeType: "application/json",
+        responseSchema
+      },
+      history: alternatingHistory
+    });
+  };
+
+  let chatSession = createChatSession(tenantModelName);
 
   // 5. Prepare Input Parts
   const promptParts: any[] = [];
@@ -403,16 +424,15 @@ export async function handleMessage(
   // 6. Gemini Interaction with Fallback
   const sendMessageWithFallback = async (parts: any) => {
       try {
-          return await chatSession.sendMessage(parts);
+          // If parts is a simple string, wrap it. If it's an array, it's already parts.
+          const msg = Array.isArray(parts) ? { message: parts } : { message: parts };
+          return await chatSession.sendMessage(msg);
       } catch (err: any) {
-          if (err.message.includes('429') || err.message.includes('503')) {
+          if (err.message.includes('429') || err.message.includes('503') || err.message.includes('Quota')) {
               logger.warn({ orgId, error: err.message }, '⚠️ Primary Model Failed. Switching to Zynux Fallback.');
-              const fallbackModel = genAI.getGenerativeModel({ 
-                model: SystemConfig.MODELS.ZYNUX_FALLBACK,
-                tools: tenantTools.length > 0 ? tenantTools : undefined,
-                generationConfig: { responseMimeType: "application/json", responseSchema } 
-              });
-              return await fallbackModel.startChat({ history: chatHistory }).sendMessage(parts);
+              chatSession = createChatSession(SystemConfig.MODELS.ZYNUX_FALLBACK);
+              const msg = Array.isArray(parts) ? { message: parts } : { message: parts };
+              return await chatSession.sendMessage(msg);
           }
           throw err;
       }
@@ -424,8 +444,8 @@ export async function handleMessage(
 
   try {
     const result = await sendMessageWithFallback(promptParts);
-    responseText = result.response.text();
-    const calls = result.response.functionCalls();
+    responseText = result.text || "";
+    const calls = result.functionCalls;
     if (calls) functionCalls = calls;
 
     if (functionCalls.length > 0) {
@@ -435,7 +455,7 @@ export async function handleMessage(
         if (isProtected && (!isAdmin || !isAuth)) {
            logger.warn({ tool: call.name, from }, `🛡️ [AUTH BLOCKED] Tool blocked (Unauthorized/Locked)`);
            await redisClient.setex(`expecting_pin:${orgId}:${from}`, 300, '1');
-           functionResponses.push({ functionResponse: { name: call.name, response: { status: 'error', code: 'AUTH_REQUIRED', message: 'Oga, please type your 4-digit PIN to proceed.' } } });
+           functionResponses.push({ role: 'user', parts: [{ functionResponse: { name: call.name, response: { status: 'error', code: 'AUTH_REQUIRED', message: 'Oga, please type your 4-digit PIN to proceed.' } } }] });
            continue;
         }
 
@@ -457,14 +477,14 @@ export async function handleMessage(
              await redisClient.setex(`expecting_pin:${orgId}:${from}`, 300, '1');
           }
 
-          functionResponses.push({ functionResponse: { name: call.name, response } });
+          functionResponses.push({ role: 'user', parts: [{ functionResponse: { name: call.name, response } }] });
         } catch (e: any) {
-          functionResponses.push({ functionResponse: { name: call.name, response: { status: 'error', message: e.message } } });
+          functionResponses.push({ role: 'user', parts: [{ functionResponse: { name: call.name, response: { status: 'error', message: e.message } } }] });
         }
       }
       if (functionResponses.length > 0) {
          const followUp = await sendMessageWithFallback(functionResponses);
-         responseText = followUp.response.text();
+         responseText = followUp.text || "";
       }
     }
   } catch (geminiError: any) {
@@ -510,9 +530,10 @@ export async function handleMessage(
           const contextKey = `price_context:${orgId}:${from}`;
 
           // 1. Gather Current Turn Products & Save to Context
-          for (const response of functionResponses) {
-             if (response.functionResponse?.name === 'search_products') {
-                const data = response.functionResponse.response?.data;
+          for (const responseEntry of functionResponses) {
+             const functionResponse = responseEntry.parts[0].functionResponse;
+             if (functionResponse?.name === 'search_products') {
+                const data = functionResponse.response?.data;
                 if (Array.isArray(data)) {
                     validProducts.push(...data);
                     
@@ -578,8 +599,8 @@ export async function handleMessage(
       for (const call of functionCalls) {
         if (imagesSentCount >= SystemConfig.LIMITS.MAX_IMAGES_PER_TURN) break; 
 
-        const response = functionResponses.find(r => r.functionResponse.name === call.name);
-        const data = response?.functionResponse?.response?.data;
+        const responseEntry = functionResponses.find(r => r.parts[0].functionResponse.name === call.name);
+        const data = responseEntry?.parts[0].functionResponse?.response?.data;
         
         try {
           if (call.name === 'search_products' && Array.isArray(data)) {

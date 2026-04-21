@@ -1,4 +1,4 @@
-import { Tool } from '@google/generative-ai';
+import { Tool } from '@google/genai';
 import { z } from 'zod';
 
 // --- SECTOR AGNOSTIC DEFINITIONS (PHASE 8.3) ---

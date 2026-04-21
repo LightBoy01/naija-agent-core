@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import pino from 'pino';
 import { JobData, SystemConfig, StaffData, parseAndFormatPhone } from '@naija-agent/types';
 import { WhatsAppService } from './services/whatsapp.js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { getProvider, PaymentProvider } from '@naija-agent/payments';
 import { getTenantTools } from './tools.js';
 import { logger } from './utils/logger.js';
@@ -84,7 +84,13 @@ const defaultWhatsAppService = new WhatsAppService(
   process.env.WHATSAPP_APP_SECRET
 );
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const genAI = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY || '',
+  httpOptions: {
+    baseUrl: 'https://aiplatform.googleapis.com',
+    apiVersion: 'v1/publishers/google'
+  }
+});
 const whatsappQueue = new Queue('whatsapp-queue', { connection: redisClient as any });
 
 // --- Main Worker ---

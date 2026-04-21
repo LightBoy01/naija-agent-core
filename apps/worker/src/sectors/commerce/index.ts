@@ -1,4 +1,4 @@
-import { Tool, SchemaType } from '@google/generative-ai';
+import { Type } from '@google/genai';
 import { SectorPack } from '@naija-agent/types';
 import { CountryCode } from 'libphonenumber-js';
 
@@ -28,14 +28,14 @@ export function getCommercePack(currency: { code: string, symbol: string }, regi
   } as const;
 
   // 3. Tools (The "Verbs")
-  const commerceTools: Tool[] = [{
+  const commerceTools: any[] = [{
     functionDeclarations: [
       {
         name: "search_products",
         description: "Searches for products in the catalog by name.",
         parameters: {
-          type: SchemaType.OBJECT,
-          properties: { query: { type: SchemaType.STRING, description: "Search term" } },
+          type: Type.OBJECT,
+          properties: { query: { type: Type.STRING, description: "Search term" } },
           required: ["query"]
         }
       },
@@ -43,10 +43,10 @@ export function getCommercePack(currency: { code: string, symbol: string }, regi
         name: "add_to_cart",
         description: "Adds a specific product to the customer's shopping cart.",
         parameters: {
-          type: SchemaType.OBJECT,
+          type: Type.OBJECT,
           properties: {
-            productId: { type: SchemaType.STRING, description: "The unique Product ID (sku)" },
-            quantity: { type: SchemaType.NUMBER, description: "Quantity to add (defaults to 1)" }
+            productId: { type: Type.STRING, description: "The unique Product ID (sku)" },
+            quantity: { type: Type.NUMBER, description: "Quantity to add (defaults to 1)" }
           },
           required: ["productId"]
         }
@@ -54,18 +54,18 @@ export function getCommercePack(currency: { code: string, symbol: string }, regi
       {
         name: "view_cart",
         description: "Shows the current items in the shopping cart and the total amount.",
-        parameters: { type: SchemaType.OBJECT, properties: {} }
+        parameters: { type: Type.OBJECT, properties: {} }
       },
       {
         name: "manage_stock",
         description: "Updates the stock level for a product. (Manager Only)",
         parameters: {
-          type: SchemaType.OBJECT,
+          type: Type.OBJECT,
           properties: {
-            productId: { type: SchemaType.STRING, description: "Unique ID (sku)" },
-            action: { type: SchemaType.STRING, format: "enum", enum: ['add', 'set', 'reduce'], description: "Action to take" },
-            amount: { type: SchemaType.NUMBER, description: "Quantity" },
-            threshold: { type: SchemaType.NUMBER, description: "Optional: Set new low-stock alert threshold" }
+            productId: { type: Type.STRING, description: "Unique ID (sku)" },
+            action: { type: Type.STRING, format: "enum", enum: ['add', 'set', 'reduce'], description: "Action to take" },
+            amount: { type: Type.NUMBER, description: "Quantity" },
+            threshold: { type: Type.NUMBER, description: "Optional: Set new low-stock alert threshold" }
           },
           required: ["productId", "action", "amount"]
         }
@@ -73,7 +73,7 @@ export function getCommercePack(currency: { code: string, symbol: string }, regi
       {
         name: "generate_checkout_invoice",
         description: "Generates a final invoice/checkout link for the customer.",
-        parameters: { type: SchemaType.OBJECT, properties: {} }
+        parameters: { type: Type.OBJECT, properties: {} }
       }
     ]
   }];

@@ -1,4 +1,4 @@
-import { Tool, SchemaType } from '@google/generative-ai';
+import { Type } from '@google/genai';
 import { SectorPack } from '@naija-agent/types';
 import { CountryCode } from 'libphonenumber-js';
 import { saveEntity, queryEntity } from '@naija-agent/firebase';
@@ -26,16 +26,16 @@ export function getHealthPack(currency: { code: string, symbol: string }, region
     ]
   } as const;
 
-  const healthTools: Tool[] = [{
+  const healthTools: any[] = [{
     functionDeclarations: [
       {
         name: "check_availability",
         description: "Check available doctor slots for a specific date.",
         parameters: {
-          type: SchemaType.OBJECT,
+          type: Type.OBJECT,
           properties: { 
-            date: { type: SchemaType.STRING, description: "YYYY-MM-DD" },
-            department: { type: SchemaType.STRING, description: "General, Dental, Optometry" }
+            date: { type: Type.STRING, description: "YYYY-MM-DD" },
+            department: { type: Type.STRING, description: "General, Dental, Optometry" }
           },
           required: ["date"]
         }
@@ -44,13 +44,13 @@ export function getHealthPack(currency: { code: string, symbol: string }, region
         name: "book_appointment",
         description: "Book a slot for a patient.",
         parameters: {
-          type: SchemaType.OBJECT,
+          type: Type.OBJECT,
           properties: {
-            patientName: { type: SchemaType.STRING, description: "Full Name" },
-            patientPhone: { type: SchemaType.STRING, description: "Phone Number" },
-            date: { type: SchemaType.STRING, description: "YYYY-MM-DD" },
-            time: { type: SchemaType.STRING, description: "HH:MM (24hr)" },
-            symptoms: { type: SchemaType.STRING, description: "Brief reason for visit" }
+            patientName: { type: Type.STRING, description: "Full Name" },
+            patientPhone: { type: Type.STRING, description: "Phone Number" },
+            date: { type: Type.STRING, description: "YYYY-MM-DD" },
+            time: { type: Type.STRING, description: "HH:MM (24hr)" },
+            symptoms: { type: Type.STRING, description: "Brief reason for visit" }
           },
           required: ["patientName", "patientPhone", "date", "time"]
         }
@@ -59,8 +59,8 @@ export function getHealthPack(currency: { code: string, symbol: string }, region
         name: "get_service_price",
         description: "Look up the cost of a medical service.",
         parameters: {
-          type: SchemaType.OBJECT,
-          properties: { query: { type: SchemaType.STRING, description: "e.g. Malaria Test, ANC" } },
+          type: Type.OBJECT,
+          properties: { query: { type: Type.STRING, description: "e.g. Malaria Test, ANC" } },
           required: ["query"]
         }
       }

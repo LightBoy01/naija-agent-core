@@ -1,4 +1,4 @@
-import { Tool, SchemaType } from '@google/generative-ai';
+import { Tool, Type } from '@google/genai';
 import { marketService } from './services/marketData.js';
 import { studyBuddy } from './services/studyBuddy.js';
 import { logger } from './utils/logger.js';
@@ -39,11 +39,11 @@ export const STATIC_LIFE_TOOLS: Tool = {
       name: 'generate_quiz',
       description: 'Generate a study quiz for a student. Requires subject and topic.',
       parameters: {
-        type: SchemaType.OBJECT,
+        type: Type.OBJECT,
         properties: {
-          subject: { type: SchemaType.STRING, description: 'The subject (e.g. Mathematics, English, Biology)' },
-          topic: { type: SchemaType.STRING, description: 'The specific topic (e.g. Algebra, Oral English, Photosynthesis)' },
-          level: { type: SchemaType.STRING, description: 'The level (e.g. SS3, WAEC, JAMB, 100 Level)' }
+          subject: { type: Type.STRING, description: 'The subject (e.g. Mathematics, English, Biology)' },
+          topic: { type: Type.STRING, description: 'The specific topic (e.g. Algebra, Oral English, Photosynthesis)' },
+          level: { type: Type.STRING, description: 'The level (e.g. SS3, WAEC, JAMB, 100 Level)' }
         },
         required: ['subject', 'topic']
       }
@@ -52,9 +52,9 @@ export const STATIC_LIFE_TOOLS: Tool = {
       name: 'search_vault',
       description: 'Search the user\'s personal document vault for receipts, bank alerts, contracts, or saved notes.',
       parameters: {
-        type: SchemaType.OBJECT,
+        type: Type.OBJECT,
         properties: {
-          query: { type: SchemaType.STRING, description: 'The search term (e.g. "GTBank", "School Fees", "Rent").' }
+          query: { type: Type.STRING, description: 'The search term (e.g. "GTBank", "School Fees", "Rent").' }
         },
         required: ['query']
       }
@@ -63,9 +63,9 @@ export const STATIC_LIFE_TOOLS: Tool = {
       name: 'save_note',
       description: 'Save a text-based memory or note to the Vault. Use this when the user says "Remember this", "Save this note", or tells you a fact they want to recall later.',
       parameters: {
-        type: SchemaType.OBJECT,
+        type: Type.OBJECT,
         properties: {
-          note: { type: SchemaType.STRING, description: 'The text content to save (e.g. "Gate code is 1234", "Auntie Tope\'s birthday is Oct 5").' }
+          note: { type: Type.STRING, description: 'The text content to save (e.g. "Gate code is 1234", "Auntie Tope\'s birthday is Oct 5").' }
         },
         required: ['note']
       }
@@ -74,9 +74,9 @@ export const STATIC_LIFE_TOOLS: Tool = {
       name: 'delete_from_vault',
       description: 'Delete a document or note from the Vault using its ID.',
       parameters: {
-        type: SchemaType.OBJECT,
+        type: Type.OBJECT,
         properties: {
-          docId: { type: SchemaType.STRING, description: 'The unique ID of the document/note to delete.' }
+          docId: { type: Type.STRING, description: 'The unique ID of the document/note to delete.' }
         },
         required: ['docId']
       }
@@ -85,9 +85,9 @@ export const STATIC_LIFE_TOOLS: Tool = {
       name: 'web_search',
       description: 'Search the live internet for general knowledge, news, facts, and live information.',
       parameters: {
-        type: SchemaType.OBJECT,
+        type: Type.OBJECT,
         properties: {
-          query: { type: SchemaType.STRING, description: 'The search query (e.g. "Latest news in Nigeria today", "Who won the Champions League match yesterday?").' }
+          query: { type: Type.STRING, description: 'The search query (e.g. "Latest news in Nigeria today", "Who won the Champions League match yesterday?").' }
         },
         required: ['query']
       }
@@ -96,9 +96,20 @@ export const STATIC_LIFE_TOOLS: Tool = {
       name: 'generate_invite',
       description: 'Generate a referral invite link for the user to invite a friend. Explain the "Give 10, Get 10" energy bonus.',
       parameters: {
-        type: SchemaType.OBJECT,
+        type: Type.OBJECT,
         properties: {
-          action: { type: SchemaType.STRING, description: 'Always pass "generate"' }
+          action: { type: Type.STRING, description: 'Always pass "generate"' }
+        },
+        required: ['action']
+      }
+    },
+    {
+      name: 'get_recharge_details',
+      description: 'Provide the user with the official bank account details to manually buy more Energy Credits. Use this when the user asks how to pay, recharge, top-up, or buy battery/energy.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          action: { type: Type.STRING, description: 'Always pass "get_details"' }
         },
         required: ['action']
       }
@@ -107,10 +118,10 @@ export const STATIC_LIFE_TOOLS: Tool = {
       name: 'delegate_task',
       description: 'Delegate a complex task or research request to a specialized sub-agent (Small Language Model). Use this when you need an expert to execute tools or analyze data on your behalf.',
       parameters: {
-        type: SchemaType.OBJECT,
+        type: Type.OBJECT,
         properties: {
-          sector: { type: SchemaType.STRING, description: 'The sector pack required. Must be one of: "EducationPack", "LifePack", "ResearchPack", or "CommercePack".' },
-          instruction: { type: SchemaType.STRING, description: 'Clear, detailed instructions for the sub-agent on what exactly you need them to do or find out.' }
+          sector: { type: Type.STRING, description: 'The sector pack required. Must be one of: "EducationPack", "LifePack", "ResearchPack", or "CommercePack".' },
+          instruction: { type: Type.STRING, description: 'Clear, detailed instructions for the sub-agent on what exactly you need them to do or find out.' }
         },
         required: ['sector', 'instruction']
       }
@@ -119,56 +130,14 @@ export const STATIC_LIFE_TOOLS: Tool = {
       name: 'log_feedback',
       description: 'Use this tool when the user provides explicit feedback (e.g., "Good job", "I hate this", "Make it shorter next time") or when you detect strong frustration in their message.',
       parameters: {
-        type: SchemaType.OBJECT,
+        type: Type.OBJECT,
         properties: {
-          sentiment: { type: SchemaType.STRING, enum: ['positive', 'negative', 'neutral'], format: "enum", description: 'The overall sentiment of the user feedback.' },
-          feedbackType: { type: SchemaType.STRING, enum: ['explicit', 'implicit'], format: "enum", description: 'Whether the feedback was directly stated or inferred from context.' },
-          learnedRule: { type: SchemaType.STRING, description: 'Optional. A new communication rule to add to the user\'s memory (e.g., "User prefers short answers").' },
-          internalNote: { type: SchemaType.STRING, description: 'Optional. Internal note explaining the reason for logging this feedback.' }
+          sentiment: { type: Type.STRING, enum: ['positive', 'negative', 'neutral'], format: "enum", description: 'The overall sentiment of the user feedback.' },
+          feedbackType: { type: Type.STRING, enum: ['explicit', 'implicit'], format: "enum", description: 'Whether the feedback was directly stated or inferred from context.' },
+          learnedRule: { type: Type.STRING, description: 'Optional. A new communication rule to add to the user\'s memory (e.g., "User prefers short answers").' },
+          internalNote: { type: Type.STRING, description: 'Optional. Internal note explaining the reason for logging this feedback.' }
         },
         required: ['sentiment', 'feedbackType']
-      }
-    },
-    {
-      name: 'update_life_context',
-      description: 'PERMANENTLY save the user\'s core personal details to long-term memory. Use this IMMEDIATELY whenever the user mentions their name, family members, health conditions, future goals, or personal preferences. This is the only way to ensure you don\'t forget these details in the next session.',
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {
-          fullName: { type: SchemaType.STRING, description: 'The user\'s full name.' },
-          family: {
-            type: SchemaType.OBJECT,
-            properties: {
-              spouse: { type: SchemaType.STRING },
-              children: {
-                type: SchemaType.ARRAY,
-                items: {
-                  type: SchemaType.OBJECT,
-                  properties: {
-                    name: { type: SchemaType.STRING },
-                    age: { type: SchemaType.NUMBER },
-                    school: { type: SchemaType.STRING }
-                  }
-                }
-              }
-            }
-          },
-          health: {
-            type: SchemaType.OBJECT,
-            properties: {
-              allergies: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
-              medications: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
-            }
-          },
-          goals: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, description: 'User goals like "Japa by 2027" or "Buy a car".' },
-          preferences: {
-            type: SchemaType.OBJECT,
-            properties: {
-              market: { type: SchemaType.STRING },
-              diet: { type: SchemaType.STRING }
-            }
-          }
-        }
       }
     }
   ],
@@ -225,23 +194,44 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
            instructions: 'Tell the user to share this link. When their friend sends the pre-filled message, both will receive 10 extra Energy Credits!'
         };
 
+      case 'get_recharge_details':
+        return {
+           status: 'success',
+           accountNumber: '7055229084',
+           bankName: 'Opay',
+           accountName: 'Nurur-Rahman Mikail Abiodun',
+           instructions: 'Tell the user to transfer their desired amount to this account and send you a screenshot of the receipt. Mention that 100 Naira = 10 Energy Credits. Once they send the receipt, you will manually confirm it.'
+        };
+
       case 'web_search': {
         try {
-          const { GoogleGenerativeAI } = await import('@google/generative-ai');
+          const { GoogleGenAI } = await import('@google/genai');
           const { SystemConfig } = await import('@naija-agent/types');
-          const searchGenAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || '');
+          const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || '';
+          
+          if (!apiKey) {
+            return { error: "I no fit search right now, my access key dey missing." };
+          }
+
+          // Use the global endpoint bypass to get preview models via Vertex without OAuth
+          const searchGenAI = new GoogleGenAI({ 
+            apiKey,
+            httpOptions: {
+              baseUrl: 'https://aiplatform.googleapis.com',
+              apiVersion: 'v1/publishers/google'
+            }
+          });
           
           const trySearch = async (modelName: string) => {
-            const searchModel = searchGenAI.getGenerativeModel({ 
+            const searchResult = await searchGenAI.models.generateContent({
               model: modelName,
-              tools: [{ googleSearch: {} }] as any
-            });
-
-            const searchResult = await searchModel.generateContent({
-              contents: [{ role: 'user', parts: [{ text: `Search for: ${args.query}. Summarize the key facts, prices, or news found. DO NOT output your search plan, internal reasoning, or introductory filler. Provide ONLY the final summary.` }] }]
+              contents: [{ role: 'user', parts: [{ text: `Search for: ${args.query}. Summarize the key facts, prices, or news found. DO NOT output your search plan, internal reasoning, or introductory filler. Provide ONLY the final summary.` }] }],
+              config: {
+                tools: [{ googleSearch: {} }] as any
+              }
             });
             
-            let text = searchResult.response.text();
+            let text = searchResult.text || "";
             text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
             return text;
           };
@@ -340,12 +330,6 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
          status: 'success', 
          message: 'Oga, I don carry your feedback go store. I go adjust for you next time!' 
         };
-        }
-
-        case 'update_life_context': {
-        const { userId, ...updates } = args;
-        await lifeMemory.updateContext(userId, updates);
-        return { status: 'success', message: 'I have updated my long-term memory of your life context. I will remember this forever!' };
         }
 
         default:

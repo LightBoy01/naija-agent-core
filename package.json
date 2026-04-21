@@ -28,6 +28,7 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
+    "@google/genai": "^1.50.1",
     "bcrypt": "^6.0.0",
     "bytes": "3.1.2",
     "cookie": "^1.1.1",

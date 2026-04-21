@@ -9,6 +9,12 @@
 - **Credit Awareness:** Gemini is now balance-aware (Context Injection) and responds to balance queries.
 
 ## Recent Changes
+- **Phase 9.1 Universal SDK Migration (April 2026):**
+    - **SDK Upgrade:** Migrated from legacy `@google/generative-ai` to the modern `@google/genai` Universal SDK.
+    - **Global Publisher Endpoint:** Re-routed all AI traffic through `https://aiplatform.googleapis.com/v1/publishers/google` for enhanced model availability (Gemini 2.5/3) without complex OAuth.
+    - **Model Strategy:** Standardized on `gemini-3-flash-preview` for primary business and life logic, with `gemini-3.1-flash-lite-preview` for high-speed worker tasks.
+    - **Tool Support:** Fully verified Google Search grounding and custom function calling across the new architecture.
+    - **Stability:** Resolved strict TypeScript type issues and chat history normalization required by the new SDK.
 - **Phase 8.3 Sector Expansion & Global Foundation (Mar/Apr 2026):**
     - **Internationalization (i18n):** Upgraded `OrganizationSchema` to enforce `currency` objects (`code`, `symbol`, `locale`) and support region toggles. Integrated `libphonenumber-js` for E.164 normalization.
     - **Multi-Currency Ledger:** Refactored Next.js dashboard (`InventoryTable.tsx`, etc.) and API Gateway to dynamically format local prices based on currency configuration.

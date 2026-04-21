@@ -6,6 +6,7 @@ import {
   queryEntity 
 } from '@naija-agent/firebase';
 import { formatCurrency } from '../utils/currency.js';
+import { SystemConfig } from '@naija-agent/types';
 
 export async function handleContentTools(name: string, args: any, ctx: HandlerContext): Promise<any> {
   const { orgId, from, isAdmin, isStaff, whatsappService, currency } = ctx;
@@ -21,9 +22,14 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
 
     case 'search_documents': {
       try {
-        const { GoogleGenerativeAI } = await import('@google/generative-ai');
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite-preview-02-05' });
+        const { GoogleGenAI } = await import('@google/genai');
+        const genAI = new GoogleGenAI({
+           apiKey: process.env.GEMINI_API_KEY || '',
+           httpOptions: {
+              baseUrl: 'https://aiplatform.googleapis.com',
+              apiVersion: 'v1/publishers/google'
+           }
+        });
 
         // 1. Semantic Keyword Extraction
         const keywordPrompt = `
@@ -32,9 +38,12 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
         Output format: JSON Array of strings. Example: ["receipt", "school", "fees", "january", "2024"]
         `;
         
-        const result = await model.generateContent(keywordPrompt);
-        const text = result.response.text();
-        const jsonMatch = text.match(/\[.*\]/);
+        const result = await genAI.models.generateContent({
+           model: SystemConfig.MODELS.ZYNUX_FALLBACK,
+           contents: keywordPrompt
+        });
+        const text = result.text || "";
+        const jsonMatch = text?.match(/\[.*\]/);
         
         if (!jsonMatch) return { status: 'error', message: 'I could not understand the search query.' };
         const keywords = JSON.parse(jsonMatch[0]);
@@ -64,39 +73,44 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
 
     case 'web_search': {
       try {
-        const { GoogleGenerativeAI } = await import('@google/generative-ai');
-        const searchGenAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+        const { GoogleGenAI } = await import('@google/genai');
+        const searchGenAI = new GoogleGenAI({
+           apiKey: process.env.GEMINI_API_KEY || '',
+           httpOptions: {
+              baseUrl: 'https://aiplatform.googleapis.com',
+              apiVersion: 'v1/publishers/google'
+           }
+        });
         
         const trySearch = async (modelName: string) => {
-          const searchModel = searchGenAI.getGenerativeModel({ 
+          const searchResult = await searchGenAI.models.generateContent({
             model: modelName,
-            tools: [{ googleSearch: {} }] as any
-          });
-
-          const searchResult = await searchModel.generateContent({
-            contents: [{ role: 'user', parts: [{ text: `Search for: ${args.query}. Summarize the key facts, prices, or news found.` }] }]
+            contents: `Search for: ${args.query}. Summarize the key facts, prices, or news found.`,
+            config: {
+              tools: [{ googleSearch: {} }]
+            }
           });
           
-          return searchResult.response.text();
+          return searchResult.text;
         };
 
         try {
-          // Tier 1: Gemini 3.1 Preview
-          const summary = await trySearch("gemma-4-26b-a4b-it");
+          // Tier 1: Primary Model (ZYNUX_PRIMARY)
+          const summary = await trySearch(SystemConfig.MODELS.ZYNUX_PRIMARY);
           return { status: 'success', result: summary };
         } catch (firstTryErr: any) {
            if (firstTryErr.message.includes('429')) {
-              console.warn(`🔄 [SEARCH FALLBACK L1] 3.1 Quota Exceeded. Retrying with Flash-Lite Latest...`);
+              console.warn(`🔄 [SEARCH FALLBACK L1] Quota Exceeded. Retrying with Worker Model...`);
               try {
-                  // Tier 2: Flash-Lite Latest (Stable)
-                  const secondSummary = await trySearch("gemini-flash-lite-latest");
-                  return { status: 'success', result: secondSummary, metadata: { fallback: 'flash-lite-latest' } };
+                  // Tier 2: Worker Model (AELIXXR_WORKER)
+                  const secondSummary = await trySearch(SystemConfig.MODELS.AELIXXR_WORKER);
+                  return { status: 'success', result: secondSummary, metadata: { fallback: 'worker' } };
               } catch (secondTryErr: any) {
                   if (secondTryErr.message.includes('429')) {
-                      console.warn(`🔄 [SEARCH FALLBACK L2] Flash-Lite Latest Busy. Retrying with Gemini 2.5 Flash...`);
-                      // Tier 3: 2.5 Flash (Ultimate Reliability)
-                      const thirdSummary = await trySearch("gemini-2.5-flash");
-                      return { status: 'success', result: thirdSummary, metadata: { fallback: 'gemini-2.5-flash' } };
+                      console.warn(`🔄 [SEARCH FALLBACK L2] Worker Busy. Retrying with Fallback Model...`);
+                      // Tier 3: Fallback (Ultimate Reliability)
+                      const thirdSummary = await trySearch(SystemConfig.MODELS.ZYNUX_FALLBACK);
+                      return { status: 'success', result: thirdSummary, metadata: { fallback: 'fallback' } };
                   }
                   throw secondTryErr;
               }
@@ -112,7 +126,7 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
     case 'generate_image': {
       const imageGenFee = 5000; // ₦50.00 Creative Fee
       try {
-        const { GoogleGenerativeAI } = await import('@google/generative-ai');
+        const { GoogleGenAI } = await import('@google/genai');
 
         if (!isAdmin && !isStaff) {
            const deductResult = await deductBalance(orgId, imageGenFee);
@@ -122,38 +136,42 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
            }
         }
 
-        const imageGenAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-        const imageModel = imageGenAI.getGenerativeModel({ 
-          model: "gemini-3.1-flash-image-preview" 
+        const imageGenAI = new GoogleGenAI({
+           apiKey: process.env.GEMINI_API_KEY || '',
+           httpOptions: {
+              baseUrl: 'https://aiplatform.googleapis.com',
+              apiVersion: 'v1/publishers/google'
+           }
         });
 
         try {
           console.log(`🎨 [IMAGE GEN] Generating image for ${orgId}: ${args.prompt}`);
           
-          const imageResult = await imageModel.generateContent({
-             contents: [{ role: 'user', parts: [{ text: `Generate a high-quality image based on this description: ${args.prompt}. Make it look professional and vibrant.` }] }]
+          const imageResult = await imageGenAI.models.generateContent({
+             model: "gemini-3.1-flash-image-preview",
+             contents: `Generate a high-quality image based on this description: ${args.prompt}. Make it look professional and vibrant.`
           });
 
-          const imagePart = imageResult.response.candidates?.[0].content.parts.find(p => p.inlineData);
+          const imagePart = imageResult.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
           
           if (imagePart && imagePart.inlineData) {
-             const buffer = Buffer.from(imagePart.inlineData.data, 'base64');
+             const buffer = Buffer.from(imagePart.inlineData.data || '', 'base64');
              await whatsappService.sendImage(from, buffer, `✨ *Generated Image:* "${args.prompt}"`);
              return { status: 'success', message: "Image generated and sent successfully." };
           } else {
-             const textResponse = imageResult.response.text();
+             const textResponse = imageResult.text;
              return { status: 'error', message: `Oga, I no fit generate that image: ${textResponse}` };
           }
         } catch (genErr: any) {
            if (genErr.message.includes('429')) {
-              console.warn(`🔄 [IMAGE FALLBACK] 3.1 Flash-Image Quota Exceeded. Switching to Creative Prompt Fallback...`);
+              console.warn(`🔄 [IMAGE FALLBACK] Quota Exceeded. Switching to Creative Prompt Fallback...`);
               
-              const promptModel = imageGenAI.getGenerativeModel({ model: "gemini-flash-lite-latest" });
-              const promptResult = await promptModel.generateContent({
-                contents: [{ role: 'user', parts: [{ text: `The image generator is busy. Create a stunning, high-quality, professional image generation prompt for this idea: ${args.prompt}. Write it in a way that the user can visualize the result.` }] }]
+              const promptResult = await imageGenAI.models.generateContent({
+                model: SystemConfig.MODELS.ZYNUX_FALLBACK,
+                contents: `The image generator is busy. Create a stunning, high-quality, professional image generation prompt for this idea: ${args.prompt}. Write it in a way that the user can visualize the result.`
               });
 
-              const artisticPrompt = promptResult.response.text();
+              const artisticPrompt = promptResult.text;
               const response = `🎨 *Creative Engine Update:* Oga, my drawing hand don tire small (Quota Limit), but look wetin I been wan draw for you:\n\n${artisticPrompt}\n\n_Wait small, I go fit draw am later!_`;
               
               return { status: 'success', result: response, metadata: { fallback: 'creative-prompt' } };
