@@ -213,7 +213,14 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
             return { error: "I no fit search right now, my access key dey missing." };
           }
 
-          const searchGenAI = new GoogleGenAI({ apiKey });
+          // Use the global endpoint bypass to get preview models via Vertex without OAuth
+          const searchGenAI = new GoogleGenAI({ 
+            apiKey,
+            httpOptions: {
+              baseUrl: 'https://aiplatform.googleapis.com',
+              apiVersion: 'v1/publishers/google'
+            }
+          });
           
           const trySearch = async (modelName: string) => {
             const searchResult = await searchGenAI.models.generateContent({
@@ -224,7 +231,12 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
               }
             });
             
-            let text = searchResult.text || "";
+            let text = "";
+            if (searchResult.candidates?.[0]?.content?.parts) {
+                text = searchResult.candidates[0].content.parts.filter((p: any) => p.text).map((p: any) => p.text).join("");
+            } else {
+                text = searchResult.text || "";
+            }
             text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
             return text;
           };

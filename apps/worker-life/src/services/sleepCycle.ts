@@ -85,7 +85,13 @@ If there is nothing new to learn, output an empty object {}.
                 return;
             }
 
-            const genAI = new GoogleGenAI({ apiKey });
+            const genAI = new GoogleGenAI({
+                apiKey: apiKey,
+                httpOptions: {
+                    baseUrl: 'https://aiplatform.googleapis.com',
+                    apiVersion: 'v1/publishers/google'
+                }
+            });
 
             const model = genAI.models.generateContent({
                 model: SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-2.5-flash',
@@ -98,7 +104,12 @@ If there is nothing new to learn, output an empty object {}.
             });
 
             const result = await model;
-            let text = result.text || '{}';
+            let text = "";
+            if (result.candidates?.[0]?.content?.parts) {
+                text = result.candidates[0].content.parts.filter((p: any) => p.text).map((p: any) => p.text).join("");
+            } else {
+                text = result.text || '{}';
+            }
             
             // Clean markdown code blocks if the LLM includes them
             text = text.replace(/```json/gi, '').replace(/```/g, '').trim();

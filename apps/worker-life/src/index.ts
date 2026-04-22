@@ -15,6 +15,26 @@ import { proactiveService } from './services/proactive.js';
 import fs from 'fs';
 import path from 'path';
 
+// --- Helper to safely extract text and avoid SDK warnings ---
+function extractSafeText(result: any): string {
+    if (!result) return "";
+    try {
+        if (result.functionCalls && result.functionCalls.length > 0) {
+            // Check if there's an actual text part alongside the function call
+            if (result.candidates?.[0]?.content?.parts) {
+                const textParts = result.candidates[0].content.parts.filter((p: any) => p.text);
+                if (textParts.length > 0) {
+                    return textParts.map((p: any) => p.text).join("");
+                }
+            }
+            return ""; // No text parts, don't trigger the .text getter
+        }
+        return result.text || "";
+    } catch (e) {
+        return "";
+    }
+}
+
 // --- Load Aelixxr Soul Prompt (Cached in RAM) ---
 let aelixxrSoulPrompt = '';
 try {
@@ -71,7 +91,11 @@ if (!apiKey) {
 }
 
 const genAI = new GoogleGenAI({
-  apiKey: apiKey || 'mock-key'
+  apiKey: apiKey || 'mock-key',
+  httpOptions: {
+    baseUrl: 'https://aiplatform.googleapis.com',
+    apiVersion: 'v1/publishers/google'
+  }
 });
 
 // --- Bootstrapping MCP Server (Phase 1) ---
@@ -252,7 +276,7 @@ const worker = new Worker(
                         });
                         
                         const result = await chatSession.sendMessage({ message: "Evaluate and generate proactive message or SKIP." });
-                        let text = result.text || "";
+                        let text = extractSafeText(result);
                         
                         // Extract everything outside <think> tags
                         text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
@@ -502,7 +526,7 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                         }
                     }
 
-                    let text = result.text || "";
+                    let text = extractSafeText(result);
                     
                     try {
                         const parsed = JSON.parse(text);
@@ -599,7 +623,7 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                                 }]
                             });
                             
-                            let followUpText = followUpResult.text || ""; 
+                            let followUpText = extractSafeText(followUpResult); 
                             try {
                                 const parsed = JSON.parse(followUpText);
                                 text = parsed.whatsapp_message || followUpText;
@@ -757,10 +781,10 @@ Do not output any text after the JSON block.`;
                                     }
                                 }]
                             });
-                            slmReport = followUp.text || "";
+                            slmReport = extractSafeText(followUp);
                         }
                     } else {
-                        slmReport = result.text || "";
+                        slmReport = extractSafeText(result);
                     }
                 } catch (e: any) {
                     logger.error({ error: e.message }, 'SLM Worker Failed');
@@ -876,7 +900,7 @@ ${resumeRep}
                 
                 try {
                     const resumeRes = await resumeChatSession.sendMessage({ message: resumeMessage });
-                    let finalTxt = resumeRes.text || "";
+                    let finalTxt = extractSafeText(resumeRes);
                     try {
                         const parsed = JSON.parse(finalTxt);
                         finalTxt = parsed.whatsapp_message || finalTxt;
