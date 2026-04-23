@@ -15,6 +15,12 @@ import { proactiveService } from './services/proactive.js';
 import fs from 'fs';
 import path from 'path';
 
+// --- Termux/Android Environment Fix: Ignore TLS issues if CA certificates are missing ---
+if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === undefined && process.platform === 'android') {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    console.log('🛡️ [TERMUX FIX]: TLS Verification disabled to prevent fetch errors.');
+}
+
 // --- Helper to safely extract text and avoid SDK warnings ---
 function extractSafeText(result: any): string {
     if (!result) return "";

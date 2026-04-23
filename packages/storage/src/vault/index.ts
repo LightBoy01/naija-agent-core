@@ -9,9 +9,10 @@ import { safeParseJSON } from '../utils/json.js';
 
 const logger = pino({ name: 'vault-service' });
 
-// --- Cloudinary Configuration (The "Bridge" - No credit card needed) ---
-if (process.env.CLOUDINARY_URL) {
-  cloudinary.config(process.env.CLOUDINARY_URL);
+// --- Termux/Android Environment Fix: Ignore TLS issues if CA certificates are missing ---
+if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === undefined && process.platform === 'android') {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    logger.info('🛡️ [TERMUX FIX]: TLS Verification disabled in Storage Vault.');
 }
 
 // --- GCS Configuration with Sanitization ---
@@ -92,7 +93,15 @@ async function uploadToGCS(userId: string, buffer: Buffer, mimeType: string): Pr
 
 async function uploadToVault(userId: string, buffer: Buffer, mimeType: string): Promise<{ url: string; gcsUri?: string; provider: 'cloudinary' | 'gcs' }> {
   // 1. Primary: Cloudinary (Free & Scalable "Bridge")
-  if (process.env.CLOUDINARY_URL) {
+  const cloudUrl = process.env.CLOUDINARY_URL;
+  logger.info({ hasUrl: !!cloudUrl }, '🔍 Checking Cloudinary URL...');
+  
+  if (cloudUrl) {
+    cloudinary.config({
+      cloudinary_url: cloudUrl,
+      secure: true
+    });
+    
     logger.info({ userId }, '☁️ Uploading to Cloudinary Bridge...');
     try {
         const result: any = await new Promise((resolve, reject) => {
@@ -100,7 +109,8 @@ async function uploadToVault(userId: string, buffer: Buffer, mimeType: string): 
               {
                 folder: `aelixxr/vault/${userId}`,
                 resource_type: 'auto',
-                tags: [userId, 'aelixxr-vault']
+                tags: [userId, 'aelixxr-vault'],
+                timeout: 60000 // 60 seconds
               },
               (error, result) => {
                 if (error) return reject(error);
@@ -131,13 +141,7 @@ async function extractMultimodalMetadata(
     apiKey: string
 ): Promise<any> {
   const { SystemConfig } = await import('@naija-agent/types');
-    const genAI = new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      baseUrl: 'https://aiplatform.googleapis.com',
-      apiVersion: 'v1/publishers/google'
-    }
-  });
+  const genAI = new GoogleGenAI({ apiKey });
 
   const prompt = `
   You are an expert Document Classification and Extraction AI for a "Life OS" Vault.
@@ -164,7 +168,7 @@ async function extractMultimodalMetadata(
 
   try {
     const result = await genAI.models.generateContent({
-      model: SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-2.0-flash',
+      model: SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3.1-flash-lite-preview',
       contents: [{
         parts: [
           { text: prompt },
@@ -188,17 +192,11 @@ async function getMultimodalEmbedding(
     textContext: string, 
     apiKey: string
 ): Promise<number[]> {
-      const genAI = new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      baseUrl: 'https://aiplatform.googleapis.com',
-      apiVersion: 'v1/publishers/google'
-    }
-  });
+    const genAI = new GoogleGenAI({ apiKey });
   
     try {
       const result = await genAI.models.embedContent({
-        model: 'models/gemini-embedding-2-preview',
+        model: 'gemini-embedding-2',
         contents: [{
           parts: [
             { text: textContext },
@@ -286,13 +284,7 @@ export async function ingestNote(
 
   // 1. Extract Metadata (The "Intelligence")
   const { SystemConfig } = await import('@naija-agent/types');
-    const genAI = new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      baseUrl: 'https://aiplatform.googleapis.com',
-      apiVersion: 'v1/publishers/google'
-    }
-  });
+  const genAI = new GoogleGenAI({ apiKey });
 
   const prompt = `
   Analyze this text note for a Life OS Vault.
@@ -303,8 +295,8 @@ export async function ingestNote(
   let analysis = { title: 'Note', summary: 'Saved Note', category: 'Note', tags: [] };
   try {
     const result = await genAI.models.generateContent({
-        model: SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-2.0-flash',
-        contents: prompt
+        model: SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3.1-flash-lite-preview',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
     });
     analysis = safeParseJSON(result.text || "") || analysis;
   } catch (e) {}

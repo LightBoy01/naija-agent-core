@@ -4,6 +4,12 @@ import fs from 'fs';
 
 dotenv.config();
 
+// --- Termux Fix ---
+if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === undefined && process.platform === 'android') {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    console.log('🛡️ [TERMUX FIX]: TLS Verification disabled to prevent fetch errors.');
+}
+
 async function testBridge() {
   console.log('☁️ --- TESTING CLOUDINARY MULTIMODAL BRIDGE --- ☁️');
 

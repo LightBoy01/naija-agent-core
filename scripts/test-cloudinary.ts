@@ -1,47 +1,47 @@
-import dotenv from 'dotenv';
-import { uploadMedia } from '../packages/storage/dist/index.js';
-import { getDb } from '@naija-agent/firebase';
+import { v2 as cloudinary } from 'cloudinary';
+import * as dotenv from 'dotenv';
 import fs from 'fs';
 
 dotenv.config();
 
-async function testCloudinary() {
-  console.log('🖼️ --- STORAGE INTEGRATION TEST --- 🚀');
+async function testCloudinaryDirect() {
+  console.log('🧪 Direct Cloudinary Test...');
   
-  // Ensure Firebase is initialized for fallback
-  await getDb();
+  const url = process.env.CLOUDINARY_URL;
+  if (!url) {
+    console.error('❌ CLOUDINARY_URL missing');
+    return;
+  }
   
-  if (!process.env.CLOUDINARY_URL) {
-    console.warn('⚠️ CLOUDINARY_URL missing in .env. Will test Firebase Fallback.');
-  } else {
-    console.log('✅ Cloudinary URL found in environment.');
-  }
+  cloudinary.config({
+    cloudinary_url: url,
+    secure: true
+  });
 
-  // Use a tiny 1x1 transparent PNG buffer
-  const mockBuffer = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', 'base64');
-  const orgId = 'test-org-cloudinary';
-  const fileName = `test-upload-${Date.now()}.png`;
-  const mimeType = 'image/png';
+  console.log('Cloud Name:', cloudinary.config().cloud_name);
 
-  console.log(`📡 Uploading mock image to ${process.env.CLOUDINARY_URL ? 'Cloudinary' : 'Firebase'}...`);
+  // Tiny 1x1 pixel PNG
+  const buffer = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', 'base64');
 
-  try {
-    const url = await uploadMedia(orgId, fileName, mockBuffer, mimeType, { test: 'true' });
-    
-    console.log('\n✅ UPLOAD SUCCESS!');
-    console.log(`🔗 URL: ${url}`);
-
-    if (url.includes('cloudinary.com')) {
-      console.log('✨ Verified: Storage is currently using CLOUDINARY (Scalable/Fast).');
-    } else if (url.includes('storage.googleapis.com')) {
-      console.log('📦 Verified: Storage is using FIREBASE FALLBACK (Reliable/Standard).');
-    } else {
-      console.warn('❓ Unknown storage provider URL format.');
-    }
-
-  } catch (err: any) {
-    console.error(`❌ UPLOAD FAILED: ${err.message}`);
-  }
+  return new Promise((resolve) => {
+    console.log('📤 Starting upload stream...');
+    const stream = cloudinary.uploader.upload_stream(
+      { 
+        folder: 'test',
+        resource_type: 'auto'
+      },
+      (error, result) => {
+        if (error) {
+          console.error('❌ Upload Error:', error);
+          resolve(false);
+        } else {
+          console.log('✅ Upload Success:', result?.secure_url);
+          resolve(true);
+        }
+      }
+    );
+    stream.end(buffer);
+  });
 }
 
-testCloudinary().then(() => process.exit(0));
+testCloudinaryDirect().then(() => process.exit(0));
