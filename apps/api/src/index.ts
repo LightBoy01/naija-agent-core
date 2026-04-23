@@ -450,7 +450,7 @@ fastify.post('/webhook', async (request, reply) => {
     orgId: org.id,
     phoneId: businessPhoneId,
     from: from,
-    name: value.contacts?.[0]?.profile.name || 'Unknown',
+    name: value.contacts?.[0]?.profile?.name || 'Unknown',
     messageId: message.id,
     timestamp: Date.now(),
     content: {

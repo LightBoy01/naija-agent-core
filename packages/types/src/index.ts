@@ -35,7 +35,7 @@ export const WhatsAppWebhookSchema = z.object({
           phone_number_id: z.string(),
         }),
         contacts: z.array(z.object({
-          profile: z.object({ name: z.string() }),
+          profile: z.object({ name: z.string() }).optional(),
           wa_id: z.string(),
         })).optional(),
         messages: z.array(WhatsAppMessageSchema).optional(),

@@ -141,7 +141,13 @@ async function extractMultimodalMetadata(
     apiKey: string
 ): Promise<any> {
   const { SystemConfig } = await import('@naija-agent/types');
-  const genAI = new GoogleGenAI({ apiKey });
+  const genAI = new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      baseUrl: 'https://aiplatform.googleapis.com',
+      apiVersion: 'v1/publishers/google'
+    }
+  });
 
   const prompt = `
   You are an expert Document Classification and Extraction AI for a "Life OS" Vault.
@@ -192,7 +198,13 @@ async function getMultimodalEmbedding(
     textContext: string, 
     apiKey: string
 ): Promise<number[]> {
-    const genAI = new GoogleGenAI({ apiKey });
+    const genAI = new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      baseUrl: 'https://aiplatform.googleapis.com',
+      apiVersion: 'v1/publishers/google'
+    }
+  });
   
     try {
       const result = await genAI.models.embedContent({
@@ -284,7 +296,13 @@ export async function ingestNote(
 
   // 1. Extract Metadata (The "Intelligence")
   const { SystemConfig } = await import('@naija-agent/types');
-  const genAI = new GoogleGenAI({ apiKey });
+  const genAI = new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      baseUrl: 'https://aiplatform.googleapis.com',
+      apiVersion: 'v1/publishers/google'
+    }
+  });
 
   const prompt = `
   Analyze this text note for a Life OS Vault.
