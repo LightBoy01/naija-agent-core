@@ -176,6 +176,7 @@ async function extractMultimodalMetadata(
     const result = await genAI.models.generateContent({
       model: SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3.1-flash-lite-preview',
       contents: [{
+        role: 'user',
         parts: [
           { text: prompt },
           // Strategy: Use fileUri if on GCS (Efficient), otherwise send raw bytes (Bridge)
