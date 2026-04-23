@@ -89,7 +89,6 @@ if (!apiKey) {
 } else {
   logger.info('🔑 Gemini API Key found.');
 }
-
 const genAI = new GoogleGenAI({
   apiKey: apiKey || 'mock-key',
   httpOptions: {
@@ -639,22 +638,31 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                     }
 
                     text += billingNote; // Append energy notification
-                    logger.info({ response: text }, '🗣️ Life Companion Replying');
                     
-                    // Deduct 1 credit for standard message (Base Cost)
-                    await lifeMemory.deductEnergy(userPhone, 1);
+                    // --- FALLBACK FOR EMPTY RESPONSES ---
+                    if (!text.trim() && (!functionCalls || functionCalls.length === 0)) {
+                        logger.warn({ userPhone }, '⚠️ AI generated an empty response. Using fallback.');
+                        text = "Oga, I hear you, but my brain slow small. Can you say that again or try a different question?";
+                    }
 
-                    // Send via WhatsApp
-                    await whatsappService.sendText(userPhone, text);
+                    if (text.trim()) {
+                        logger.info({ response: text }, '🗣️ Life Companion Replying');
+                        
+                        // Deduct 1 credit for standard message (Base Cost)
+                        await lifeMemory.deductEnergy(userPhone, 1);
 
-                    // Save conversation history to the database
-                    // Use fullMessage to include transcription for Sleep Cycle context
-                    await saveMessage(chatId, { 
-                        role: 'user', content: fullMessage, type: 'text' 
-                    });
-                    await saveMessage(chatId, { 
-                        role: 'assistant', content: text, type: 'text' 
-                    });
+                        // Send via WhatsApp
+                        await whatsappService.sendText(userPhone, text);
+
+                        // Save conversation history to the database
+                        // Use fullMessage to include transcription for Sleep Cycle context
+                        await saveMessage(chatId, { 
+                            role: 'user', content: fullMessage, type: 'text' 
+                        });
+                        await saveMessage(chatId, { 
+                            role: 'assistant', content: text, type: 'text' 
+                        });
+                    }
                     
                     // --- TRIGGER SLEEP CYCLE (Memory Consolidation) ---
                     // Enqueue a delayed job to process implicit memories 30 minutes from now.
