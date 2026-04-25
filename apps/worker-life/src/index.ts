@@ -633,9 +633,25 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                         
                         if (!shouldBreak && toolResponses.length > 0) {
                             // Return the tool results to the AI model so it can formulate a final answer
-                            const followUpResult = await chatSession.sendMessage({
-                                message: toolResponses
-                            });
+                            let followUpResult;
+                            try {
+                                followUpResult = await chatSession.sendMessage({
+                                    message: toolResponses
+                                });
+                            } catch (toolError: any) {
+                                if (toolError.message.includes('429') || toolError.message.includes('503') || toolError.message.includes('fetch failed') || toolError.message.includes('500') || toolError.message.includes('Quota')) {
+                                    logger.warn('⚠️ Primary Life Model Failed on Tool Response. Switching to Fallback.');
+                                    const currentHistory = await chatSession.getHistory();
+                                    chatSession = genAI.chats.create({
+                                        model: fallbackModel,
+                                        config: { systemInstruction, tools },
+                                        history: currentHistory
+                                    });
+                                    followUpResult = await chatSession.sendMessage({ message: toolResponses });
+                                } else {
+                                    throw toolError;
+                                }
+                            }
                             
                             let followUpText = extractSafeText(followUpResult); 
                             try {
