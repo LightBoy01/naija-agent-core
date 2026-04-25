@@ -116,7 +116,7 @@ export const STATIC_LIFE_TOOLS: Tool = {
     },
     {
       name: 'verify_payment_and_topup',
-      description: 'Call this tool ONLY when the user uploads a payment receipt (image or document) for Energy Credits. The AI must first read the receipt image to confirm the amount paid in Naira. 100 Naira = 10 Energy Credits. This tool will securely verify the receipt is valid and add the credits to their wallet. DO NOT call this tool unless you see a receipt confirming payment.',
+      description: 'Call this tool ONLY when the user uploads a payment receipt (image or document) for Energy Credits. The AI MUST first act as a Forensic Analyst: thoroughly read the receipt image to confirm the amount paid in Naira, verify the date is current, ensure the transaction ID exists, and check for any signs of forgery. 100 Naira = 10 Energy Credits. This tool will securely verify the receipt is valid and add the credits to their wallet. DO NOT call this tool unless you are 100% sure the receipt is authentic and you have explicitly stated your forensic findings.',
       parameters: {
         type: Type.OBJECT,
         properties: {
