@@ -550,6 +550,9 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
 
                     if (functionCalls && functionCalls.length > 0) {
                         logger.info('🛠️ AI requested tools...');
+                        let toolResponses: any[] = [];
+                        let shouldBreak = false;
+
                         for (const call of functionCalls) {
                             if (!call.name) continue;
 
@@ -592,6 +595,7 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                                 // Emergency Reserve Check (Soft Bounce)
                                 if (energyCredits <= 0) {
                                      text = `Here is what I was trying to do, but my battery actually hit 0% right now! I'd love to use my tools for you, but I'm officially 'sleeping'. Please use your portal to recharge me so we can continue! 🔋💤`;
+                                     shouldBreak = true;
                                      break;
                                 }
 
@@ -599,6 +603,7 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                                 
                                 if (newBalance === null) {
                                     text = `I'd love to help with this, but it takes a lot of energy (${costInCredits} units) and my battery is too low right now. Can we recharge quickly so I can get to work? 🔋🔌`;
+                                    shouldBreak = true;
                                     break; // Stop execution
                                 }
                                 billingNote += `\n_(-${costInCredits} Energy used for deep search)_`;
@@ -618,14 +623,18 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                                 safeResponse.system_context = `The tool execution failed. Please apologize to the user. Remember, their original request was: "${message}".`;
                             }
                             
-                            // Return the tool result to the AI model so it can formulate a final answer
+                            toolResponses.push({
+                                functionResponse: {
+                                    name: call.name,
+                                    response: safeResponse
+                                }
+                            });
+                        }
+                        
+                        if (!shouldBreak && toolResponses.length > 0) {
+                            // Return the tool results to the AI model so it can formulate a final answer
                             const followUpResult = await chatSession.sendMessage({
-                                message: [{
-                                    functionResponse: {
-                                        name: call.name,
-                                        response: safeResponse
-                                    }
-                                }]
+                                message: toolResponses
                             });
                             
                             let followUpText = extractSafeText(followUpResult); 
@@ -637,9 +646,9 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                                 text = followUpText;
                             }
                             text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-                    if (text.includes('<think>')) {
-                        text = text.split('<think>')[0].trim();
-                    }
+                            if (text.includes('<think>')) {
+                                text = text.split('<think>')[0].trim();
+                            }
                         }
                     }
 
