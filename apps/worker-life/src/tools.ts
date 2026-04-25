@@ -115,6 +115,18 @@ export const STATIC_LIFE_TOOLS: Tool = {
       }
     },
     {
+      name: 'verify_payment_and_topup',
+      description: 'Call this tool ONLY when the user uploads a payment receipt (image or document) for Energy Credits. The AI must first read the receipt image to confirm the amount paid in Naira. 100 Naira = 10 Energy Credits. This tool will securely verify the receipt is valid and add the credits to their wallet. DO NOT call this tool unless you see a receipt confirming payment.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          amountPaidNaira: { type: Type.NUMBER, description: 'The exact amount paid in Naira, extracted from the receipt.' },
+          reference: { type: Type.STRING, description: 'The transaction reference or ID from the receipt. Pass "unknown" if not found.' }
+        },
+        required: ['amountPaidNaira', 'reference']
+      }
+    },
+    {
       name: 'delegate_task',
       description: 'Delegate a complex task or research request to a specialized sub-agent (Small Language Model). Use this when you need an expert to execute tools or analyze data on your behalf.',
       parameters: {
@@ -202,6 +214,33 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
            accountName: 'Nurur-Rahman Mikail Abiodun',
            instructions: 'Tell the user to transfer their desired amount to this account and send you a screenshot of the receipt. Mention that 100 Naira = 10 Energy Credits. Once they send the receipt, you will manually confirm it.'
         };
+
+      case 'verify_payment_and_topup': {
+        const amountNaira = Number(args.amountPaidNaira);
+        if (isNaN(amountNaira) || amountNaira <= 0) {
+            return { error: "Invalid amount. I could not verify the payment." };
+        }
+        
+        // 100 Naira = 10 Energy Credits. So 10 Naira = 1 Energy Credit.
+        const energyToAdd = Math.floor(amountNaira / 10);
+        if (energyToAdd <= 0) {
+            return { error: `Amount ${amountNaira} Naira is too small to top up.` };
+        }
+
+        try {
+            const newEnergy = await lifeMemory.addEnergy(args.userId, energyToAdd);
+            logger.info({ userId: args.userId, amountNaira, energyToAdd, reference: args.reference }, '✅ Payment verified and energy topped up via Receipt Analysis');
+            return {
+                status: 'success',
+                message: `Payment of ₦${amountNaira} verified! I have successfully added ${energyToAdd} Energy Credits to the wallet.`,
+                newBalance: newEnergy,
+                instructions: `Enthusiastically inform the user that their payment of ₦${amountNaira} was successful and their new balance is ${newEnergy} Energy Credits.`
+            };
+        } catch (e: any) {
+            logger.error({ error: e.message }, 'Failed to top up energy');
+            return { error: "I verified the receipt, but there was a database error adding the energy. Please contact support." };
+        }
+      }
 
       case 'web_search': {
         try {
