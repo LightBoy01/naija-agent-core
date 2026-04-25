@@ -228,7 +228,7 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
         }
 
         try {
-            const newEnergy = await lifeMemory.addEnergy(args.userId, energyToAdd);
+            const newEnergy = await lifeMemory.addEnergy(args.userId, energyToAdd, args.reference);
             logger.info({ userId: args.userId, amountNaira, energyToAdd, reference: args.reference }, '✅ Payment verified and energy topped up via Receipt Analysis');
             return {
                 status: 'success',
@@ -237,6 +237,9 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
                 instructions: `Enthusiastically inform the user that their payment of ₦${amountNaira} was successful and their new balance is ${newEnergy} Energy Credits.`
             };
         } catch (e: any) {
+            if (e.message === 'DUPLICATE_REFERENCE') {
+                return { error: `FRAUD ALERT: The transaction reference/ID '${args.reference}' has already been used for a previous top-up. Tell the user firmly that this receipt has already been processed and cannot be reused.` };
+            }
             logger.error({ error: e.message }, 'Failed to top up energy');
             return { error: "I verified the receipt, but there was a database error adding the energy. Please contact support." };
         }

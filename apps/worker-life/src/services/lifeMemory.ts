@@ -68,15 +68,31 @@ export class LifeMemoryService {
 
   /**
    * Adds energy credits to a user securely using a transaction.
+   * Prevents duplicate top-ups if a unique reference is provided.
    * Returns the new balance.
    */
-  async addEnergy(phone: string, amount: number): Promise<number | null> {
+  async addEnergy(phone: string, amount: number, reference?: string): Promise<number | null> {
     try {
       const db = getDb();
       const docRef = db.collection(this.collection).doc(phone);
       let newBalance: number | null = null;
 
       await db.runTransaction(async (t: any) => {
+        // 1. Idempotency Check
+        if (reference && reference.toLowerCase() !== 'unknown') {
+            const txRef = `energy_topup_${reference}`;
+            const refDoc = await t.get(db.collection('energy_topup_references').doc(txRef));
+            if (refDoc.exists) {
+                throw new Error('DUPLICATE_REFERENCE');
+            }
+            // Burn the reference immediately in the transaction
+            t.set(db.collection('energy_topup_references').doc(txRef), {
+                phone,
+                amount,
+                usedAt: new Date()
+            });
+        }
+
         const doc = await t.get(docRef);
         
         let currentBalance = 0;
@@ -89,9 +105,13 @@ export class LifeMemoryService {
         t.set(docRef, { energyCredits: newBalance, lastInteraction: new Date() }, { merge: true });
       });
 
-      logger.info({ phone, added: amount, newBalance }, '🔋 Energy Added Successfully');
+      logger.info({ phone, added: amount, newBalance, reference }, '🔋 Energy Added Successfully');
       return newBalance;
     } catch (e: any) {
+      if (e.message === 'DUPLICATE_REFERENCE') {
+          logger.warn({ phone, reference }, `Blocked duplicate energy top-up attempt`);
+          throw e; // Re-throw so the tool can tell the user it was already used
+      }
       logger.warn({ phone, error: e.message }, `Energy addition failed`);
       return null;
     }
