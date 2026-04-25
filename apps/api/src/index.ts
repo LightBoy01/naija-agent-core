@@ -485,6 +485,7 @@ fastify.post('/webhook', async (request, reply) => {
             userPhone: from,
             message: jobData.content.text || jobData.content.caption || '', 
             imageId: jobData.content.imageId,
+            audioId: jobData.content.audioId,
             documentId: jobData.content.documentId,
             mimeType: jobData.content.mimeType
         }, {
