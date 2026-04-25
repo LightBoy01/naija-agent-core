@@ -199,13 +199,19 @@ async function getMultimodalEmbedding(
     textContext: string, 
     apiKey: string
 ): Promise<number[]> {
-    const genAI = new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      baseUrl: 'https://aiplatform.googleapis.com',
-      apiVersion: 'v1/publishers/google'
-    }
+  const embeddingKey = process.env.GEMINI_EMBEDDING_API_KEY || apiKey;
+  const useBypass = !process.env.GEMINI_EMBEDDING_API_KEY;
+
+  const genAI = new GoogleGenAI({
+    apiKey: embeddingKey,
+    ...(useBypass ? {
+      httpOptions: {
+        baseUrl: 'https://aiplatform.googleapis.com',
+        apiVersion: 'v1/publishers/google'
+      }
+    } : {})
   });
+
   try {
     const result = await genAI.models.embedContent({
       model: 'gemini-embedding-2',
