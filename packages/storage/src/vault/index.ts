@@ -206,20 +206,20 @@ async function getMultimodalEmbedding(
       apiVersion: 'v1/publishers/google'
     }
   });
-  
-    try {
-      const result = await genAI.models.embedContent({
-        model: 'gemini-embedding-2',
-        contents: [{
-          parts: [
-            { text: textContext },
-            gcsUri ? { fileData: { fileUri: gcsUri, mimeType } } : { inlineData: { data: buffer.toString('base64'), mimeType } }
-          ]
-        }],
-        config: {
-            outputDimensionality: 768
-        }
-      });
+  try {
+    const result = await genAI.models.embedContent({
+      model: 'gemini-embedding-2',
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: textContext },
+          gcsUri ? { fileData: { fileUri: gcsUri, mimeType } } : { inlineData: { data: buffer.toString('base64'), mimeType } }
+        ]
+      }],
+      config: {
+        outputDimensionality: 768
+      }
+    });
       
       return result.embeddings?.[0]?.values || [];
     } catch (e: any) {
