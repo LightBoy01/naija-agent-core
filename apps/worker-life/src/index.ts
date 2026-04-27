@@ -513,19 +513,23 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                     const { primaryModel, fallbackModel, tools, systemInstruction } = await getDynamicModels(systemPrompt);
                     logger.info({ role: 'Orchestrator', model: primaryModel, user: userPhone }, '🧠 Aelixxr Primary routing user message');
 
+                    // --- API GUARD: Prevent crash on empty tool declarations ---
+                    const activeTools = (tools && tools[0]?.functionDeclarations?.length > 0) ? tools : undefined;
+
                     try {
                         chatSession = genAI.chats.create({
                             model: primaryModel,
-                            config: { systemInstruction, tools },
+                            config: { systemInstruction, tools: activeTools },
                             history: chatHistory
                         });
                         result = await chatSession.sendMessage({ message: fullMessage });
                     } catch (primaryError: any) {
+                        console.error('❌ [PRIMARY MODEL ERROR]:', primaryError);
                         if (primaryError.message.includes('429') || primaryError.message.includes('503') || primaryError.message.includes('fetch failed') || primaryError.message.includes('500') || primaryError.message.includes('Quota')) {
                             logger.warn({ error: primaryError.message }, '⚠️ Primary Life Model Failed. Switching to Fallback.');
                             chatSession = genAI.chats.create({
                                 model: fallbackModel,
-                                config: { systemInstruction, tools },
+                                config: { systemInstruction, tools: activeTools },
                                 history: chatHistory
                             });
                             result = await chatSession.sendMessage({ message: fullMessage });
@@ -677,7 +681,11 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                     
                     // --- FALLBACK FOR EMPTY RESPONSES ---
                     if (!text.trim() && (!functionCalls || functionCalls.length === 0)) {
-                        logger.warn({ userPhone }, '⚠️ AI generated an empty response. Using fallback.');
+                        logger.warn({ 
+                            userPhone, 
+                            finishReason: result.candidates?.[0]?.finishReason,
+                            safety: result.candidates?.[0]?.safetyRatings 
+                        }, '⚠️ AI generated an empty response. Safety block?');
                         text = "Oga, I hear you, but my brain slow small. Can you say that again or try a different question?";
                     }
 
@@ -944,9 +952,12 @@ ${resumeMonitors.length > 0 ? JSON.stringify(resumeMonitors) : "None currently a
                     normalizedResumeHistory.pop(); // Pop so the new message becomes the 'user' turn
                 }
 
+                // --- API GUARD: Resume Block ---
+                const activeResumeTools = (resumeTools && resumeTools[0]?.functionDeclarations?.length > 0) ? resumeTools : undefined;
+
                 const resumeChatSession = genAI.chats.create({
                     model: resumePrimary,
-                    config: { systemInstruction: resumePrompt, tools: resumeTools },
+                    config: { systemInstruction: resumePrompt, tools: activeResumeTools },
                     history: normalizedResumeHistory
                 });
 
