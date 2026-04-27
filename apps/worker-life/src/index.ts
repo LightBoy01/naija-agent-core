@@ -880,10 +880,16 @@ Do not output any text after the JSON block.`;
                 let cleanedReport = slmReport;
                 const jsonMatch = slmReport.match(/\{[\s\S]*\}/);
                 if (jsonMatch) {
-                    cleanedReport = jsonMatch[0];
+                    try {
+                        JSON.parse(jsonMatch[0]); // Verify it's actually parsable
+                        cleanedReport = jsonMatch[0];
+                    } catch(e) {
+                        logger.warn({ raw: slmReport }, 'SLM output invalid JSON block. Passing raw text.');
+                        cleanedReport = JSON.stringify({ status: "success", report: slmReport });
+                    }
                 } else {
-                    logger.warn('SLM failed to output valid JSON. Falling back to error report.');
-                    cleanedReport = JSON.stringify({ status: "error", report: "Sub-agent failed to structure the data correctly." });
+                    logger.warn({ raw: slmReport }, 'SLM completely ignored JSON schema. Passing raw text.');
+                    cleanedReport = JSON.stringify({ status: "success", report: slmReport });
                 }
 
                 await lifeQueue.add('life-chat-resume', {
@@ -1017,9 +1023,10 @@ ${resumeRep}
                     if (!finalTxt.trim()) {
                         logger.warn({ 
                             resumePhone, 
-                            finishReason: resumeRes.candidates?.[0]?.finishReason,
-                            safety: resumeRes.candidates?.[0]?.safetyRatings 
-                        }, '⚠️ Resume generated an empty response. Safety block?');
+                            finishReason: resumeRes?.candidates?.[0]?.finishReason,
+                            safety: resumeRes?.candidates?.[0]?.safetyRatings,
+                            rawResponse: extractSafeText(resumeRes)
+                        }, '⚠️ Resume generated an empty response. Safety block or formatting issue?');
                         finalTxt = "Oga, my brain don tire small from all the research. I see wetin we find, but I no fit process am right now. Abeg ask me another question make I wake up!";
                     }
 
