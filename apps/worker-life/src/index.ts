@@ -836,7 +836,9 @@ Do not output any text after the JSON block.`;
                     model: SystemConfig.MODELS.AELIXXR_WORKER,
                     config: {
                         tools: slmTools,
-                        systemInstruction: agentPrompt
+                        systemInstruction: agentPrompt,
+                        responseMimeType: 'application/json',
+                        responseSchema: slmResponseSchema as any
                     }
                 });
 
@@ -986,7 +988,19 @@ ${resumeRep}
 `;
                 
                 try {
-                    const resumeRes = await resumeChatSession.sendMessage({ message: resumeMessage });
+                    let resumeRes;
+                    try {
+                        resumeRes = await resumeChatSession.sendMessage({ message: resumeMessage });
+                    } catch (resError: any) {
+                        logger.warn({ error: resError.message }, '⚠️ Resume Orchestration Failed. Switching to Fallback.');
+                        const fallbackChat = genAI.chats.create({
+                            model: fallbackModel,
+                            config: { systemInstruction: resumePrompt, tools: activeResumeTools },
+                            history: normalizedResumeHistory
+                        });
+                        resumeRes = await fallbackChat.sendMessage({ message: resumeMessage });
+                    }
+
                     let finalTxt = extractSafeText(resumeRes);
                     try {
                         const parsed = JSON.parse(finalTxt);
@@ -997,6 +1011,16 @@ ${resumeRep}
                     finalTxt = finalTxt.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
                     if (finalTxt.includes('<think>')) {
                         finalTxt = finalTxt.split('<think>')[0].trim();
+                    }
+
+                    // --- FALLBACK FOR EMPTY RESPONSES (Resume) ---
+                    if (!finalTxt.trim()) {
+                        logger.warn({ 
+                            resumePhone, 
+                            finishReason: resumeRes.candidates?.[0]?.finishReason,
+                            safety: resumeRes.candidates?.[0]?.safetyRatings 
+                        }, '⚠️ Resume generated an empty response. Safety block?');
+                        finalTxt = "Oga, my brain don tire small from all the research. I see wetin we find, but I no fit process am right now. Abeg ask me another question make I wake up!";
                     }
 
                     logger.info({ response: finalTxt }, '🗣️ Life Companion Replying (Post-SLM)');
