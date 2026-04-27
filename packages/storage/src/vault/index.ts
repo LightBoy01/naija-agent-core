@@ -193,7 +193,7 @@ async function extractMultimodalMetadata(
     return safeParseJSON(text) || { summary: 'Processed File', category: 'Other', tags: [] };
   } catch (e: any) {
     logger.error({ error: e.message }, 'Multimodal metadata extraction failed');
-    return { summary: 'Unprocessed File', category: 'Other', tags: [] };
+    return { summary: 'Unprocessed File', category: 'Other', tags: [], content: `Extraction failed: ${e.message}` };
   }
 }
 
