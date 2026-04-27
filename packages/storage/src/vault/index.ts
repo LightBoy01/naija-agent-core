@@ -358,14 +358,29 @@ export async function ingestNote(
 
 // --- Main: Search Vault ---
 export async function searchVault(userId: string, query: string): Promise<VaultDocument[]> {
+    logger.info({ userId, query }, '🔍 Searching Vault...');
+
+    // --- ID SEARCH OPTIMIZATION (Security Patch: UUID Detection) ---
+    // If the query looks like a UUID, try to fetch it directly first
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(query.trim())) {
+        const doc = await getDb().collection('vault').doc(userId).collection('docs').doc(query.trim()).get();
+        if (doc.exists) {
+            logger.info({ userId, docId: query }, '✅ Found specific document via ID search');
+            return [doc.data() as VaultDocument];
+        }
+    }
+
     const snapshot = await getDb().collection('vault').doc(userId).collection('docs')
         .orderBy('createdAt', 'desc')
-        .limit(100)
+        .limit(100) // Fetch up to 100 for filtering
         .get();
 
     const results = snapshot.docs.map(d => d.data() as VaultDocument);
     const lowerQuery = query.toLowerCase();
-    return results.filter((d: VaultDocument) => 
+    
+    // Filter results
+    const filtered = results.filter((d: VaultDocument) => 
         (d.title && d.title.toLowerCase().includes(lowerQuery)) ||
         d.summary.toLowerCase().includes(lowerQuery) || 
         (d.content && d.content.toLowerCase().includes(lowerQuery)) || 
@@ -373,6 +388,11 @@ export async function searchVault(userId: string, query: string): Promise<VaultD
         (d.extractedData?.issuer && d.extractedData.issuer.toLowerCase().includes(lowerQuery)) ||
         d.tags.some((t: string) => t.toLowerCase().includes(lowerQuery))
     );
+
+    // --- CONTEXT SAFETY: Limit final return to 5 most relevant items ---
+    const finalResults = filtered.slice(0, 5);
+    logger.info({ userId, query, count: finalResults.length }, '✅ Search completed');
+    return finalResults;
 }
 
 // --- Main: Delete from Vault ---

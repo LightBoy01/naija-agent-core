@@ -198,37 +198,45 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
         return { error: 'Oga, I need the exact Document ID to delete it. Please use the search tool first to find the right ID.' };
     }
 
+    let toolResult: any;
+
     switch (name) {
       case 'generate_quiz':
-        return await studyBuddy.generateQuiz(args.subject, args.topic, args.level);
+        toolResult = await studyBuddy.generateQuiz(args.subject, args.topic, args.level);
+        break;
 
       case 'search_vault':
-        return await searchVault(args.userId, args.query);
+        toolResult = await searchVault(args.userId, args.query);
+        break;
 
       case 'save_note':
         const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || 'mock-key';
-        return await ingestNote(args.userId, args.note, apiKey);
+        toolResult = await ingestNote(args.userId, args.note, apiKey);
+        break;
 
       case 'delete_from_vault':
-        return await deleteFromVault(args.userId, args.docId);
+        toolResult = await deleteFromVault(args.userId, args.docId);
+        break;
 
       case 'generate_invite':
         const botPhone = process.env.AELIXXR_PHONE_ID_DISPLAY || '2347042310893'; // Fallback to test number
         const encodedText = encodeURIComponent(`Hi Aelixxr! My friend ${args.userId} invited me. Let's chat!`);
-        return { 
+        toolResult = { 
            status: 'success', 
            inviteLink: `https://wa.me/${botPhone}?text=${encodedText}`,
            instructions: 'Tell the user to share this link. When their friend sends the pre-filled message, both will receive 10 extra Energy Credits!'
         };
+        break;
 
       case 'get_recharge_details':
-        return {
+        toolResult = {
            status: 'success',
            accountNumber: '7055229084',
            bankName: 'Opay',
            accountName: 'Nurur-Rahman Mikail Abiodun',
            instructions: 'Tell the user to transfer their desired amount to this account and send you a screenshot of the receipt. Mention that 100 Naira = 10 Energy Credits. Once they send the receipt, you will manually confirm it.'
         };
+        break;
 
       case 'verify_payment_and_topup': {
         const reference = args.reference;
@@ -258,7 +266,7 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
         try {
             const newEnergy = await lifeMemory.addEnergy(args.userId, energyToAdd, reference);
             logger.info({ userId: args.userId, verifiedAmountNaira, energyToAdd, reference }, '✅ Payment verified via Backend Truth and energy topped up');
-            return {
+            toolResult = {
                 status: 'success',
                 message: `Payment of ₦${verifiedAmountNaira} verified against the gateway! I have added ${energyToAdd} Energy Credits to the wallet.`,
                 newBalance: newEnergy,
@@ -266,11 +274,13 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
             };
         } catch (e: any) {
             if (e.message === 'DUPLICATE_REFERENCE') {
-                return { error: `FRAUD ALERT: The transaction reference '${reference}' has already been used for a previous top-up. Tell the user firmly that this receipt has already been processed and cannot be reused.` };
+                toolResult = { error: `FRAUD ALERT: The transaction reference '${reference}' has already been used for a previous top-up. Tell the user firmly that this receipt has already been processed and cannot be reused.` };
+            } else {
+                logger.error({ error: e.message }, 'Failed to top up energy');
+                toolResult = { error: "I verified the receipt, but there was a database error adding the energy. Please contact support." };
             }
-            logger.error({ error: e.message }, 'Failed to top up energy');
-            return { error: "I verified the receipt, but there was a database error adding the energy. Please contact support." };
         }
+        break;
       }
 
       case 'web_search': {
@@ -280,57 +290,59 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
           const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || '';
           
           if (!apiKey) {
-            return { error: "I no fit search right now, my access key dey missing." };
-          }
+            toolResult = { error: "I no fit search right now, my access key dey missing." };
+          } else {
+              // Use the global endpoint bypass to get preview models via Vertex without OAuth
+              const searchGenAI = new GoogleGenAI({ 
+                apiKey,
+                httpOptions: {
+                  baseUrl: 'https://aiplatform.googleapis.com',
+                  apiVersion: 'v1/publishers/google'
+                }
+              });
+              
+              const trySearch = async (modelName: string) => {
+                const searchResult = await searchGenAI.models.generateContent({
+                  model: modelName,
+                  contents: [{ role: 'user', parts: [{ text: `Search for: ${args.query}. Summarize the key facts, prices, or news found. DO NOT output your search plan, internal reasoning, or introductory filler. Provide ONLY the final summary.` }] }],
+                  config: {
+                    tools: [{ googleSearch: {} }] as any
+                  }
+                });
+                
+                let text = "";
+                if (searchResult.candidates?.[0]?.content?.parts) {
+                    text = searchResult.candidates[0].content.parts.filter((p: any) => p.text).map((p: any) => p.text).join("");
+                } else {
+                    text = searchResult.text || "";
+                }
+                text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+                return text;
+              };
 
-          // Use the global endpoint bypass to get preview models via Vertex without OAuth
-          const searchGenAI = new GoogleGenAI({ 
-            apiKey,
-            httpOptions: {
-              baseUrl: 'https://aiplatform.googleapis.com',
-              apiVersion: 'v1/publishers/google'
-            }
-          });
-          
-          const trySearch = async (modelName: string) => {
-            const searchResult = await searchGenAI.models.generateContent({
-              model: modelName,
-              contents: [{ role: 'user', parts: [{ text: `Search for: ${args.query}. Summarize the key facts, prices, or news found. DO NOT output your search plan, internal reasoning, or introductory filler. Provide ONLY the final summary.` }] }],
-              config: {
-                tools: [{ googleSearch: {} }] as any
+              try {
+                // Tier 1: Primary Worker Model
+                const summary = await trySearch(SystemConfig.MODELS.AELIXXR_WORKER);
+                toolResult = { status: 'success', result: summary };
+              } catch (firstTryErr: any) {
+                 if (firstTryErr.message.includes('429') || firstTryErr.message.includes('503') || firstTryErr.message.includes('fetch failed') || firstTryErr.message.includes('500') || firstTryErr.message.includes('limit')) {
+                    logger.warn(`🔄 [LIFE SEARCH FALLBACK] Quota Exceeded or Model Busy. Retrying with Fallback...`);
+                    // Tier 2: Fallback (Reliability)
+                    const secondSummary = await trySearch(SystemConfig.MODELS.AELIXXR_FALLBACK);
+                    toolResult = { status: 'success', result: secondSummary };
+                 } else {
+                    throw firstTryErr;
+                 }
               }
-            });
-            
-            let text = "";
-            if (searchResult.candidates?.[0]?.content?.parts) {
-                text = searchResult.candidates[0].content.parts.filter((p: any) => p.text).map((p: any) => p.text).join("");
-            } else {
-                text = searchResult.text || "";
-            }
-            text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-            return text;
-          };
-
-          try {
-            // Tier 1: Primary Worker Model
-            const summary = await trySearch(SystemConfig.MODELS.AELIXXR_WORKER);
-            return { status: 'success', result: summary };
-          } catch (firstTryErr: any) {
-             if (firstTryErr.message.includes('429') || firstTryErr.message.includes('503') || firstTryErr.message.includes('fetch failed') || firstTryErr.message.includes('500') || firstTryErr.message.includes('limit')) {
-                logger.warn(`🔄 [LIFE SEARCH FALLBACK] Quota Exceeded or Model Busy. Retrying with Fallback...`);
-                // Tier 2: Fallback (Reliability)
-                const secondSummary = await trySearch(SystemConfig.MODELS.AELIXXR_FALLBACK);
-                return { status: 'success', result: secondSummary };
-             }
-             throw firstTryErr;
           }
         } catch (err: any) {
-        logger.error({ error: err.message }, 'Web Search Failed');
-        return { error: 'Oga, I don search tire for today! I don reach my limit for now.' };
+            logger.error({ error: err.message }, 'Web Search Failed');
+            toolResult = { error: 'Oga, I don search tire for today! I don reach my limit for now.' };
         }
-        }
+        break;
+      }
 
-        case 'log_feedback': {
+      case 'log_feedback': {
           const { userId, sessionId, originalMessage, sentiment, feedbackType, learnedRule, internalNote } = args;
 
           // 1. Rate Limiting Check (Max once per hour)
@@ -351,68 +363,71 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
 
           if (lastFeedback && !isNaN(lastFeedback.getTime()) && (now.getTime() - lastFeedback.getTime() < 3600000)) {
              logger.info({ userId }, '⏳ [FEEDBACK] Rate limited, skipping duplicate log.');
-             return { status: 'skipped', reason: 'Rate limited (max 1 per hour)' };
-          }
-        // 2. Redact PII from user message
-        const redactedMessage = redactPII(originalMessage || '');
+             toolResult = { status: 'skipped', reason: 'Rate limited (max 1 per hour)' };
+          } else {
+            // 2. Redact PII from user message
+            const redactedMessage = redactPII(originalMessage || '');
 
-        // 3. Save Feedback Event to Firestore
-        const db = getDb();
-        const feedbackId = `${userId}_${now.getTime()}`;
-        const feedbackEvent: Partial<FeedbackEvent> = {
-        id: feedbackId,
-        userId,
-        sessionId,
-        timestamp: now,
-        sentiment: sentiment as any,
-        feedbackType: feedbackType as any,
-        userMessage: redactedMessage,
-        aiContext: internalNote || 'Auto-detected sentiment'
-        };
-
-        await db.collection('agent_feedback').doc(feedbackId).set(feedbackEvent);
-
-        // --- SOVEREIGN SNITCH: Negative Feedback Alert ---
-        if (sentiment === 'negative') {
-           try {
-              const masterPhone = process.env.MASTER_ADMIN_PHONE || '2347042310893';
-              const snitchMsg = `⚠️ *AELIXXR NEGATIVE FEEDBACK*\n\n*User:* ${userId}\n*Sentiment:* ${sentiment}\n*Type:* ${feedbackType}\n\n*Message:* ${redactedMessage}\n\nOga, user is frustrated. Please check the chat history.`;
-              await whatsappService.sendText(masterPhone, snitchMsg);
-              logger.info({ userId }, '🚨 [SNITCH] Negative feedback reported to Boss.');
-           } catch (snitchErr: any) {
-              logger.error({ error: snitchErr.message }, 'Failed to snitch negative feedback');
-           }
-        }
-
-        // 4. Update LifeContext (Learned Rule & Rate Limit Timestamp)
-
-        const updates: any = { lastFeedbackAt: now };
-
-        if (learnedRule) {
-         const safeRule = sanitizeLearnedRule(learnedRule);
-         if (safeRule) {
-            const currentRules = context.communicationPreferences?.customRules || [];
-            updates.communicationPreferences = {
-               ...context.communicationPreferences,
-               customRules: Array.from(new Set([...currentRules, safeRule]))
+            // 3. Save Feedback Event to Firestore
+            const db = getDb();
+            const feedbackId = `${userId}_${now.getTime()}`;
+            const feedbackEvent: Partial<FeedbackEvent> = {
+            id: feedbackId,
+            userId,
+            sessionId,
+            timestamp: now,
+            sentiment: sentiment as any,
+            feedbackType: feedbackType as any,
+            userMessage: redactedMessage,
+            aiContext: internalNote || 'Auto-detected sentiment'
             };
-         }
+
+            await db.collection('agent_feedback').doc(feedbackId).set(feedbackEvent);
+
+            // --- SOVEREIGN SNITCH: Negative Feedback Alert ---
+            if (sentiment === 'negative') {
+               try {
+                  const masterPhone = process.env.MASTER_ADMIN_PHONE || '2347042310893';
+                  const snitchMsg = `⚠️ *AELIXXR NEGATIVE FEEDBACK*\n\n*User:* ${userId}\n*Sentiment:* ${sentiment}\n*Type:* ${feedbackType}\n\n*Message:* ${redactedMessage}\n\nOga, user is frustrated. Please check the chat history.`;
+                  await whatsappService.sendText(masterPhone, snitchMsg);
+                  logger.info({ userId }, '🚨 [SNITCH] Negative feedback reported to Boss.');
+               } catch (snitchErr: any) {
+                  logger.error({ error: snitchErr.message }, 'Failed to snitch negative feedback');
+               }
+            }
+
+            // 4. Update LifeContext (Learned Rule & Rate Limit Timestamp)
+            const updates: any = { lastFeedbackAt: now };
+
+            if (learnedRule) {
+             const safeRule = sanitizeLearnedRule(learnedRule);
+             if (safeRule) {
+                const currentRules = context.communicationPreferences?.customRules || [];
+                updates.communicationPreferences = {
+                   ...context.communicationPreferences,
+                   customRules: Array.from(new Set([...currentRules, safeRule]))
+                };
+             }
+            }
+
+            await lifeMemory.updateContext(userId, updates);
+            toolResult = { 
+             status: 'success', 
+             message: 'Oga, I don carry your feedback go store. I go adjust for you next time!' 
+            };
+          }
+          break;
         }
 
-        await lifeMemory.updateContext(userId, updates);
-
-        return { 
-         status: 'success', 
-         message: 'Oga, I don carry your feedback go store. I go adjust for you next time!' 
-        };
-        }
-
-        default:
+      default:
         // Try fallback to MCP dynamically loaded tools
-
         logger.info({ tool: name }, 'Tool not found locally, attempting MCP execution');
-        return await mcpClient.executeTool(name, args);
-        }
+        toolResult = await mcpClient.executeTool(name, args);
+        break;
+    }
+
+    logger.info({ tool: name }, '✅ Tool execution completed successfully');
+    return toolResult;
 
   } catch (error: any) {
     logger.error({ tool: name, error: error.message }, '❌ Tool Execution Failed');

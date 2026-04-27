@@ -636,9 +636,11 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                             // Return the tool results to the AI model so it can formulate a final answer
                             let followUpResult;
                             try {
+                                logger.info({ toolCount: toolResponses.length }, '📤 Sending tool results back to Primary AI');
                                 followUpResult = await chatSession.sendMessage({
                                     message: toolResponses
                                 });
+                                logger.info('📥 Received final response from Primary AI after tool execution');
                             } catch (toolError: any) {
                                 if (toolError.message.includes('429') || toolError.message.includes('503') || toolError.message.includes('fetch failed') || toolError.message.includes('500') || toolError.message.includes('Quota')) {
                                     logger.warn('⚠️ Primary Life Model Failed on Tool Response. Switching to Fallback.');
