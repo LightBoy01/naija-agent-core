@@ -419,8 +419,7 @@ const worker = new Worker(
                                    caption: message, 
                                    originalMediaId: mediaId
                                });
-                               ingestionSummary = `\n\n[SYSTEM UPDATE]: I have saved this document to your Vault.\nTitle: ${doc.title}\nCategory: ${doc.type}\nSummary: ${doc.summary}\nID: ${doc.id}`;
-                               logger.info({ docId: doc.id }, '✅ Saved to Vault');
+                               ingestionSummary = `\n\n[SYSTEM UPDATE]: I have saved this document to your Vault.\nTitle: ${doc.title}\nCategory: ${doc.type}\nSummary: ${doc.summary}\nForensic Analysis: ${doc.extractedData?.forensicAnalysis || 'Not performed'}\nID: ${doc.id}`;                               logger.info({ docId: doc.id }, '✅ Saved to Vault');
 
                                await lifeMemory.saveEpisodicEvent(
                                    userPhone,
@@ -523,7 +522,7 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                         result = await chatSession.sendMessage({ message: fullMessage });
                     } catch (primaryError: any) {
                         if (primaryError.message.includes('429') || primaryError.message.includes('503') || primaryError.message.includes('fetch failed') || primaryError.message.includes('500') || primaryError.message.includes('Quota')) {
-                            logger.warn('⚠️ Primary Life Model Failed. Switching to Fallback.');
+                            logger.warn({ error: primaryError.message }, '⚠️ Primary Life Model Failed. Switching to Fallback.');
                             chatSession = genAI.chats.create({
                                 model: fallbackModel,
                                 config: { systemInstruction, tools },
@@ -990,7 +989,7 @@ ${resumeRep}
                     
                     return { success: true, reply: finalTxt };
                 } catch(e: any) {
-                    logger.error('Failed to resume life chat', e);
+                    logger.error({ error: e.message }, 'Failed to resume life chat');
                     
                     // --- SOVEREIGN SNITCH: Brain Freeze Alert (Resume) ---
                     try {

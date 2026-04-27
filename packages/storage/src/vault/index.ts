@@ -55,6 +55,7 @@ export const VaultDocumentSchema = z.object({
     receiver: z.string().optional(),
     reference: z.string().optional(),
     duration: z.number().optional(),
+    forensicAnalysis: z.string().optional(),
   }),
   storageUrl: z.string().optional(), // Public/Signed URL (Cloudinary or GCS)
   gcsUri: z.string().optional(), // gs:// path if on GCS
@@ -166,6 +167,7 @@ async function extractMultimodalMetadata(
     "receiver": "Name of the recipient or null",
     "reference": "Any ID or reference found or null",
     "duration": Number or null,
+    "forensicAnalysis": "Strict forensic evaluation (Tampering detection, font consistency, alignment check). If it's a receipt, state 'PASS' or 'FAIL' and provide reasons.",
     "tags": ["List", "of", "5-10", "search", "keywords"]
   }
   RETURN JSON ONLY, no markdown formatting blocks.
