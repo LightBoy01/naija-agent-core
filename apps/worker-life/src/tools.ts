@@ -136,7 +136,8 @@ export const STATIC_LIFE_TOOLS: Tool = {
       parameters: {
         type: Type.OBJECT,
         properties: {
-          reference: { type: Type.STRING, description: 'The unique transaction reference or ID from the receipt (e.g. from OPay, Monnify, or Paystack).' }
+          reference: { type: Type.STRING, description: 'The unique transaction reference or ID from the receipt (e.g. from OPay, Monnify, or Paystack).' },
+          amountPaidNaira: { type: Type.NUMBER, description: 'Optional. The amount shown on the receipt in Naira.' }
         },
         required: ['reference']
       }
@@ -258,27 +259,36 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
 
       case 'verify_payment_and_topup': {
         const reference = args.reference;
-        if (!reference || reference === 'unknown' || reference.length < 5) {
+        const amountNaira = Number(args.amountPaidNaira || 0);
+
+        if (!reference || reference === 'unknown' || reference === 'null' || reference.length < 5) {
+            if (amountNaira > 0) {
+                logger.warn({ userId: args.userId, amountNaira }, '💳 [SECURITY] Receipt found but reference ID missing. Marking for Manual Review.');
+                return { 
+                    status: 'pending', 
+                    message: `Oga, I see say you pay ₦${amountNaira}, but I no fit find the clear Transaction ID on the receipt. I don log am for the Boss to check and approve manually for you. I go let you know once e done!`,
+                    instructions: "Inform the user that the receipt is logged for manual review because the reference ID was unclear."
+                };
+            }
             return { error: "Oga, I couldn't find a clear transaction reference on this receipt. Please make sure the ID is visible so I can verify it." };
         }
 
         logger.info({ userId: args.userId, reference }, '💳 [SECURITY] AI requested payment verification. Fetching truth from backend...');
         
         // --- SECURE BACKEND VERIFICATION (Simulation) ---
-        // In a live environment, this would call Monnify/Paystack API: `GET /verify/${reference}`
-        // For now, we simulate a successful verification if the reference isn't a known "hack" string.
         let verifiedAmountNaira = 0;
         
         if (reference.startsWith('TEST_')) {
-             verifiedAmountNaira = 1000; // Simulated test amount
+             verifiedAmountNaira = 1000; 
         } else if (reference.includes('HACK') || reference.includes('DEBUG')) {
-             return { error: "FRAUD ALERT: This transaction reference looks like a test or manual override attempt. I cannot process this." };
+             return { error: "FRAUD ALERT: This transaction reference looks like a test attempt. I cannot process this." };
         } else {
-             // Simulate a random real-looking payment for the demo (normally would be a real API call)
-             verifiedAmountNaira = 2000; 
+             // If the AI extracted an amount, use it as the 'truth' for the demo, 
+             // but in real life, we fetch it from the Bank API via the reference.
+             verifiedAmountNaira = amountNaira > 0 ? amountNaira : 2000; 
         }
 
-        // 100 Naira = 10 Energy Credits. So 10 Naira = 1 Energy Credit.
+        // 100 Naira = 10 Energy Credits.
         const energyToAdd = Math.floor(verifiedAmountNaira / 10);
 
         try {
@@ -292,10 +302,10 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
             };
         } catch (e: any) {
             if (e.message === 'DUPLICATE_REFERENCE') {
-                toolResult = { error: `FRAUD ALERT: The transaction reference '${reference}' has already been used for a previous top-up. Tell the user firmly that this receipt has already been processed and cannot be reused.` };
+                toolResult = { error: `FRAUD ALERT: The transaction reference '${reference}' has already been used for a previous top-up. Tell the user firmly that this receipt has already been processed.` };
             } else {
                 logger.error({ error: e.message }, 'Failed to top up energy');
-                toolResult = { error: "I verified the receipt, but there was a database error adding the energy. Please contact support." };
+                toolResult = { error: "I verified the receipt, but there was a database error adding the energy." };
             }
         }
         break;

@@ -165,7 +165,7 @@ async function extractMultimodalMetadata(
     "date": "YYYY-MM-DD or null",
     "issuer": "Name of the issuer or null",
     "receiver": "Name of the recipient or null",
-    "reference": "Any ID or reference found or null",
+    "reference": "The unique Transaction Reference/ID. LOOK CLOSELY for strings like 'Ref:', 'Txn ID:', 'Session ID:', or a long 10-20 digit sequence. Return null if absolutely not found.",
     "duration": Number or null,
     "forensicAnalysis": "Strict forensic evaluation (Tampering detection, font consistency, alignment check). If it's a receipt, state 'PASS' or 'FAIL' and provide reasons.",
     "tags": ["List", "of", "5-10", "search", "keywords"]
