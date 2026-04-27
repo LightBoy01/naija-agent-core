@@ -61,6 +61,7 @@ const TOOL_COSTS: Record<string, number> = {
     'get_recharge_details': 0,
     'log_feedback': 0,
     'web_search': 3000,
+    'create_reminder': 0,
 };
 
 // --- Redis Configuration for Life Engine (LOS) ---
