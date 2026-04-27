@@ -34,7 +34,7 @@ export const SystemConfig = {
 
         // --- AELIXXR (Life) ---
         AELIXXR_PRIMARY: 'gemini-3-flash-preview',
-        AELIXXR_WORKER: 'gemini-3.1-flash-lite-preview',
+        AELIXXR_WORKER: 'gemini-3.1-flash-lite-preview', 
         AELIXXR_FALLBACK: 'gemini-2.5-flash',
 
         // --- ROUTER (Gateway) ---

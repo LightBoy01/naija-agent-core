@@ -509,6 +509,7 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                     fullMessage = fullMessage + ingestionSummary + referralSummary;
 
                     const { primaryModel, fallbackModel, tools, systemInstruction } = await getDynamicModels(systemPrompt);
+                    logger.info({ role: 'Orchestrator', model: primaryModel, user: userPhone }, '🧠 Aelixxr Primary routing user message');
 
                     try {
                         chatSession = genAI.chats.create({
@@ -727,6 +728,7 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
             case 'execute-slm-task':
                 logger.info('🤖 Starting SLM Worker...');
                 const { sector, instruction: slmInst, originalMessage: slmOrig, userPhone: slmPhone, chatId: slmChatId } = job.data;
+                logger.info({ role: 'Sub-Agent', sector: sector, model: SystemConfig.MODELS.AELIXXR_WORKER }, '🤖 SLM Worker starting task');
                 
                 let agentPrompt = '';
                 try {
@@ -754,8 +756,33 @@ Do not output any text after the JSON block.`;
 
                 const fullInstruction = `
                 [USER_ID]: ${slmPhone}
-                [INSTRUCTION]: ${slmInst}
+                <untrusted_user_instruction>
+                ${slmInst}
+                </untrusted_user_instruction>
                 `;
+
+                // --- TOOL SCOPING (Security Patch: Confused Deputy) ---
+                const rawTools = globalLifeTools || await getLifeTools();
+                let slmTools = rawTools;
+                
+                if (rawTools && rawTools[0]?.functionDeclarations) {
+                    const allDecls = rawTools[0].functionDeclarations;
+                    let allowedNames: string[] = [];
+
+                    if (sector === 'EducationPack') {
+                        allowedNames = ['generate_quiz', 'web_search'];
+                    } else if (sector === 'ResearchPack') {
+                        allowedNames = ['web_search', 'fetch_webpage'];
+                    } else if (sector === 'LifePack') {
+                        allowedNames = ['search_vault', 'save_note', 'delete_from_vault'];
+                    } else if (sector === 'CommercePack') {
+                        allowedNames = ['web_search'];
+                    }
+
+                    const filteredDecls = allDecls.filter(d => allowedNames.includes(d.name));
+                    slmTools = [{ functionDeclarations: filteredDecls }];
+                    logger.info({ sector, allowedCount: filteredDecls.length }, '🔒 SLM Tool Scoping applied');
+                }
 
                 const slmResponseSchema = {
                     type: Type.OBJECT,
@@ -791,7 +818,7 @@ Do not output any text after the JSON block.`;
                 const slmChat = genAI.chats.create({
                     model: SystemConfig.MODELS.AELIXXR_WORKER,
                     config: {
-                        tools: globalLifeTools || await getLifeTools(),
+                        tools: slmTools,
                         systemInstruction: agentPrompt
                     }
                 });

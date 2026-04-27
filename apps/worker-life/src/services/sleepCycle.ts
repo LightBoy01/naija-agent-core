@@ -93,8 +93,11 @@ If there is nothing new to learn, output an empty object {}.
                 }
             });
 
+            const modelName = SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-2.5-flash';
+            logger.info({ role: 'Background', model: modelName }, '💤 Sleep Cycle extracting memory');
+
             const model = genAI.models.generateContent({
-                model: SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-2.5-flash',
+                model: modelName,
                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
                 config: {
                     responseMimeType: 'application/json',

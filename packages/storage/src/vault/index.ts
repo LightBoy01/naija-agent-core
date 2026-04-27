@@ -173,8 +173,11 @@ async function extractMultimodalMetadata(
   `;
 
   try {
+    const modelName = SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3.1-flash-lite-preview';
+    logger.info({ role: 'Multimodal', model: modelName }, '🖼️ Extracting file metadata');
+    
     const result = await genAI.models.generateContent({
-      model: SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3.1-flash-lite-preview',
+      model: modelName,
       contents: [{
         role: 'user',
         parts: [
@@ -213,8 +216,11 @@ async function getMultimodalEmbedding(
   });
 
   try {
+    const modelName = 'gemini-embedding-2';
+    logger.info({ role: 'Embedding', model: modelName }, '🧬 Generating vector embedding');
+
     const result = await genAI.models.embedContent({
-      model: 'gemini-embedding-2',
+      model: modelName,
       contents: [{
         role: 'user',
         parts: [
@@ -320,7 +326,7 @@ export async function ingestNote(
   let analysis = { title: 'Note', summary: 'Saved Note', category: 'Note', tags: [] };
   try {
     const result = await genAI.models.generateContent({
-        model: SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3.1-flash-lite-preview',
+        model: SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3-flash-preview',
         contents: [{ role: 'user', parts: [{ text: prompt }] }]
     });
     analysis = safeParseJSON(result.text || "") || analysis;
