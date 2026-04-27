@@ -258,6 +258,15 @@ const worker = new Worker(
                 try {
                     const { shouldMessage, contextData } = await heartbeatService.evaluateConfig(config);
                     if (shouldMessage) {
+                        // --- DETERMINISTIC OPTIMIZATION: Bypass LLM for Pre-drafted Reminders ---
+                        if ((contextData as any).deterministic && (contextData as any).payload) {
+                            const payload = (contextData as any).payload;
+                            logger.info({ userId }, '🚀 Sending deterministic scheduled reminder...');
+                            await whatsappService.sendText(userId, payload);
+                            await heartbeatService.deactivateConfig(userId, config.id, 'completed');
+                            return { success: true, mode: 'deterministic' };
+                        }
+
                         const context = await lifeMemory.getContext(userId);
                         const systemPrompt = `
                         You are "Aelixxr", the Life Companion.

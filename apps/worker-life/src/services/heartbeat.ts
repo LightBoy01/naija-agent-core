@@ -52,23 +52,72 @@ class HeartbeatService {
    * Evaluates if a heartbeat should trigger a message.
    */
   async evaluateConfig(config: any): Promise<{ shouldMessage: boolean, contextData: any }> {
-      // Fetch required data based on config
+      // Deterministic Check: If it's a scheduled reminder
+      if (config.type === 'reminder' && config.triggerTime) {
+          const now = Date.now();
+          if (now >= config.triggerTime && config.status === 'pending') {
+              return { shouldMessage: true, contextData: { deterministic: true, payload: config.messagePayload } };
+          }
+          return { shouldMessage: false, contextData: {} };
+      }
+
+      // Polling Check: Fetch required data based on config
       let contextData = {};
       try {
           if (config.type === 'market') {
               contextData = await executeLifeTool('get_market_prices', {});
           }
-          // Add other data sources here (e.g., weather, calendar)
       } catch (error: any) {
           logger.error({ error: error.message, configType: config.type }, 'Failed to gather context for heartbeat');
       }
 
-      // For now, we will let the AI decide if it should message based on the gathered data
       return { shouldMessage: true, contextData };
   }
 
   /**
-   * Creates a new heartbeat configuration for a user.
+   * Creates a deterministic reminder.
+   */
+  async createReminder(userId: string, triggerTime: number, messagePayload: string): Promise<any> {
+      try {
+          const db = getFirestore();
+          const docRef = db.collection('users').doc(userId).collection('heartbeats').doc();
+          
+          const config = {
+              type: 'reminder',
+              triggerTime,
+              messagePayload,
+              status: 'pending',
+              active: true,
+              createdAt: Date.now()
+          };
+          
+          await docRef.set(config);
+          logger.info({ userId, configId: docRef.id, triggerTime }, '✅ Created new deterministic reminder');
+          return { id: docRef.id, ...config };
+      } catch (error: any) {
+          logger.error({ error: error.message, userId }, '❌ Failed to create reminder');
+          return { error: error.message };
+      }
+  }
+
+  /**
+   * Marks a heartbeat/reminder as completed or inactive.
+   */
+  async deactivateConfig(userId: string, configId: string, status: 'completed' | 'cancelled' = 'completed'): Promise<void> {
+      try {
+          const db = getFirestore();
+          await db.collection('users').doc(userId).collection('heartbeats').doc(configId).update({
+              active: false,
+              status,
+              updatedAt: Date.now()
+          });
+      } catch (error: any) {
+          logger.error({ error: error.message, userId, configId }, 'Failed to deactivate config');
+      }
+  }
+
+  /**
+   * Creates a new heartbeat configuration for a user (Legacy/Polling).
    */
   async createHeartbeat(userId: string, type: string, query: string, intervalDescription: string): Promise<any> {
       try {

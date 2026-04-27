@@ -76,6 +76,18 @@ export const STATIC_LIFE_TOOLS: Tool = {
       }
     },
     {
+      name: 'create_reminder',
+      description: 'Schedule a proactive WhatsApp message to be sent to the user at a specific time in the future. Use this when the user says "Remind me to...", "Tell me when it is...", or asks to be alerted about something later. You MUST calculate the exact triggerTime (UNIX timestamp in milliseconds) and draft a friendly messagePayload.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          triggerTime: { type: Type.NUMBER, description: 'The exact UNIX timestamp in milliseconds when the message should be sent (e.g. 1777264222020).' },
+          messagePayload: { type: Type.STRING, description: 'The friendly message to send to the user (e.g. "Oga, time don reach to study Biochemistry!").' }
+        },
+        required: ['triggerTime', 'messagePayload']
+      }
+    },
+    {
       name: 'save_note',
       description: 'Save a text-based memory or note to the Vault. Use this when the user says "Remember this", "Save this note", or tells you a fact they want to recall later.',
       parameters: {
@@ -197,6 +209,7 @@ export async function getOrchestratorTools(): Promise<Tool[]> {
   const allowedNames = [
     'delegate_task', 
     'save_note', 
+    'create_reminder',
     'log_feedback', 
     'get_recharge_details', 
     'generate_invite'
@@ -231,6 +244,10 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
       case 'save_note':
         const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || 'mock-key';
         toolResult = await ingestNote(args.userId, args.note, apiKey);
+        break;
+
+      case 'create_reminder':
+        toolResult = await heartbeatService.createReminder(args.userId, args.triggerTime, args.messagePayload);
         break;
 
       case 'delete_from_vault':
