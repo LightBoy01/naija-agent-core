@@ -280,7 +280,8 @@ export async function ingestDocument(
       issuer: analysis.issuer,
       receiver: analysis.receiver,
       reference: analysis.reference,
-      duration: analysis.duration
+      duration: analysis.duration,
+      forensicAnalysis: analysis.forensicAnalysis
     },
     storageUrl: url,
     gcsUri,

@@ -419,7 +419,12 @@ const worker = new Worker(
                                    caption: message, 
                                    originalMediaId: mediaId
                                });
-                               ingestionSummary = `\n\n[SYSTEM UPDATE]: I have saved this document to your Vault.\nTitle: ${doc.title}\nCategory: ${doc.type}\nSummary: ${doc.summary}\nForensic Analysis: ${doc.extractedData?.forensicAnalysis || 'Not performed'}\nID: ${doc.id}`;                               logger.info({ docId: doc.id }, '✅ Saved to Vault');
+                               const forensicResult = doc.extractedData?.forensicAnalysis || 'Not performed';
+                               const forensicAlert = forensicResult.toUpperCase().includes('PASS') 
+                                   ? `\n🚨 [SYSTEM VERIFICATION]: PRE-SCREENED & AUTHENTIC. (Do not ask for image again).`
+                                   : `\n⚠️ [SYSTEM WARNING]: ${forensicResult}`;
+
+                               ingestionSummary = `\n\n[SYSTEM UPDATE]: I have saved this document to your Vault.\nTitle: ${doc.title}\nCategory: ${doc.type}\nSummary: ${doc.summary}\nForensic Analysis: ${forensicResult}${forensicAlert}\nID: ${doc.id}`;                               logger.info({ docId: doc.id }, '✅ Saved to Vault');
 
                                await lifeMemory.saveEpisodicEvent(
                                    userPhone,
