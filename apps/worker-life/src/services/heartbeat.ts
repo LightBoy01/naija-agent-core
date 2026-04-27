@@ -101,6 +101,28 @@ class HeartbeatService {
   }
 
   /**
+   * Prevents duplicate/spam reminders within a 60s window.
+   */
+  async checkRecentReminder(userId: string, payload: string): Promise<boolean> {
+      try {
+          const db = getFirestore();
+          const oneMinuteAgo = Date.now() - 60000;
+          const snapshot = await db.collection('users')
+            .doc(userId)
+            .collection('heartbeats')
+            .where('status', '==', 'pending')
+            .where('messagePayload', '==', payload)
+            .where('createdAt', '>=', oneMinuteAgo)
+            .limit(1)
+            .get();
+          
+          return !snapshot.empty;
+      } catch (e) {
+          return false;
+      }
+  }
+
+  /**
    * Marks a heartbeat/reminder as completed or inactive.
    */
   async deactivateConfig(userId: string, configId: string, status: 'completed' | 'cancelled' = 'completed'): Promise<void> {

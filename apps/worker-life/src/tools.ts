@@ -247,7 +247,33 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
         break;
 
       case 'create_reminder':
-        toolResult = await heartbeatService.createReminder(args.userId, args.triggerTime, args.messagePayload);
+        const triggerTime = Number(args.triggerTime);
+        const delay = Math.max(0, triggerTime - Date.now());
+        
+        // --- ECHO SHIELD: Prevent duplicate reminders for the same user within 60 seconds ---
+        const recentReminder = await heartbeatService.checkRecentReminder(args.userId, args.messagePayload);
+        if (recentReminder) {
+            return { status: 'success', message: 'I already have this nudge active o! No need to set am again.' };
+        }
+
+        toolResult = await heartbeatService.createReminder(args.userId, triggerTime, args.messagePayload);
+        
+        // --- HIGH RELIABILITY: Direct Queue Nudge ---
+        // For short-term reminders (under 24 hours), we also add a delayed job directly to the queue
+        // so it works even if the CRON is slow.
+        if (delay < 1000 * 60 * 60 * 24) {
+            const { lifeQueue } = await import('./index.js');
+            await lifeQueue.add('evaluate-heartbeat', {
+                userId: args.userId,
+                config: { ...toolResult, id: toolResult.id },
+                timestamp: Date.now()
+            }, {
+                delay,
+                jobId: `nudge-${args.userId}-${toolResult.id}`,
+                removeOnComplete: true
+            });
+            logger.info({ userId: args.userId, delay }, '⚡ High-reliability nudge queued directly');
+        }
         break;
 
       case 'delete_from_vault':
