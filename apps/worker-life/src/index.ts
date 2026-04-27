@@ -8,7 +8,7 @@ import { ingestDocument } from '@naija-agent/storage';
 import { logger } from './utils/logger.js';
 import { marketService } from './services/marketData.js';
 import { lifeMemory } from './services/lifeMemory.js';
-import { getLifeTools, executeLifeTool } from './tools.js';
+import { getLifeTools, getOrchestratorTools, executeLifeTool } from './tools.js';
 import { whatsappService } from './services/whatsapp.js';
 import { heartbeatService } from './services/heartbeat.js';
 import { proactiveService } from './services/proactive.js';
@@ -107,6 +107,7 @@ const genAI = new GoogleGenAI({
 import { mcpClient } from './services/mcpClient.js';
 
 let globalLifeTools: any[] | null = null;
+let globalOrchestratorTools: any[] | null = null;
 
 (async () => {
   try {
@@ -119,15 +120,17 @@ let globalLifeTools: any[] | null = null;
 
     // Pre-fetch tools into cache to avoid IPC latency on every message
     globalLifeTools = await getLifeTools();
+    globalOrchestratorTools = await getOrchestratorTools();
     logger.info('✅ Dynamic Tools Cached Successfully');
   } catch (error: any) {
     logger.error({ error: error.message }, '⚠️ Failed to bootstrap MCP server, Aelixxr will run with native tools only.');
     globalLifeTools = await getLifeTools(); // Fallback to native tools
+    globalOrchestratorTools = await getOrchestratorTools();
   }
 })();
 
 async function getDynamicModels(systemInstruction?: string) {
-  const tools = globalLifeTools || await getLifeTools();
+  const tools = globalOrchestratorTools || await getOrchestratorTools();
 
   return { 
     primaryModel: process.env.GEMINI_MODEL_LOS || SystemConfig.MODELS.AELIXXR_PRIMARY,
@@ -952,7 +955,7 @@ ${resumeMonitors.length > 0 ? JSON.stringify(resumeMonitors) : "None currently a
 [USER_MESSAGE]: ${resumeOrig}
 
 [SYSTEM UPDATE]: Your specialized sub-agent (${resumeSector}) has completed its research/task.
-Below is the structured DATA REPORT from the sub-agent. 
+Below is the HIGH-RESOLUTION DATA REPORT from the sub-agent. 
 
 [START OF SUB-AGENT REPORT]
 ${resumeRep}
@@ -960,10 +963,11 @@ ${resumeRep}
 
 [INSTRUCTION]:
 1. Review the sub-agent's findings above.
-2. Synthesize a warm, empathetic, and professional response to the user's original message.
-3. If the sub-agent found data (like search results or a quiz), present it clearly and conversationally.
-4. DO NOT mention you are an AI, do not mention the sub-agent, and do not mention JSON. 
-5. Maintain your Aelixxr persona.
+2. **ACT AS THE PROFESSOR:** You have superior reasoning and teaching skills compared to the sub-agent. Review their "Raw Material" carefully.
+3. If the report contains technical data, formulas, or raw document text, synthesize it into a high-quality educational explanation for the user. 
+4. Correct any subtle errors or formatting issues in the sub-agent's report.
+5. Present the final information warm, empathetic, and in your Aelixxr voice.
+6. DO NOT mention you are an AI, do not mention the sub-agent, and do not mention JSON. 
 `;
                 
                 try {

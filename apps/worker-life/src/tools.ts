@@ -187,6 +187,24 @@ export async function getLifeTools(): Promise<Tool[]> {
   return [{ functionDeclarations: allFunctions }];
 }
 
+export async function getOrchestratorTools(): Promise<Tool[]> {
+  // --- HIERARCHY ENFORCEMENT: Primary (Orchestrator) is restricted ---
+  // It only sees tools for delegation and basic interaction.
+  const allTools = await getLifeTools();
+  const decls = allTools[0]?.functionDeclarations || [];
+  
+  const allowedNames = [
+    'delegate_task', 
+    'save_note', 
+    'log_feedback', 
+    'get_recharge_details', 
+    'generate_invite'
+  ];
+
+  const filtered = decls.filter(d => allowedNames.includes(d.name));
+  return [{ functionDeclarations: filtered }];
+}
+
 // --- Tool Execution Logic ---
 export async function executeLifeTool(name: string, args: Record<string, any>): Promise<any> {
   logger.info({ tool: name, args }, '🛠️ Executing Life Tool');
