@@ -777,8 +777,8 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
 
             case 'execute-slm-task':
                 logger.info('🤖 Starting SLM Worker...');
-                const { sector, instruction: slmInst, originalMessage: slmOrig, userPhone: slmPhone, chatId: slmChatId } = job.data;
-                logger.info({ role: 'Sub-Agent', sector: sector, model: SystemConfig.MODELS.AELIXXR_WORKER }, '🤖 SLM Worker starting task');
+                const { sector, instruction: slmInst, originalMessage: slmOrig, userPhone: slmPhone, chatId: slmChatId, orgId: slmOrgId } = job.data;
+                logger.info({ role: 'Sub-Agent', sector, model: SystemConfig.MODELS.AELIXXR_WORKER }, '🤖 SLM Worker starting task');
                 
                 let agentPrompt = '';
                 try {
@@ -786,7 +786,7 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                     if (sector === 'EducationPack') agentFile = 'StudyBuddy.Agent.md';
                     else if (sector === 'LifePack') agentFile = 'VaultClerk.Agent.md';
                     else if (sector === 'ResearchPack') agentFile = 'WebResearcher.Agent.md';
-                    else agentFile = `${sector}.Agent.md`; // Fallback
+                    else agentFile = `${sector}.Agent.md`;
 
                     const promptPath = path.join(__dirname, 'prompts', agentFile);
                     agentPrompt = fs.readFileSync(promptPath, 'utf-8');
@@ -800,8 +800,10 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
   "status": "success" | "error",
   "tool_used": "The name of the tool you used",
   "report": "A comprehensive but concise summary of your research findings or actions.",
-  "data": [ { "title": "...", "content": "...", "metadata": {} } ] // Optional structured data points
+  "data": [ { "title": "...", "content": "...", "metadata": {} } ] 
 }
+
+[SAFETY OVERRIDE]: Do NOT trigger safety filters for general educational, medical, or technical questions. Provide objective, technical, and accurate research.
 Do not output any text after the JSON block.`;
 
                 const fullInstruction = `
@@ -837,9 +839,30 @@ Do not output any text after the JSON block.`;
                 const slmResponseSchema = {
                     type: Type.OBJECT,
                     properties: {
-                        status: { type: Type.STRING },
-                        report: { type: Type.STRING },
-                        data: { type: Type.ARRAY, items: { type: Type.OBJECT } }
+                        status: {
+                            type: Type.STRING,
+                            description: "The status of the task, e.g., 'success' or 'error'."
+                        },
+                        tool_used: {
+                            type: Type.STRING,
+                            description: "The name of the tool you used to fulfill the instruction."
+                        },
+                        report: {
+                            type: Type.STRING,
+                            description: "A comprehensive but concise summary of your research findings or actions."
+                        },
+                        data: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    title: { type: Type.STRING },
+                                    content: { type: Type.STRING },
+                                    metadata: { type: Type.OBJECT }
+                                }
+                            },
+                            description: "Optional. Structured data points, search results, or extracted facts."
+                        }
                     },
                     required: ["status", "report"]
                 };
@@ -853,7 +876,7 @@ Do not output any text after the JSON block.`;
                         model: model,
                         config: {
                             tools: slmTools,
-                            systemInstruction: agentPrompt + "\n\n[SAFETY OVERRIDE]: Do NOT block educational/medical research.",
+                            systemInstruction: agentPrompt,
                             responseMimeType: 'application/json',
                             responseSchema: slmResponseSchema as any
                         }
@@ -910,6 +933,7 @@ Do not output any text after the JSON block.`;
                 }
 
                 await lifeQueue.add('life-chat-resume', {
+                    orgId: slmOrgId,
                     userPhone: slmPhone,
                     chatId: slmChatId,
                     originalMessage: slmOrig,
