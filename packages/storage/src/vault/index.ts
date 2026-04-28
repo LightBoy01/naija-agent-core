@@ -175,6 +175,23 @@ async function extractMultimodalMetadata(
   `;
 
   try {
+    const supportedMimes = [
+        'image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif',
+        'audio/wav', 'audio/mp3', 'audio/aiff', 'audio/aac', 'audio/ogg', 'audio/flac',
+        'video/mp4', 'video/mpeg', 'video/mov', 'video/avi', 'video/x-flv', 'video/mpg', 'video/webm', 'video/wmv', 'video/3gpp',
+        'application/pdf'
+    ];
+
+    if (!supportedMimes.includes(mimeType)) {
+        logger.warn({ mimeType }, '⚠️ MimeType not supported for multimodal extraction. Returning generic summary.');
+        return { 
+            title: caption || 'Uploaded Document', 
+            summary: `Saved ${mimeType} file to Vault. Automated content analysis is limited for this format.`, 
+            category: 'Other', 
+            tags: ['document', 'vault'] 
+        };
+    }
+
     const modelName = SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3.1-flash-lite-preview';
     logger.info({ role: 'Multimodal', model: modelName }, '🖼️ Extracting file metadata');
     
@@ -218,6 +235,18 @@ async function getMultimodalEmbedding(
   });
 
   try {
+    const supportedMimes = [
+        'image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif',
+        'audio/wav', 'audio/mp3', 'audio/aiff', 'audio/aac', 'audio/ogg', 'audio/flac',
+        'video/mp4', 'video/mpeg', 'video/mov', 'video/avi', 'video/x-flv', 'video/mpg', 'video/webm', 'video/wmv', 'video/3gpp',
+        'application/pdf'
+    ];
+
+    if (!supportedMimes.includes(mimeType)) {
+        logger.warn({ mimeType }, '⚠️ MimeType not supported for multimodal embedding. Skipping vector generation.');
+        return [];
+    }
+
     const modelName = 'gemini-embedding-2';
     logger.info({ role: 'Embedding', model: modelName }, '🧬 Generating vector embedding');
 
