@@ -2,7 +2,7 @@ import { Tool, Type } from '@google/genai';
 import { marketService } from './services/marketData.js';
 import { studyBuddy } from './services/studyBuddy.js';
 import { logger } from './utils/logger.js';
-import { searchVault, ingestNote, deleteFromVault } from '@naija-agent/storage';
+import { searchVault, ingestNote, deleteFromVault, getVaultFile } from '@naija-agent/storage';
 import { mcpClient } from './services/mcpClient.js';
 import { heartbeatService } from './services/heartbeat.js';
 import { getDb } from '@naija-agent/firebase';
@@ -97,6 +97,17 @@ export const STATIC_LIFE_TOOLS: Tool = {
           note: { type: Type.STRING, description: 'The text content to save (e.g. "Gate code is 1234", "Auntie Tope\'s birthday is Oct 5").' }
         },
         required: ['note']
+      }
+    },
+    {
+      name: 'get_vault_file',
+      description: 'Retrieve a specific document or file from the Vault using its unique ID. Use this when you have a DocID and need to read the full content, forensic analysis, or extracted metadata of that specific file.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          docId: { type: Type.STRING, description: 'The unique ID of the document/file to retrieve.' }
+        },
+        required: ['docId']
       }
     },
     {
@@ -275,6 +286,10 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
             });
             logger.info({ userId: args.userId, delay }, '⚡ High-reliability nudge queued directly');
         }
+        break;
+
+      case 'get_vault_file':
+        toolResult = await getVaultFile(args.userId, args.docId);
         break;
 
       case 'delete_from_vault':

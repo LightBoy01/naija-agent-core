@@ -427,6 +427,19 @@ export async function searchVault(userId: string, query: string): Promise<VaultD
     return finalResults;
 }
 
+/**
+ * Retrieves a specific file's content and metadata from the Vault using its unique ID.
+ */
+export async function getVaultFile(userId: string, docId: string): Promise<any> {
+    try {
+        const doc = await getDb().collection('vault').doc(userId).collection('docs').doc(docId).get();
+        if (!doc.exists) return null;
+        return { id: doc.id, ...doc.data() };
+    } catch (e) {
+        return null;
+    }
+}
+
 // --- Main: Delete from Vault ---
 export async function deleteFromVault(userId: string, docId: string): Promise<boolean> {
   try {
