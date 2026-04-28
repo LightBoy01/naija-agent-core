@@ -4,7 +4,7 @@ import 'dotenv/config';
 import { GoogleGenAI, Type } from '@google/genai';
 import { SystemConfig, formatCurrency } from '@naija-agent/types';
 import { deductBalance, getOrgById, getChatHistory, findOrCreateChat, saveMessage } from '@naija-agent/firebase';
-import { ingestDocument } from '@naija-agent/storage';
+import { ingestDocument, searchVault } from '@naija-agent/storage';
 import { logger } from './utils/logger.js';
 import { marketService } from './services/marketData.js';
 import { lifeMemory } from './services/lifeMemory.js';
@@ -259,13 +259,26 @@ const worker = new Worker(
                 try {
                     const { shouldMessage, contextData } = await heartbeatService.evaluateConfig(config);
                     if (shouldMessage) {
-                        // --- DETERMINISTIC OPTIMIZATION: Bypass LLM for Pre-drafted Reminders ---
-                        if ((contextData as any).deterministic && (contextData as any).payload) {
+                        const isSmartReminder = !!(contextData as any).vaultTopic;
+                        
+                        // --- DETERMINISTIC OPTIMIZATION: Bypass LLM for simple Pre-drafted Reminders ---
+                        if ((contextData as any).deterministic && (contextData as any).payload && !isSmartReminder) {
                             const payload = (contextData as any).payload;
                             logger.info({ userId }, '🚀 Sending deterministic scheduled reminder...');
                             await whatsappService.sendText(userId, payload);
                             await heartbeatService.deactivateConfig(userId, config.id, 'completed');
                             return { success: true, mode: 'deterministic' };
+                        }
+
+                        // --- SMART ENRICHMENT: Fetch Vault Data for the Scholar's Recall ---
+                        let vaultEnrichment = "";
+                        if (isSmartReminder) {
+                            const topic = (contextData as any).vaultTopic;
+                            logger.info({ userId, topic }, '🧠 [SCHOLAR\'S RECALL]: Enriching reminder with Vault data...');
+                            const results = await searchVault(userId, topic);
+                            if (results && results.length > 0) {
+                                vaultEnrichment = `\n\n[RELEVANT VAULT MEMORIES]:\n${JSON.stringify(results.slice(0, 3))}`;
+                            }
                         }
 
                         const context = await lifeMemory.getContext(userId);
@@ -274,11 +287,14 @@ const worker = new Worker(
                         This is a PROACTIVE message. The user did not speak to you.
                         You are checking their active heartbeat config: ${JSON.stringify(config)}
                         Here is the latest data for this config: ${JSON.stringify(contextData)}
+                        ${vaultEnrichment}
+                        
                         User Context:
                         - Family: ${JSON.stringify(context.family || {})}
                         - Goals: ${JSON.stringify(context.goals || [])}
                         
-                        Your Goal: Analyze the latest data against their config. If it warrants an alert (e.g. price dropped, or a reminder is due), draft a short, friendly WhatsApp message to them. 
+                        Your Goal: Analyze the latest data and memories. Draft a short, friendly, and specific WhatsApp message to them. 
+                        If this is a "Smart Reminder" (has Vault topic), reference the specific facts found in the memories to help them flourish.
                         If no alert is needed, you MUST reply with exactly "SKIP" and nothing else.
 
                         [RESPONSE FORMATTING - CRITICAL]:
@@ -305,6 +321,10 @@ const worker = new Worker(
                         if (text !== 'SKIP' && text !== '') {
                             logger.info({ userId }, 'Proactive heartbeat message generated');
                             await whatsappService.sendText(userId, text);
+                            // Mark as completed if it was a one-off reminder
+                            if (config.type === 'reminder') {
+                                await heartbeatService.deactivateConfig(userId, config.id, 'completed');
+                            }
                         } else {
                             logger.info({ userId }, 'Heartbeat evaluated: SKIP');
                         }

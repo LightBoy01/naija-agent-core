@@ -56,7 +56,11 @@ class HeartbeatService {
       if (config.type === 'reminder' && config.triggerTime) {
           const now = Date.now();
           if (now >= config.triggerTime && config.status === 'pending') {
-              return { shouldMessage: true, contextData: { deterministic: true, payload: config.messagePayload } };
+              return { shouldMessage: true, contextData: { 
+                  deterministic: true, 
+                  payload: config.messagePayload,
+                  vaultTopic: config.vaultTopic 
+              } };
           }
           return { shouldMessage: false, contextData: {} };
       }
@@ -77,7 +81,7 @@ class HeartbeatService {
   /**
    * Creates a deterministic reminder.
    */
-  async createReminder(userId: string, triggerTime: number, messagePayload: string): Promise<any> {
+  async createReminder(userId: string, triggerTime: number, messagePayload: string, vaultTopic?: string): Promise<any> {
       try {
           const db = getFirestore();
           const docRef = db.collection('users').doc(userId).collection('heartbeats').doc();
@@ -86,13 +90,14 @@ class HeartbeatService {
               type: 'reminder',
               triggerTime,
               messagePayload,
+              vaultTopic,
               status: 'pending',
               active: true,
               createdAt: Date.now()
           };
           
           await docRef.set(config);
-          logger.info({ userId, configId: docRef.id, triggerTime }, '✅ Created new deterministic reminder');
+          logger.info({ userId, configId: docRef.id, triggerTime, vaultTopic }, '✅ Created new deterministic reminder');
           return { id: docRef.id, ...config };
       } catch (error: any) {
           logger.error({ error: error.message, userId }, '❌ Failed to create reminder');

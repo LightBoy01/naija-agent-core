@@ -82,7 +82,8 @@ export const STATIC_LIFE_TOOLS: Tool = {
         type: Type.OBJECT,
         properties: {
           triggerTime: { type: Type.NUMBER, description: 'The exact UNIX timestamp in milliseconds when the message should be sent (e.g. 1777264222020).' },
-          messagePayload: { type: Type.STRING, description: 'The friendly message to send to the user (e.g. "Oga, time don reach to study Biochemistry!").' }
+          messagePayload: { type: Type.STRING, description: 'The friendly message to send to the user (e.g. "Oga, time don reach to study Biochemistry!").' },
+          vaultTopic: { type: Type.STRING, description: 'Optional. A specific topic or keyword to search the Vault for when the reminder fires. Use this if the reminder is about previously saved notes or documents (e.g., "IMP Synthesis", "Iron Metabolism").' }
         },
         required: ['triggerTime', 'messagePayload']
       }
@@ -256,7 +257,7 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
             return { status: 'success', message: 'I already have this nudge active o! No need to set am again.' };
         }
 
-        toolResult = await heartbeatService.createReminder(args.userId, triggerTime, args.messagePayload);
+        toolResult = await heartbeatService.createReminder(args.userId, triggerTime, args.messagePayload, args.vaultTopic);
         
         // --- HIGH RELIABILITY: Direct Queue Nudge ---
         // For short-term reminders (under 24 hours), we also add a delayed job directly to the queue
