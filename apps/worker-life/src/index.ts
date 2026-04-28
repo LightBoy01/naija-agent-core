@@ -468,17 +468,20 @@ const worker = new Worker(
                            ingestionSummary = `\n\n[SYSTEM ERROR]: I tried to process the file/audio you sent but failed. Error: ${ingestErr.message}`;
                         }
                     }
+const activeMonitors = await heartbeatService.getUserConfigs(userPhone);
+const now = new Date();
+const localTime = now.toLocaleString('en-NG', { timeZone: 'Africa/Lagos' });
 
-                    const activeMonitors = await heartbeatService.getUserConfigs(userPhone);
-                    
-                    // 2. Construct Prompt with Context
-                    const systemPrompt = `
+// 2. Construct Prompt with Context
+const systemPrompt = `
 ${aelixxrSoulPrompt}
-                    
+
 ---
 [DYNAMIC SYSTEM CONTEXT]:
-- Current Server Time (UTC): ${new Date().toUTCString()}
+- Current UTC Time: ${now.toISOString()}
+- User Local Time (WAT): ${localTime}
 - Currency: ${currency.code} (${currency.symbol})
+...
 - Locale: ${currency.locale}
 - Current Energy Credits: ${energyCredits} units left.
 
@@ -930,16 +933,18 @@ Do not output any text after the JSON block.`;
                 const resumeContext = await lifeMemory.getContext(resumePhone);
                 const resumeEnergy = resumeContext.energyCredits ?? 0;
                 const resumeMonitors = await heartbeatService.getUserConfigs(resumePhone);
-                const currentTime = new Date().toISOString();
+                const resumeNow = new Date();
+                const resumeLocalTime = resumeNow.toLocaleString('en-NG', { timeZone: 'Africa/Lagos' });
 
                 const resumePrompt = `
                 ${aelixxrSoulPrompt}
 
                 ---
                 [DYNAMIC SYSTEM CONTEXT]:
-                - Current Time: ${currentTime} (UTC)
+                - Current UTC Time: ${resumeNow.toISOString()}
+                - User Local Time (WAT): ${resumeLocalTime}
                 - Currency: ${resumeCurrency.code} (${resumeCurrency.symbol})
-                - Locale: ${resumeCurrency.locale}
+                ...
                 - Current Energy Credits: ${resumeEnergy} units left.
                 ...
 User Context:
