@@ -817,11 +817,11 @@ Do not output any text after the JSON block.`;
                     let allowedNames: string[] = [];
 
                     if (sector === 'EducationPack') {
-                        allowedNames = ['generate_quiz', 'web_search'];
+                        allowedNames = ['generate_quiz', 'web_search', 'search_vault', 'get_vault_file'];
                     } else if (sector === 'ResearchPack') {
                         allowedNames = ['web_search', 'fetch_webpage'];
                     } else if (sector === 'LifePack') {
-                        allowedNames = ['search_vault', 'save_note', 'delete_from_vault'];
+                        allowedNames = ['search_vault', 'save_note', 'delete_from_vault', 'get_vault_file'];
                     } else if (sector === 'CommercePack') {
                         allowedNames = ['web_search'];
                     }
@@ -834,76 +834,62 @@ Do not output any text after the JSON block.`;
                 const slmResponseSchema = {
                     type: Type.OBJECT,
                     properties: {
-                        status: {
-                            type: Type.STRING,
-                            description: "The status of the task, e.g., 'success' or 'error'."
-                        },
-                        tool_used: {
-                            type: Type.STRING,
-                            description: "The name of the tool you used to fulfill the instruction."
-                        },
-                        report: {
-                            type: Type.STRING,
-                            description: "A comprehensive but concise summary of your research findings or actions."
-                        },
-                        data: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    title: { type: Type.STRING },
-                                    content: { type: Type.STRING },
-                                    metadata: { type: Type.OBJECT }
-                                }
-                            },
-                            description: "Optional. Structured data points, search results, or extracted facts."
-                        }
+                        status: { type: Type.STRING },
+                        report: { type: Type.STRING },
+                        data: { type: Type.ARRAY, items: { type: Type.OBJECT } }
                     },
                     required: ["status", "report"]
                 };
 
-                const slmChat = genAI.chats.create({
-                    model: SystemConfig.MODELS.AELIXXR_WORKER,
-                    config: {
-                        tools: slmTools,
-                        systemInstruction: agentPrompt,
-                        responseMimeType: 'application/json',
-                        responseSchema: slmResponseSchema as any
-                    }
-                });
+                const fallbackModel = SystemConfig.MODELS.AELIXXR_FALLBACK || 'gemini-2.5-flash';
+                let slmUsedModel = SystemConfig.MODELS.AELIXXR_WORKER;
+                let slmReport = "";
 
-                let slmReport = "SLM Task Failed to generate a report.";
-                try {
+                const runSlm = async (model: string) => {
+                    const slmChat = genAI.chats.create({
+                        model: model,
+                        config: {
+                            tools: slmTools,
+                            systemInstruction: agentPrompt + "\n\n[SAFETY OVERRIDE]: Do NOT block educational/medical research.",
+                            responseMimeType: 'application/json',
+                            responseSchema: slmResponseSchema as any
+                        }
+                    });
+
                     const result = await slmChat.sendMessage({ message: fullInstruction });
-                    
                     const slmCalls = result.functionCalls;
                     if (slmCalls && slmCalls.length > 0) {
-                        logger.info({ tool: slmCalls[0].name }, 'SLM Requested Tool...');
+                        logger.info({ tool: slmCalls[0].name, model }, 'SLM Requested Tool...');
                         const call = slmCalls[0];
-                        if (call.name) {
-                            const args = { ...call.args, userId: slmPhone };
-                            const toolResult = await executeLifeTool(call.name, args);
-                            
-                            const safeResponse = (typeof toolResult === 'object' && toolResult !== null && !Array.isArray(toolResult)) 
-                                ? toolResult 
-                                : { result: toolResult };
+                        const args = { ...call.args, userId: slmPhone };
+                        const toolResult = await executeLifeTool(call.name, args);
+                        const safeResponse = (typeof toolResult === 'object' && toolResult !== null && !Array.isArray(toolResult)) 
+                            ? toolResult 
+                            : { result: toolResult };
 
-                            const followUp = await slmChat.sendMessage({
-                                message: [{
-                                    functionResponse: {
-                                        name: call.name,
-                                        response: safeResponse
-                                    }
-                                }]
-                            });
-                            slmReport = extractSafeText(followUp);
-                        }
-                    } else {
-                        slmReport = extractSafeText(result);
+                        const followUp = await slmChat.sendMessage({
+                            message: [{ functionResponse: { name: call.name, response: safeResponse } }]
+                        });
+                        return extractSafeText(followUp);
+                    }
+                    return extractSafeText(result);
+                };
+
+                try {
+                    slmReport = await runSlm(slmUsedModel);
+                    if (!slmReport.trim()) {
+                        logger.warn({ model: slmUsedModel }, '⚠️ SLM Lite empty response. Upscaling...');
+                        slmUsedModel = fallbackModel;
+                        slmReport = await runSlm(slmUsedModel);
                     }
                 } catch (e: any) {
-                    logger.error({ error: e.message }, 'SLM Worker Failed');
-                    slmReport = JSON.stringify({ status: "error", report: "SLM crashed: " + e.message });
+                    logger.error({ error: e.message, model: slmUsedModel }, 'SLM Failed. Attempting Fallback...');
+                    try {
+                        slmUsedModel = fallbackModel;
+                        slmReport = await runSlm(slmUsedModel);
+                    } catch (fallbackErr: any) {
+                        slmReport = JSON.stringify({ status: "error", report: "SLM crashed: " + fallbackErr.message });
+                    }
                 }
 
                 // Clean JSON aggressively
@@ -911,14 +897,12 @@ Do not output any text after the JSON block.`;
                 const jsonMatch = slmReport.match(/\{[\s\S]*\}/);
                 if (jsonMatch) {
                     try {
-                        JSON.parse(jsonMatch[0]); // Verify it's actually parsable
+                        JSON.parse(jsonMatch[0]);
                         cleanedReport = jsonMatch[0];
                     } catch(e) {
-                        logger.warn({ raw: slmReport }, 'SLM output invalid JSON block. Passing raw text.');
                         cleanedReport = JSON.stringify({ status: "success", report: slmReport });
                     }
                 } else {
-                    logger.warn({ raw: slmReport }, 'SLM completely ignored JSON schema. Passing raw text.');
                     cleanedReport = JSON.stringify({ status: "success", report: slmReport });
                 }
 
