@@ -142,7 +142,7 @@ async function getDynamicModels(systemInstruction?: string) {
 }
 
 // --- Queue Setup ---
-const lifeQueue = new Queue('life-queue', { connection: redisClient });
+export const lifeQueue = new Queue('life-queue', { connection: redisClient });
 
 // --- Worker Setup ---
 const worker = new Worker(
