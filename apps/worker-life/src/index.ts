@@ -930,16 +930,18 @@ Do not output any text after the JSON block.`;
                 const resumeContext = await lifeMemory.getContext(resumePhone);
                 const resumeEnergy = resumeContext.energyCredits ?? 0;
                 const resumeMonitors = await heartbeatService.getUserConfigs(resumePhone);
+                const currentTime = new Date().toISOString();
 
                 const resumePrompt = `
-${aelixxrSoulPrompt}
-                    
----
-[DYNAMIC SYSTEM CONTEXT]:
-- Currency: ${resumeCurrency.code} (${resumeCurrency.symbol})
-- Locale: ${resumeCurrency.locale}
-- Current Energy Credits: ${resumeEnergy} units left.
+                ${aelixxrSoulPrompt}
 
+                ---
+                [DYNAMIC SYSTEM CONTEXT]:
+                - Current Time: ${currentTime} (UTC)
+                - Currency: ${resumeCurrency.code} (${resumeCurrency.symbol})
+                - Locale: ${resumeCurrency.locale}
+                - Current Energy Credits: ${resumeEnergy} units left.
+                ...
 User Context:
 - Family: ${JSON.stringify(resumeContext.family || {})}
 - Goals: ${JSON.stringify(resumeContext.goals || [])}
