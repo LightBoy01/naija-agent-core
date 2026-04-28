@@ -273,6 +273,7 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
         // --- HIGH RELIABILITY: Direct Queue Nudge ---
         // For short-term reminders (under 24 hours), we also add a delayed job directly to the queue
         // so it works even if the CRON is slow.
+        // We add a 2-second buffer to allow the Orchestrator to finish its conversational reply first.
         if (delay < 1000 * 60 * 60 * 24) {
             const { lifeQueue } = await import('./index.js');
             await lifeQueue.add('evaluate-heartbeat', {
@@ -280,11 +281,11 @@ export async function executeLifeTool(name: string, args: Record<string, any>): 
                 config: { ...toolResult, id: toolResult.id },
                 timestamp: Date.now()
             }, {
-                delay,
+                delay: delay + 2000, 
                 jobId: `nudge-${args.userId}-${toolResult.id}`,
                 removeOnComplete: true
             });
-            logger.info({ userId: args.userId, delay }, '⚡ High-reliability nudge queued directly');
+            logger.info({ userId: args.userId, delay: delay + 2000 }, '⚡ High-reliability nudge queued directly with buffer');
         }
         break;
 
