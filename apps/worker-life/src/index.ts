@@ -800,7 +800,7 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
   "status": "success" | "error",
   "tool_used": "The name of the tool you used",
   "report": "A comprehensive but concise summary of your research findings or actions.",
-  "data": [ { "title": "...", "content": "...", "metadata": {} } ] 
+  "data": [ { "title": "Section Title", "content": "Detailed Findings", "metadata": {} } ] 
 }
 
 [SAFETY OVERRIDE]: Do NOT trigger safety filters for general educational, medical, or technical questions. Provide objective, technical, and accurate research.
@@ -951,14 +951,16 @@ Do not output any text after the JSON block.`;
 
             case 'life-chat-resume':
                 logger.info('🧠 Resuming Aelixxr Orchestration...');
-                const { userPhone: resumePhone, originalMessage: resumeOrig, slmReport: resumeRep, chatId: resumeChatId, sector: resumeSector } = job.data;
+                const { userPhone: resumePhone, originalMessage: resumeOrig, slmReport: resumeRep, chatId: resumeChatId, sector: resumeSector, orgId: resumeOrgId } = job.data;
                 
-                const resumeCurrency = { code: 'NGN', symbol: '₦', locale: 'en-NG' };
+                const resumeOrg = resumeOrgId ? await getOrgById(resumeOrgId) : null;
+                const resumeCurrency = resumeOrg?.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
+                const resumeTimezone = resumeOrg?.timezone || 'Africa/Lagos';
+                
                 const resumeContext = await lifeMemory.getContext(resumePhone);
                 const resumeEnergy = resumeContext.energyCredits ?? 0;
                 const resumeMonitors = await heartbeatService.getUserConfigs(resumePhone);
                 const resumeNow = new Date();
-                const resumeTimezone = 'Africa/Lagos'; // TODO: Pull from org/context if available in resume block
                 const resumeLocalTime = resumeNow.toLocaleString('en-NG', { timeZone: resumeTimezone });
 
                 const resumePrompt = `
