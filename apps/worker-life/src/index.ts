@@ -470,7 +470,8 @@ const worker = new Worker(
                     }
 const activeMonitors = await heartbeatService.getUserConfigs(userPhone);
 const now = new Date();
-const localTime = now.toLocaleString('en-NG', { timeZone: 'Africa/Lagos' });
+const timezone = org?.timezone || 'Africa/Lagos';
+const localTime = now.toLocaleString('en-NG', { timeZone: timezone });
 
 // 2. Construct Prompt with Context
 const systemPrompt = `
@@ -479,9 +480,8 @@ ${aelixxrSoulPrompt}
 ---
 [DYNAMIC SYSTEM CONTEXT]:
 - Current UTC Time: ${now.toISOString()}
-- User Local Time (WAT): ${localTime}
+- User Local Time: ${localTime} (${timezone})
 - Currency: ${currency.code} (${currency.symbol})
-...
 - Locale: ${currency.locale}
 - Current Energy Credits: ${energyCredits} units left.
 
@@ -934,19 +934,20 @@ Do not output any text after the JSON block.`;
                 const resumeEnergy = resumeContext.energyCredits ?? 0;
                 const resumeMonitors = await heartbeatService.getUserConfigs(resumePhone);
                 const resumeNow = new Date();
-                const resumeLocalTime = resumeNow.toLocaleString('en-NG', { timeZone: 'Africa/Lagos' });
+                const resumeTimezone = 'Africa/Lagos'; // TODO: Pull from org/context if available in resume block
+                const resumeLocalTime = resumeNow.toLocaleString('en-NG', { timeZone: resumeTimezone });
 
                 const resumePrompt = `
-                ${aelixxrSoulPrompt}
+${aelixxrSoulPrompt}
 
-                ---
-                [DYNAMIC SYSTEM CONTEXT]:
-                - Current UTC Time: ${resumeNow.toISOString()}
-                - User Local Time (WAT): ${resumeLocalTime}
-                - Currency: ${resumeCurrency.code} (${resumeCurrency.symbol})
-                ...
-                - Current Energy Credits: ${resumeEnergy} units left.
-                ...
+---
+[DYNAMIC SYSTEM CONTEXT]:
+- Current UTC Time: ${resumeNow.toISOString()}
+- User Local Time: ${resumeLocalTime} (${resumeTimezone})
+- Currency: ${resumeCurrency.code} (${resumeCurrency.symbol})
+- Locale: ${resumeCurrency.locale}
+- Current Energy Credits: ${resumeEnergy} units left.
+
 User Context:
 - Family: ${JSON.stringify(resumeContext.family || {})}
 - Goals: ${JSON.stringify(resumeContext.goals || [])}
