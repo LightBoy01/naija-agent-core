@@ -171,6 +171,32 @@ const lifeQueue = new Queue('life-queue', { connection: redisConnection });
 
 // --- Helpers ---
 
+// Send Typing Indicator and Mark as Read
+async function sendTypingIndicator(phoneId: string, messageId: string, token: string) {
+  try {
+    const url = `https://graph.facebook.com/v21.0/${phoneId}/messages`;
+    const body = {
+      messaging_product: 'whatsapp',
+      status: 'read',
+      message_id: messageId,
+      typing_indicator: {
+        type: 'text'
+      }
+    };
+    
+    // Non-blocking fire and forget
+    import('axios').then(axios => {
+        axios.default.post(url, body, { 
+          headers: { Authorization: `Bearer ${token}` } 
+        }).catch(e => {
+          logger.warn({ error: e.message, messageId }, 'Failed to send typing indicator (non-critical)');
+        });
+    });
+  } catch (e) {
+    // Silently fail as this is a non-critical UX enhancement
+  }
+}
+
 // Verify X-Hub-Signature-256
 function verifySignature(payload: string, signature: string, secret: string): boolean {
   if (!signature) return false;
@@ -414,6 +440,12 @@ fastify.post('/webhook', async (request, reply) => {
   if (!org) {
     logger.warn({ businessPhoneId }, `Unknown Business Phone ID`);
     return reply.status(200).send('OK');
+  }
+
+  // --- UX: TRIGGER TYPING INDICATOR ---
+  const apiToken = org.config?.apiToken || process.env.WHATSAPP_API_TOKEN;
+  if (apiToken) {
+    sendTypingIndicator(businessPhoneId, message.id, apiToken);
   }
 
   const processedKey = `processed:${org.id}:${message.id}`;

@@ -77,13 +77,13 @@ export const STATIC_LIFE_TOOLS: Tool = {
     },
     {
       name: 'create_reminder',
-      description: 'Schedule a proactive WhatsApp message to be sent to the user at a specific time in the future. Use this when the user says "Remind me to...", "Tell me when it is...", or asks to be alerted about something later. You MUST calculate the exact triggerTime (UNIX timestamp in milliseconds) and draft a friendly messagePayload.',
+      description: 'Schedule a proactive WhatsApp message. To calculate triggerTime: Take the Current UNIX Timestamp provided in the system context and add the required duration in milliseconds (e.g., 30 mins = 1,800,000ms). Use this for "Remind me to...", "Tell me when it is...", or alerts.',
       parameters: {
         type: Type.OBJECT,
         properties: {
-          triggerTime: { type: Type.NUMBER, description: 'The exact UNIX timestamp in milliseconds when the message should be sent (e.g. 1777264222020).' },
-          messagePayload: { type: Type.STRING, description: 'The friendly message to send to the user (e.g. "Oga, time don reach to study Biochemistry!").' },
-          vaultTopic: { type: Type.STRING, description: 'Optional. A specific topic or keyword to search the Vault for when the reminder fires. Use this if the reminder is about previously saved notes or documents (e.g., "IMP Synthesis", "Iron Metabolism").' }
+          triggerTime: { type: Type.NUMBER, description: 'The exact UNIX timestamp in milliseconds (Math Base + duration).' },
+          messagePayload: { type: Type.STRING, description: 'The friendly message to send to the user.' },
+          vaultTopic: { type: Type.STRING, description: 'Optional. Vault topic for enrichment.' }
         },
         required: ['triggerTime', 'messagePayload']
       }

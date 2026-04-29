@@ -12,6 +12,7 @@ import { getLifeTools, getOrchestratorTools, executeLifeTool } from './tools.js'
 import { whatsappService } from './services/whatsapp.js';
 import { heartbeatService } from './services/heartbeat.js';
 import { proactiveService } from './services/proactive.js';
+import { Formatter } from './utils/formatter.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -320,7 +321,8 @@ const worker = new Worker(
                         
                         if (text !== 'SKIP' && text !== '') {
                             logger.info({ userId }, 'Proactive heartbeat message generated');
-                            await whatsappService.sendText(userId, text);
+                            const formattedText = Formatter.format(text);
+                            await whatsappService.sendText(userId, formattedText);
                             // Mark as completed if it was a one-off reminder
                             if (config.type === 'reminder') {
                                 await heartbeatService.deactivateConfig(userId, config.id, 'completed');
@@ -351,7 +353,7 @@ const worker = new Worker(
                 
                 // --- 0. REFERRAL INTERCEPTOR ---
                 let referralSummary = "";
-                const referralMatch = message ? message.match(/friend\s+(\+?\d+)\s+invited/i) : null;
+                const referralMatch = message ? message.match(/(?:friend|referred|invited by)\s+(\+?\d+)/i) : null;
                 
                 if (referralMatch) {
                     const rawReferrerPhone = referralMatch[1];
@@ -470,7 +472,8 @@ const worker = new Worker(
                     }
 const activeMonitors = await heartbeatService.getUserConfigs(userPhone);
 const now = new Date();
-const timezone = org?.timezone || 'Africa/Lagos';
+const { getTimezoneFromPhone } = await import('./utils/timezone.js');
+const timezone = org?.timezone || getTimezoneFromPhone(userPhone);
 const localTime = now.toLocaleString('en-NG', { timeZone: timezone });
 
 // 2. Construct Prompt with Context
@@ -479,7 +482,8 @@ ${aelixxrSoulPrompt}
 
 ---
 [DYNAMIC SYSTEM CONTEXT]:
-- Current UTC Time: ${now.toISOString()}
+- Current UTC Time (ISO): ${now.toISOString()}
+- Current UNIX Timestamp: ${now.getTime()} (Use this as your MATH BASE for relative time like "in 5 minutes").
 - User Local Time: ${localTime} (${timezone})
 - Currency: ${currency.code} (${currency.symbol})
 - Locale: ${currency.locale}
@@ -489,6 +493,11 @@ User Context:
 - Family: ${JSON.stringify(context.family || {})}
 - Goals: ${JSON.stringify(context.goals || [])}
 - Preferences: ${JSON.stringify(context.preferences || {})}
+
+[TIMEKEEPING RULES]:
+1. If the user asks for a relative time (e.g. "in 30 minutes"), add the duration to the Current UNIX Timestamp (${now.getTime()}) to get the triggerTime.
+2. If the user specifies an absolute time (e.g. "at 5 PM"), use their Local Time (${localTime}) to determine the correct UNIX timestamp.
+3. ALWAYS return UNIX timestamps in milliseconds.
 
 [ACTIVE MONITORS & REMINDERS]:
 You have set up the following proactive monitors for the user. If they ask about their reminders or alerts, reference this list:
@@ -529,6 +538,9 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                     
                     chatHistory = alternatingHistory;
 
+                    const originalMessage = message || ""; // Keep a clean copy for DB saving
+                    let fullMessage = originalMessage;
+
                     // If history ends with user, Gemini will append the new message correctly.
                     // But if we use sendMessage, we usually want history to be empty or end with model.
                     // Actually, startChat(history) where history ends with model is best for sendMessage(user).
@@ -536,13 +548,14 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                         // We will append the current message to the last user message or just pass empty and let sendMessage handle it.
                         // Best practice for Gemini: if last is user, pop it and merge with the current message.
                         const lastUserMsg = chatHistory.pop();
-                        logger.info({ lastMsg: lastUserMsg?.parts[0].text }, 'Merging last user history with current message');
+                        const lastText = lastUserMsg?.parts[0].text || "";
+                        fullMessage = `[Previous Context]: ${lastText}\n\n${fullMessage}`;
+                        logger.info({ lastMsg: lastText }, 'Successfully merged orphaned history into current prompt.');
                     }
 
                     logger.info({ historyLength: chatHistory.length }, '🚀 Sending normalized chat history to AI');
 
                     // Append ingestion summary, referral summary, and audio transcript to user message so AI knows what happened
-                    let fullMessage = message || "";
                     if (audioTranscript) {
                         fullMessage = `[VOICE NOTE TRANSCRIPT]: "${audioTranscript}"\n\n` + fullMessage;
                     }
@@ -606,13 +619,17 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                                 const args = call.args as any;
                                 logger.info({ sector: args.sector }, '🔀 Orchestrator delegating task to SLM...');
                                 
+                                // --- CONTEXTUAL ENRICHMENT: Give the SLM a glimpse of the history ---
+                                const slmHistorySummary = history.slice(-3).map((m: any) => `${m.role}: ${m.content}`).join('\n');
+                                const enrichedInstruction = `[CONVERSATION CONTEXT]:\n${slmHistorySummary}\n\n[TASK]: ${args.instruction}`;
+
                                 await lifeQueue.add('execute-slm-task', {
                                     orgId,
                                     userPhone,
                                     chatId,
                                     originalMessage: message,
                                     sector: args.sector,
-                                    instruction: args.instruction,
+                                    instruction: enrichedInstruction,
                                     energyCredits,
                                     timestamp: Date.now()
                                 }, { removeOnComplete: true, removeOnFail: false });
@@ -729,17 +746,21 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
 
                     if (text.trim()) {
                         logger.info({ response: text }, '🗣️ Life Companion Replying');
-                        
+
                         // Deduct 1 credit for standard message (Base Cost)
                         await lifeMemory.deductEnergy(userPhone, 1);
 
+                        const formattedText = Formatter.format(text + billingNote);
+
                         // Send via WhatsApp
-                        await whatsappService.sendText(userPhone, text);
+                        await whatsappService.sendText(userPhone, formattedText);
 
                         // Save conversation history to the database
-                        // Use fullMessage to include transcription for Sleep Cycle context
+                        // Use transcription in the saved message if it's a voice note, but NOT the context blocks
+                        const savedContent = audioTranscript ? `[VOICE NOTE]: ${audioTranscript}` : originalMessage;
+                        
                         await saveMessage(chatId, { 
-                            role: 'user', content: fullMessage, type: 'text' 
+                            role: 'user', content: savedContent, type: 'text' 
                         });
                         await saveMessage(chatId, { 
                             role: 'assistant', content: text, type: 'text' 
@@ -748,14 +769,18 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                     
                     // --- TRIGGER SLEEP CYCLE (Memory Consolidation) ---
                     // Enqueue a delayed job to process implicit memories 30 minutes from now.
-                    const windowId = Math.floor(Date.now() / (1000 * 60 * 30)); 
+                    // We remove any existing job for this user to effectively "reset" the timer.
+                    try {
+                        const existingJob = await lifeQueue.getJob(`sleep-${userPhone}`);
+                        if (existingJob) await existingJob.remove();
+                    } catch (e) {}
+
                     await lifeQueue.add('consolidate-memory', { userId: userPhone, orgId }, {
-                        jobId: `sleep-${userPhone}-${windowId}`,
+                        jobId: `sleep-${userPhone}`,
                         delay: 1000 * 60 * 30, // 30 minutes
                         removeOnComplete: true,
                         removeOnFail: false
-                    });
-                    
+                    });                    
                     return { success: true, reply: text };
                 } catch (apiError: any) {
                     logger.error({ error: apiError.message }, '❌ Gemini API Call Failed');
@@ -1079,7 +1104,8 @@ ${resumeRep}
                     }
 
                     logger.info({ response: finalTxt }, '🗣️ Life Companion Replying (Post-SLM)');
-                    await whatsappService.sendText(resumePhone, finalTxt);
+                    const formattedFinalTxt = Formatter.format(finalTxt);
+                    await whatsappService.sendText(resumePhone, formattedFinalTxt);
                     await saveMessage(resumeChatId, { role: 'assistant', content: finalTxt, type: 'text' });
                     
                     return { success: true, reply: finalTxt };

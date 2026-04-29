@@ -13,25 +13,37 @@ export class WhatsAppService {
   }
 
   async sendText(to: string, text: string) {
-    const maxLen = 4096;
-    const chunks = [];
-    for (let i = 0; i < text.length; i += maxLen) {
-      chunks.push(text.slice(i, i + maxLen));
-    }
-
+    // 1. Split into bubbles by double newline (paragraphs) or bullet points
+    // This makes the response look like it's being "streamed" by a human.
+    const bubbles = text.split(/\n\n+/).filter(b => b.trim() !== "");
+    
     try {
-      for (const chunk of chunks) {
-        await axios.post(
-          `${this.apiUrl}/${this.phoneNumberId}/messages`,
-          {
-            messaging_product: 'whatsapp',
-            recipient_type: 'individual',
-            to,
-            type: 'text',
-            text: { body: chunk },
-          },
-          { headers: { Authorization: `Bearer ${this.accessToken}` } }
-        );
+      for (const bubble of bubbles) {
+        // Handle ultra-long bubbles by splitting them into 4096-char chunks (WhatsApp limit)
+        const maxLen = 4096;
+        const subChunks = [];
+        for (let i = 0; i < bubble.length; i += maxLen) {
+            subChunks.push(bubble.slice(i, i + maxLen));
+        }
+
+        for (const chunk of subChunks) {
+            await axios.post(
+              `${this.apiUrl}/${this.phoneNumberId}/messages`,
+              {
+                messaging_product: 'whatsapp',
+                recipient_type: 'individual',
+                to,
+                type: 'text',
+                text: { body: chunk },
+              },
+              { headers: { Authorization: `Bearer ${this.accessToken}` } }
+            );
+        }
+
+        // Slight delay between bubbles (1 second) to simulate typing
+        if (bubbles.length > 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
     } catch (error: any) {
       logger.error({ error: error.response?.data || error.message }, 'WhatsApp Send Failed');
