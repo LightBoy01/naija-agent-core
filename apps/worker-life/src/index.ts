@@ -899,8 +899,8 @@ Do not output any text after the JSON block.`;
 
                 try {
                     slmReport = await runSlm(slmUsedModel);
-                    if (!slmReport.trim()) {
-                        logger.warn({ model: slmUsedModel }, '⚠️ SLM Lite empty response. Upscaling...');
+                    if (!slmReport.trim() || slmReport === '{}') {
+                        logger.warn({ model: slmUsedModel }, '⚠️ SLM empty response. Retrying with Fallback...');
                         slmUsedModel = fallbackModel;
                         slmReport = await runSlm(slmUsedModel);
                     }
@@ -910,8 +910,16 @@ Do not output any text after the JSON block.`;
                         slmUsedModel = fallbackModel;
                         slmReport = await runSlm(slmUsedModel);
                     } catch (fallbackErr: any) {
-                        slmReport = JSON.stringify({ status: "error", report: "SLM crashed: " + fallbackErr.message });
+                        slmReport = JSON.stringify({ 
+                            status: "error", 
+                            report: "I tried to find specific details but my research tools are a bit cloudy right now." 
+                        });
                     }
+                }
+
+                // Ensure we NEVER send an empty string to resume
+                if (!slmReport.trim()) {
+                    slmReport = JSON.stringify({ status: "success", report: "Research completed but no specific new data was found." });
                 }
 
                 // Clean JSON aggressively
@@ -1046,8 +1054,8 @@ ${resumeRep}
                             finishReason: resumeRes?.candidates?.[0]?.finishReason,
                             safety: resumeRes?.candidates?.[0]?.safetyRatings,
                             rawResponse: extractSafeText(resumeRes)
-                        }, '⚠️ Resume generated an empty response. Safety block or formatting issue?');
-                        finalTxt = "Oga, my brain don tire small from all the research. I see wetin we find, but I no fit process am right now. Abeg ask me another question make I wake up!";
+                        }, '⚠️ Resume generated an empty response.');
+                        finalTxt = "Oga, I don try check that one for you but my brain slow small. Make I try search am for another way or we fit talk about somethin else?";
                     }
 
                     logger.info({ response: finalTxt }, '🗣️ Life Companion Replying (Post-SLM)');
