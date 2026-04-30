@@ -820,7 +820,7 @@ Do not output any text after the JSON block.`;
                     if (sector === 'EducationPack') {
                         allowedNames = ['generate_quiz', 'web_search', 'search_vault', 'get_vault_file'];
                     } else if (sector === 'ResearchPack') {
-                        allowedNames = ['web_search', 'fetch_webpage'];
+                        allowedNames = ['web_search', 'fetch_webpage', 'search_vault', 'get_vault_file'];
                     } else if (sector === 'LifePack') {
                         allowedNames = ['search_vault', 'save_note', 'delete_from_vault', 'get_vault_file'];
                     } else if (sector === 'CommercePack') {

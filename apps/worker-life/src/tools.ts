@@ -168,12 +168,12 @@ export const STATIC_LIFE_TOOLS: Tool = {
     },
     {
       name: 'delegate_task',
-      description: 'Delegate a complex task or research request to a specialized sub-agent (Small Language Model). Use this when you need an expert to execute tools or analyze data on your behalf.',
+      description: 'Delegate a specialized task to a sub-agent. Choose the sector carefully: \n- "EducationPack": For quizzes, study plans, and educational research.\n- "LifePack": For searching the user\'s Vault (receipts, notes, alerts) or deleting data.\n- "ResearchPack": For browsing the live internet, fetching webpages, and general news.\n- "CommercePack": For shopping, pricing, and market comparisons.',
       parameters: {
         type: Type.OBJECT,
         properties: {
-          sector: { type: Type.STRING, description: 'The sector pack required. Must be one of: "EducationPack", "LifePack", "ResearchPack", or "CommercePack".' },
-          instruction: { type: Type.STRING, description: 'Clear, detailed instructions for the sub-agent on what exactly you need them to do or find out.' }
+          sector: { type: Type.STRING, enum: ["EducationPack", "LifePack", "ResearchPack", "CommercePack"], description: 'The specialized sector pack required.' },
+          instruction: { type: Type.STRING, description: 'Clear, detailed instructions for the sub-agent. Include all context needed to execute the task.' }
         },
         required: ['sector', 'instruction']
       }
