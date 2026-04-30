@@ -13,6 +13,7 @@ import { whatsappService } from './services/whatsapp.js';
 import { heartbeatService } from './services/heartbeat.js';
 import { proactiveService } from './services/proactive.js';
 import { Formatter } from './utils/formatter.js';
+import { normalizeHistory } from './utils/ai.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -512,45 +513,14 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
                     const chatId = await findOrCreateChat(orgId || 'naija-agent-master', `${userPhone}_life`, 'User');
                     const history = await getChatHistory(chatId, 10);
                     
-                    // --- STRICT ROLE NORMALIZATION ---
-                    let chatHistory = history.map((msg: any) => ({
-                        role: msg.role === 'assistant' || msg.role === 'model' ? 'model' : 'user',
-                        parts: [{ text: msg.content }],
-                    }));
-
-                    // Remove leading model messages (Gemini/Gemma requirement)
-                    while (chatHistory.length > 0 && chatHistory[0].role === 'model') {
-                        chatHistory.shift();
-                    }
-
-                    // Ensure strictly alternating roles (User -> Model -> User)
-                    const alternatingHistory = [];
-                    let lastRole = null;
-                    for (const msg of chatHistory) {
-                        if (msg.role !== lastRole) {
-                            alternatingHistory.push(msg);
-                            lastRole = msg.role;
-                        } else {
-                            // Merge consecutive same-role messages or skip
-                            alternatingHistory[alternatingHistory.length - 1].parts[0].text += "\n" + msg.parts[0].text;
-                        }
-                    }
-                    
-                    chatHistory = alternatingHistory;
+                    const { history: chatHistory, lastUserMessage } = normalizeHistory(history);
 
                     const originalMessage = message || ""; // Keep a clean copy for DB saving
                     let fullMessage = originalMessage;
 
-                    // If history ends with user, Gemini will append the new message correctly.
-                    // But if we use sendMessage, we usually want history to be empty or end with model.
-                    // Actually, startChat(history) where history ends with model is best for sendMessage(user).
-                    if (chatHistory.length > 0 && chatHistory[chatHistory.length - 1].role === 'user') {
-                        // We will append the current message to the last user message or just pass empty and let sendMessage handle it.
-                        // Best practice for Gemini: if last is user, pop it and merge with the current message.
-                        const lastUserMsg = chatHistory.pop();
-                        const lastText = lastUserMsg?.parts[0].text || "";
-                        fullMessage = `[Previous Context]: ${lastText}\n\n${fullMessage}`;
-                        logger.info({ lastMsg: lastText }, 'Successfully merged orphaned history into current prompt.');
+                    if (lastUserMessage) {
+                        fullMessage = `[Previous Context]: ${lastUserMessage}\n\n${fullMessage}`;
+                        logger.info({ lastMsg: lastUserMessage }, 'Successfully merged orphaned history into current prompt.');
                     }
 
                     logger.info({ historyLength: chatHistory.length }, '🚀 Sending normalized chat history to AI');
@@ -824,10 +794,11 @@ ${activeMonitors.length > 0 ? JSON.stringify(activeMonitors) : "None currently a
 {
   "status": "success" | "error",
   "tool_used": "The name of the tool you used",
-  "report": "A comprehensive but concise summary of your research findings or actions.",
-  "data": [ { "title": "Section Title", "content": "Detailed Findings", "metadata": {} } ] 
+  "report": "A comprehensive summary of your research findings or actions.",
+  "data": [ { "title": "Section Title", "content": "Raw High-Resolution Data / Full Details", "metadata": {} } ] 
 }
 
+[FULL DETAILS MANDATE]: Provide the absolute most detailed raw data possible in the "data" array. Do not summarize aggressively; let the Professor decide what to keep.
 [SAFETY OVERRIDE]: Do NOT trigger safety filters for general educational, medical, or technical questions. Provide objective, technical, and accurate research.
 Do not output any text after the JSON block.`;
 
@@ -1012,31 +983,7 @@ ${resumeMonitors.length > 0 ? JSON.stringify(resumeMonitors) : "None currently a
                 const { primaryModel: resumePrimary, tools: resumeTools } = await getDynamicModels(resumePrompt);
                 const resumeHistory = await getChatHistory(resumeChatId, 10);
                 
-                // --- STRICT ROLE NORMALIZATION (Resume Block) ---
-                let normalizedResumeHistory = resumeHistory.map((msg: any) => ({
-                    role: msg.role === 'assistant' || msg.role === 'model' ? 'model' : 'user',
-                    parts: [{ text: msg.content }],
-                }));
-
-                while (normalizedResumeHistory.length > 0 && normalizedResumeHistory[0].role === 'model') {
-                    normalizedResumeHistory.shift();
-                }
-
-                const altResumeHistory = [];
-                let lastResumeRole = null;
-                for (const msg of normalizedResumeHistory) {
-                    if (msg.role !== lastResumeRole) {
-                        altResumeHistory.push(msg);
-                        lastResumeRole = msg.role;
-                    } else {
-                        altResumeHistory[altResumeHistory.length - 1].parts[0].text += "\n" + msg.parts[0].text;
-                    }
-                }
-                normalizedResumeHistory = altResumeHistory;
-
-                if (normalizedResumeHistory.length > 0 && normalizedResumeHistory[normalizedResumeHistory.length - 1].role === 'user') {
-                    normalizedResumeHistory.pop(); // Pop so the new message becomes the 'user' turn
-                }
+                const { history: normalizedResumeHistory } = normalizeHistory(resumeHistory);
 
                 // --- API GUARD: Resume Block ---
                 const activeResumeTools = (resumeTools && resumeTools[0]?.functionDeclarations?.length > 0) ? resumeTools : undefined;

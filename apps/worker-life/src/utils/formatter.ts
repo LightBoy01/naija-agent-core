@@ -84,24 +84,22 @@ export class Formatter {
   private static cleanupMarkdown(text: string): string {
     let cleaned = text;
 
-    // 1. Convert Headers (### Header) to Bold (*Header*)
-    cleaned = cleaned.replace(/^#{1,6}\s+(.*)$/gm, '*$1*');
-
-    // 2. Handle Bold-Italic (***text***) -> (*_text_*)
+    // 1. Handle Bold-Italic (***text***) -> (*_text_*)
     cleaned = cleaned.replace(/\*\*\*(.*?)\*\*\*/g, '*_$1_*');
 
-    // 3. Handle Bold (**text** or __text__) -> (*text*)
-    // Use a more robust regex that handles potential multiline and non-greedy matching
-    cleaned = cleaned.replace(/(\*\*|__)(.*?)\1/g, '*$2*');
+    // 2. Handle standard Bold (**text**) -> (*text*)
+    // We use a specific regex to avoid matching single stars
+    cleaned = cleaned.replace(/\*\*(.*?)\*\*/g, '*$1*');
 
-    // 4. Handle Italic (*text*) -> (_text_) 
-    // We do this AFTER bold to avoid double-replacing. 
-    // We only match single stars that are NOT part of a bold block.
-    cleaned = cleaned.replace(/(^|[^\*])\*([^\*]+)\*([^\*]|$)/g, '$1_$2_$3');
+    // 3. Handle double-underscore bold (__text__) -> (*text*)
+    cleaned = cleaned.replace(/__(.*?)__/g, '*$1*');
 
-    // 5. Cleanup redundant spaces or lines caused by math/tables
-    cleaned = cleaned.trim();
+    // 4. Cleanup Headers: Convert ### Header to *HEADER* (Bold + Uppercase for emphasis)
+    cleaned = cleaned.replace(/^#{1,6}\s+(.*)$/gm, (match, p1) => `*${p1.toUpperCase()}*`);
 
-    return cleaned;
+    // 5. Final Polish: Ensure no triple-stars or empty bold blocks remain
+    cleaned = cleaned.replace(/\*\*\*/g, '*');
+
+    return cleaned.trim();
   }
 }

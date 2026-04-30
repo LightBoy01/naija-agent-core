@@ -13,13 +13,25 @@ export class WhatsAppService {
   }
 
   async sendText(to: string, text: string) {
-    // 1. Split into bubbles by double newline (paragraphs) or bullet points
-    // This makes the response look like it's being "streamed" by a human.
-    const bubbles = text.split(/\n\n+/).filter(b => b.trim() !== "");
+    // 1. Logic: Group paragraphs into coarser "Coarse Bubbles" (Approx 800 chars)
+    // This prevents notification fatigue while still chunking long answers.
+    const paragraphs = text.split(/\n\n+/);
+    const bubbles: string[] = [];
+    let currentBubble = "";
+
+    for (const p of paragraphs) {
+        if ((currentBubble.length + p.length) < 800) {
+            currentBubble += (currentBubble ? "\n\n" : "") + p;
+        } else {
+            if (currentBubble) bubbles.push(currentBubble);
+            currentBubble = p;
+        }
+    }
+    if (currentBubble) bubbles.push(currentBubble);
     
     try {
       for (const bubble of bubbles) {
-        // Handle ultra-long bubbles by splitting them into 4096-char chunks (WhatsApp limit)
+        // Handle ultra-long bubbles (sanity check for 4096 limit)
         const maxLen = 4096;
         const subChunks = [];
         for (let i = 0; i < bubble.length; i += maxLen) {
@@ -40,9 +52,9 @@ export class WhatsAppService {
             );
         }
 
-        // Slight delay between bubbles (1 second) to simulate typing
+        // Slight delay between coarse bubbles (500ms)
         if (bubbles.length > 1) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
     } catch (error: any) {
