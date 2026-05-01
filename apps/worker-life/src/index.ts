@@ -86,8 +86,7 @@ const worker: Worker = new Worker(
         globalLifeTools,
         getLifeTools,
         worker 
-    };
-
+        };
     try {
         switch (job.name) {
             // --- Phase 3: Administrative Control ---
