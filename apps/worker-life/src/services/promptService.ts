@@ -4,18 +4,41 @@ import { logger } from '../utils/logger.js';
 
 export class PromptService {
     private cache: Record<string, string> = {};
-    private promptsDir: string;
+    private promptsDir: string = '';
 
     constructor() {
-        // Resolve absolute path to the prompts directory
-        this.promptsDir = path.join(__dirname, '..', 'prompts');
+        this.resolvePromptsDir();
         this.loadAll();
     }
 
     /**
-     * Loads all .md files from the prompts directory into RAM.
+     * Attempts to find the prompts directory in multiple locations
+     * to support both ts-node (dev) and node (dist/prod).
      */
+    private resolvePromptsDir() {
+        const pathsToTry = [
+            path.join(__dirname, '..', 'prompts'),          // Relative to src/services or dist/services
+            path.join(process.cwd(), 'src', 'prompts'),     // Local dev from apps/worker-life root
+            path.join(process.cwd(), 'dist', 'prompts'),    // Production from apps/worker-life root
+            path.join(__dirname, '..', '..', 'src', 'prompts') // Deep nested check
+        ];
+
+        for (const p of pathsToTry) {
+            if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
+                this.promptsDir = p;
+                logger.info({ resolvedPath: p }, '📂 Prompts directory resolved');
+                return;
+            }
+        }
+
+        logger.error('❌ Could not resolve prompts directory in any known location');
+        // Fallback to current __dirname parent just in case
+        this.promptsDir = path.join(__dirname, '..', 'prompts');
+    }
+
     public loadAll() {
+        if (!this.promptsDir || !fs.existsSync(this.promptsDir)) return;
+
         try {
             const files = fs.readdirSync(this.promptsDir);
             const mdFiles = files.filter(f => f.endsWith('.md'));
@@ -31,31 +54,28 @@ export class PromptService {
         }
     }
 
-    /**
-     * Retrieves a specific prompt from the cache.
-     * Falls back to disk if not in cache (safety).
-     */
     public getPrompt(filename: string): string {
         if (this.cache[filename]) {
             return this.cache[filename];
         }
 
         try {
-            logger.warn({ filename }, '⚠️ Prompt cache miss, reading from disk');
-            const content = fs.readFileSync(path.join(this.promptsDir, filename), 'utf-8');
-            this.cache[filename] = content; // Update cache
-            return content;
-        } catch (e) {
-            logger.error({ filename }, '❌ Prompt not found on disk');
-            return '';
-        }
+            const fullPath = path.join(this.promptsDir, filename);
+            if (fs.existsSync(fullPath)) {
+                logger.warn({ filename }, '⚠️ Prompt cache miss, reading from disk');
+                const content = fs.readFileSync(fullPath, 'utf-8');
+                this.cache[filename] = content;
+                return content;
+            }
+        } catch (e) {}
+
+        logger.error({ filename, dir: this.promptsDir }, '❌ Prompt not found on disk');
+        return '';
     }
 
-    /**
-     * Force-reloads all prompts from disk.
-     */
     public refresh() {
         logger.info('🔄 Hot-Reloading prompts...');
+        this.resolvePromptsDir();
         this.loadAll();
         return true;
     }
