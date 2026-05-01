@@ -17,10 +17,20 @@ export class PromptService {
      */
     private resolvePromptsDir() {
         const pathsToTry = [
-            path.join(__dirname, '..', 'prompts'),          // Relative to src/services or dist/services
-            path.join(process.cwd(), 'src', 'prompts'),     // Local dev from apps/worker-life root
-            path.join(process.cwd(), 'dist', 'prompts'),    // Production from apps/worker-life root
-            path.join(__dirname, '..', '..', 'src', 'prompts') // Deep nested check
+            // 1. Bundled Prod: __dirname is /app/apps/worker-life/dist
+            // Prompts are at: /app/apps/worker-life/dist/prompts
+            path.resolve(__dirname, 'prompts'),
+
+            // 2. Container/Prod (Unbundled): __dirname is /app/apps/worker-life/dist/services
+            // We want to reach: /app/apps/worker-life/src/prompts
+            path.resolve(__dirname, '..', '..', 'src', 'prompts'),
+            
+            // 3. Local Dev (ts-node): __dirname is apps/worker-life/src/services
+            // We want to reach: apps/worker-life/src/prompts
+            path.resolve(__dirname, '..', 'prompts'),
+
+            // 4. Fallback: Absolute path from monorepo root
+            path.resolve(process.cwd(), 'apps', 'worker-life', 'src', 'prompts')
         ];
 
         for (const p of pathsToTry) {
@@ -31,9 +41,8 @@ export class PromptService {
             }
         }
 
-        logger.error('❌ Could not resolve prompts directory in any known location');
-        // Fallback to current __dirname parent just in case
-        this.promptsDir = path.join(__dirname, '..', 'prompts');
+        logger.error({ pathsTried: pathsToTry, cwd: process.cwd(), dirname: __dirname }, '❌ Could not resolve prompts directory in any known location');
+        this.promptsDir = path.resolve(__dirname, '..', 'prompts'); // Ultimate fallback
     }
 
     public loadAll() {
