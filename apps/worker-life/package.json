@@ -6,6 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "../../node_modules/.bin/tsc",
+    "postbuild": "cp -r src/prompts dist/",
     "dev": "ts-node-dev src/index.ts",
     "start": "node dist/index.js",
     "test": "vitest run"

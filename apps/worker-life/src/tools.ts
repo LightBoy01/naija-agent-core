@@ -227,7 +227,7 @@ export async function getOrchestratorTools(): Promise<Tool[]> {
     'generate_invite'
   ];
 
-  const filtered = decls.filter(d => allowedNames.includes(d.name));
+  const filtered = decls.filter(d => d.name && allowedNames.includes(d.name));
   return [{ functionDeclarations: filtered }];
 }
 

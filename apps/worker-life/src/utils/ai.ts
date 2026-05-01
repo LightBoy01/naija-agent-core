@@ -47,3 +47,25 @@ export function normalizeHistory(history: any[]) {
         lastUserMessage 
     };
 }
+
+/**
+ * Safely extracts text from a Gemini result, handling function calls
+ * and potential SDK warnings gracefully.
+ */
+export function extractSafeText(result: any): string {
+    if (!result) return "";
+    try {
+        if (result.functionCalls && result.functionCalls.length > 0) {
+            if (result.candidates?.[0]?.content?.parts) {
+                const textParts = result.candidates[0].content.parts.filter((p: any) => p.text);
+                if (textParts.length > 0) {
+                    return textParts.map((p: any) => p.text).join("");
+                }
+            }
+            return "";
+        }
+        return result.text || "";
+    } catch (e) {
+        return "";
+    }
+}
