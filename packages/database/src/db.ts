@@ -16,10 +16,28 @@ dotenv.config({ path: path.resolve(currentDir, '../../../.env') });
 const DATABASE_URL = process.env.DATABASE_URL;
 
 // Path to the CA certificate
-const caPath = path.resolve(currentDir, '../isrgrootx1.pem');
-const sslConfig = fs.existsSync(caPath) 
+const possibleCaPaths = [
+  path.resolve(currentDir, '../isrgrootx1.pem'), // Legacy relative
+  path.resolve(process.cwd(), 'packages/database/isrgrootx1.pem'), // Root-relative (Monorepo dev/container)
+  path.resolve(process.cwd(), 'isrgrootx1.pem'), // Root-direct
+  '/app/packages/database/isrgrootx1.pem', // Fixed container path
+];
+
+let caPath = '';
+for (const p of possibleCaPaths) {
+  if (fs.existsSync(p)) {
+    caPath = p;
+    break;
+  }
+}
+
+const sslConfig = caPath 
   ? { ssl: { ca: fs.readFileSync(caPath) } }
   : {};
+
+if (!caPath && DATABASE_URL?.includes('tidbcloud.com')) {
+  console.warn('⚠️ [DB] TiDB detected but no SSL certificate (isrgrootx1.pem) found. Connection might fail.');
+}
 
 export const connection = DATABASE_URL 
   ? mysql.createPool({
