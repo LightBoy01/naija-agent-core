@@ -9,7 +9,8 @@ A high-scale, multi-tenant AI Business Operating System built specifically for t
 *   **State:** Firebase Firestore (Atomic Ledgers) + Redis (Heartbeats/Idempotency/Locking).
 *   **Identity:** WhatsApp-first MFA and Bcrypt-salted Admin PINs.
 
-## 🚀 Key Features (MVP Phase 7)
+## 🚀 Key Features (Empire Phase 9)
+*   🏦 **Alajo Sovereign Finance:** Automated personal vaults with Monnify Virtual Accounts, bill payments, and goal-based savings.
 *   🛒 **Conversational Commerce:** Full Shopping Cart lifecycle (`add`, `view`, `remove`, `clear`) integrated into checkout.
 *   🛡️ **Deterministic Price Guard:** Algorithmic verification of AI-quoted prices against live product data to prevent fraud.
 *   📱 **SMS Bridge Relay:** Real-time bank alert matching via Termux-based bridge devices.
@@ -25,6 +26,7 @@ A high-scale, multi-tenant AI Business Operating System built specifically for t
 5.  **Run:** `npm start` (Runs both API and Worker).
 
 ## 🌍 Strategic Documentation
+*   [Alajo Financial Guide](docs/guides/ALAJO_SYSTEM_GUIDE.md)
 *   [Constitution (Sovereign Directive 2026)](docs/SOVEREIGN_DIRECTIVE_2026_03_10.md)
 *   [Empire Roadmap](docs/GROWTH_BLUEPRINT.md)
 *   [Onboarding Strategy](docs/ONBOARDING_STRATEGY_2026.md)

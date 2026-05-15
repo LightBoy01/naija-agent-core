@@ -5,19 +5,21 @@ export class MonnifyProvider implements PaymentProvider {
   private apiKey: string;
   private secretKey: string;
   private contractCode: string | null = null;
+  private walletAccountNumber: string | null = null;
   private baseUrl = 'https://api.monnify.com'; // Default to Production
   private accessToken: string | null = null;
   private tokenExpiresAt: number = 0;
 
   constructor(combinedKey: string) {
-    // Format: API_KEY:SECRET_KEY[:CONTRACT_CODE]
-    const [apiKey, secretKey, contractCode] = combinedKey.split(':');
+    // Format: API_KEY:SECRET_KEY[:CONTRACT_CODE][:WALLET_ACCOUNT_NUMBER]
+    const [apiKey, secretKey, contractCode, walletAccountNumber] = combinedKey.split(':');
     if (!apiKey || !secretKey) {
-      throw new Error('Monnify requires API_KEY:SECRET_KEY[:CONTRACT_CODE] format.');
+      throw new Error('Monnify requires API_KEY:SECRET_KEY[:CONTRACT_CODE][:WALLET_ACCOUNT_NUMBER] format.');
     }
     this.apiKey = apiKey;
     this.secretKey = secretKey;
     this.contractCode = contractCode || process.env.MONNIFY_CONTRACT_CODE || null;
+    this.walletAccountNumber = walletAccountNumber || process.env.MONNIFY_WALLET_ACCOUNT_NUMBER || null;
     
     // Check if it's a test key (usually starts with MK_TEST)
     if (this.apiKey.startsWith('MK_TEST')) {
@@ -164,6 +166,205 @@ export class MonnifyProvider implements PaymentProvider {
     } catch (error) {
       console.error('Monnify Create Link Error:', error);
       return null;
+    }
+  }
+
+  /**
+   * Reserves a dedicated virtual account for a customer.
+   * If an account already exists for this reference (e.g. phone number), it returns the existing one.
+   */
+  async reserveAccount(reference: string, accountName: string, customerEmail: string, customerName: string): Promise<any | null> {
+    try {
+      const contractCode = this.contractCode;
+      if (!contractCode) {
+        console.error('Missing Monnify Contract Code for Account Reservation.');
+        return null;
+      }
+
+      const token = await this.getAccessToken();
+
+      const payload = {
+        accountReference: reference, // Use phone number or unique user ID
+        accountName: accountName,
+        currencyCode: 'NGN',
+        contractCode: contractCode,
+        customerEmail: customerEmail,
+        customerName: customerName,
+        getAllAvailableBanks: true
+      };
+
+      const response = await fetch(`${this.baseUrl}/api/v2/bank-transfer/reserved-accounts`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      if (data.requestSuccessful && data.responseBody) {
+        return data.responseBody;
+      }
+      
+      // If already exists, Monnify might return an error or the existing one depending on the API version.
+      // v2 usually handles it gracefully or requires a GET if it fails.
+      return null;
+    } catch (error) {
+      console.error('Monnify Reserve Account Error:', error);
+      return null;
+    }
+  }
+
+  async getBanks(): Promise<any[]> {
+    try {
+      const token = await this.getAccessToken();
+      const response = await fetch(`${this.baseUrl}/api/v1/banks`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      return data.requestSuccessful ? data.responseBody : [];
+    } catch (error) {
+      console.error('Monnify getBanks Error:', error);
+      return [];
+    }
+  }
+
+  async resolveAccount(bankCode: string, accountNumber: string): Promise<string | null> {
+    try {
+      const token = await this.getAccessToken();
+      const response = await fetch(`${this.baseUrl}/api/v1/disbursements/account/validate?accountNumber=${accountNumber}&bankCode=${bankCode}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      return data.requestSuccessful ? data.responseBody.accountName : null;
+    } catch (error) {
+      console.error('Monnify resolveAccount Error:', error);
+      return null;
+    }
+  }
+
+  async payout(args: { amount: number, bankCode: string, accountNumber: string, reference: string, narration?: string }): Promise<{ success: boolean; message: string; reference?: string }> {
+    try {
+      if (!this.walletAccountNumber) {
+        return { success: false, message: 'Source Wallet Account Number missing. Configure in MONNIFY_WALLET_ACCOUNT_NUMBER.' };
+      }
+
+      // 1. Resolve Account Name first (Required for v2)
+      const accountName = await this.resolveAccount(args.bankCode, args.accountNumber);
+      if (!accountName) {
+        return { success: false, message: 'Could not resolve destination account name.' };
+      }
+
+      const token = await this.getAccessToken();
+      const payload = {
+        amount: args.amount,
+        reference: args.reference,
+        narration: args.narration || 'Aelixxr Vault Withdrawal',
+        destinationBankCode: args.bankCode,
+        destinationAccountNumber: args.accountNumber,
+        destinationAccountName: accountName,
+        currency: 'NGN',
+        sourceAccountNumber: this.walletAccountNumber
+      };
+
+      const response = await fetch(`${this.baseUrl}/api/v2/disbursements/single`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      if (data.requestSuccessful) {
+        return { success: true, message: 'Transfer successful', reference: data.responseBody.reference };
+      }
+      return { success: false, message: data.responseMessage || 'Transfer failed' };
+    } catch (error: any) {
+      console.error('Monnify payout Error:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  // --- Value Added Services (VAS) ---
+
+  async getBillers(categoryCode: string): Promise<any[]> {
+    try {
+      const token = await this.getAccessToken();
+      const response = await fetch(`${this.baseUrl}/api/v1/vas/bills-payment/billers?categoryCode=${categoryCode}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      return data.requestSuccessful ? data.responseBody : [];
+    } catch (error) {
+      console.error('Monnify getBillers Error:', error);
+      return [];
+    }
+  }
+
+  async getBillerProducts(billerCode: string): Promise<any[]> {
+    try {
+      const token = await this.getAccessToken();
+      const response = await fetch(`${this.baseUrl}/api/v1/vas/bills-payment/biller-products?billerCode=${billerCode}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      return data.requestSuccessful ? data.responseBody : [];
+    } catch (error) {
+      console.error('Monnify getBillerProducts Error:', error);
+      return [];
+    }
+  }
+
+  async validateUtilityCustomer(productCode: string, customerId: string): Promise<any | null> {
+    try {
+      const token = await this.getAccessToken();
+      const response = await fetch(`${this.baseUrl}/api/v1/vas/bills-payment/validate-customer`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ productCode, customerId })
+      });
+      const data = await response.json();
+      return data.requestSuccessful ? data.responseBody : null;
+    } catch (error) {
+      console.error('Monnify validateUtilityCustomer Error:', error);
+      return null;
+    }
+  }
+
+  async vendUtility(args: { productCode: string, customerId: string, amount: number, reference: string, validationReference: string }): Promise<{ success: boolean; message: string; responseBody?: any }> {
+    try {
+      const token = await this.getAccessToken();
+      const payload = {
+        productCode: args.productCode,
+        customerId: args.customerId,
+        amount: args.amount,
+        paymentReference: args.reference,
+        validationReference: args.validationReference
+      };
+
+      const response = await fetch(`${this.baseUrl}/api/v1/vas/bills-payment/vend`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      if (data.requestSuccessful) {
+        return { success: true, message: 'Vending successful', responseBody: data.responseBody };
+      }
+      return { success: false, message: data.responseMessage || 'Vending failed' };
+    } catch (error: any) {
+      console.error('Monnify vendUtility Error:', error);
+      return { success: false, message: error.message };
     }
   }
 }

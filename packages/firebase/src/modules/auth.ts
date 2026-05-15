@@ -46,3 +46,16 @@ export async function verifySovereignPin(phone: string, pin: string): Promise<bo
 
   return bcrypt.compare(pin, masterOrg.config.adminPin || '');
 }
+
+export async function setUserPin(phone: string, pin: string): Promise<void> {
+    const hashedPin = await bcrypt.hash(pin, 10);
+    await db.collection('user_profiles').doc(phone).set({
+        pin: hashedPin
+    }, { merge: true });
+}
+
+export async function verifyUserPin(phone: string, pin: string): Promise<boolean> {
+    const userDoc = await db.collection('user_profiles').doc(phone).get();
+    if (!userDoc.exists || !userDoc.data()?.pin) return false;
+    return bcrypt.compare(pin, userDoc.data()!.pin);
+}

@@ -2,28 +2,28 @@ import { Job } from 'bullmq';
 import { Type } from '@google/genai';
 import { SystemConfig } from '@naija-agent/types';
 import { logger } from '../utils/logger.js';
-import { executeLifeTool } from '../tools.js';
+import { executeLifeTool } from '../tools/index.js';
 import { whatsappService } from '../services/whatsapp.js';
 import { billingService } from '../services/billingService.js';
 import { promptService } from '../services/promptService.js';
 import { SECTOR_PACKS, DEFAULT_SECTOR_CONFIG } from '../config/sectors.js';
+import { AIProvider, AIMessage } from '@naija-agent/ai';
 
 export interface SLMDependencies {
-    genAI: any;
+    ai: AIProvider;
     lifeQueue: any;
     globalLifeTools: any[] | null;
     getLifeTools: () => Promise<any[]>;
-    extractSafeText: (result: any) => string;
 }
 
 export async function handleSLMTask(job: Job, deps: SLMDependencies) {
-    const { genAI, lifeQueue, globalLifeTools, getLifeTools, extractSafeText } = deps;
+    const { ai, lifeQueue, globalLifeTools, getLifeTools } = deps;
     logger.info('🤖 Starting SLM Worker...');
     const { sector, instruction: slmInst, originalMessage: slmOrig, userPhone: slmPhone, chatId: slmChatId, orgId: slmOrgId, energyCredits: initialEnergy } = job.data;
     
     let currentEnergy = initialEnergy ?? 0;
 
-    // --- Phase 3: Hot-Reloading Agent Prompt ---
+    // --- Phase 10: Hot-Reloading Agent Prompt (The Triad) ---
     let agentFile = '';
     if (sector === 'EducationPack') agentFile = 'StudyBuddy.Agent.md';
     else if (sector === 'LifePack') agentFile = 'VaultClerk.Agent.md';
@@ -47,7 +47,7 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
 
     const fullInstruction = `[USER_ID]: ${slmPhone}\n<untrusted_user_instruction>\n${slmInst}\n</untrusted_user_instruction>`;
 
-    // --- TOOL SCOPING ---
+    // --- TOOL SCOPING (Sector Packs) ---
     const rawTools = globalLifeTools || await getLifeTools();
     let slmTools = rawTools;
     
@@ -85,22 +85,22 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
     let slmReport = "";
 
     const runSlm = async (model: string) => {
-        const slmChat = genAI.chats.create({
-            model: model,
-            config: {
-                tools: slmTools,
-                systemInstruction: agentPrompt,
-                responseMimeType: 'application/json',
-                responseSchema: slmResponseSchema as any
-            }
+        let history: AIMessage[] = [{ role: 'user', parts: [{ text: fullInstruction }] }];
+
+        const result = await ai.chat(history, fullInstruction, {
+            model,
+            systemInstruction: agentPrompt,
+            tools: slmTools,
+            responseMimeType: 'application/json',
+            responseSchema: slmResponseSchema as any
         });
 
-        const result = await slmChat.sendMessage({ message: fullInstruction });
         const slmCalls = result.functionCalls;
         
         if (slmCalls && slmCalls.length > 0) {
-            const call = slmCalls[0];
+            const call = slmCalls[0]; // SLMs typically do one thing well
             const billResult = await billingService.billForTool(slmPhone, call.name, currentEnergy);
+            
             if (!billResult.success) {
                 return JSON.stringify({
                     status: "error",
@@ -109,16 +109,26 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
             }
             currentEnergy = billResult.newBalance ?? currentEnergy;
 
-            const toolResult = await executeLifeTool(call.name, { ...call.args, userId: slmPhone });
+            const toolResult = await executeLifeTool(call.name, { ...call.args, userId: slmPhone }, job.id);
             const safeResponse = (typeof toolResult === 'object' && toolResult !== null && !Array.isArray(toolResult)) 
                 ? toolResult 
                 : { result: toolResult };
-            const followUp = await slmChat.sendMessage({
-                message: [{ functionResponse: { name: call.name, response: safeResponse } }]
+            
+            history.push({ role: 'model', parts: [{ functionCall: call }] });
+            history.push({ role: 'function', parts: [{ functionResponse: { name: call.name, response: safeResponse } }] });
+
+            const followUp = await ai.chat(history, "Analyze the tool result and generate the final report.", {
+                 model,
+                 systemInstruction: agentPrompt,
+                 tools: slmTools,
+                 responseMimeType: 'application/json',
+                 responseSchema: slmResponseSchema as any
             });
-            return extractSafeText(followUp);
+
+            return followUp.text;
         }
-        return extractSafeText(result);
+
+        return result.text;
     };
 
     try {
@@ -126,7 +136,7 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
     } catch (e: any) {
         logger.error({ error: e.message, model: slmUsedModel }, 'SLM Failed. Attempting Fallback...');
         try {
-            const masterPhone = process.env.MASTER_ADMIN_PHONE || '2347042310893';
+            const masterPhone = process.env.MASTER_ADMIN_PHONE || SystemConfig.CONTACTS.MASTER_ADMIN_PHONE;
             await whatsappService.sendText(masterPhone, `🚨 *AELIXXR SLM ERROR*\n\n*User:* ${slmPhone}\n*Sector:* ${sector}\n*Model:* ${slmUsedModel}\n*Error:* ${e.message}`);
         } catch (sErr) {}
 
@@ -153,6 +163,7 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
         cleanedReport = JSON.stringify({ status: "success", report: slmReport || "Completed." });
     }
 
+    // Pass the baton back to Aelixxr (The Soul)
     await lifeQueue.add('life-chat-resume', {
         orgId: slmOrgId,
         userPhone: slmPhone,

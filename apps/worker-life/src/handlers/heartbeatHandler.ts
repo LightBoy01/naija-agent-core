@@ -6,12 +6,13 @@ import { whatsappService } from '../services/whatsapp.js';
 import { proactiveService } from '../services/proactive.js';
 import { searchVault } from '@naija-agent/storage';
 import { Formatter } from '../utils/formatter.js';
+import { AIProvider } from '@naija-agent/ai';
+import { SystemConfig } from '@naija-agent/types';
 
 export interface HeartbeatDependencies {
-    genAI: any;
+    ai: AIProvider;
     getDynamicModels: (systemInstruction?: string) => Promise<any>;
     lifeQueue: any;
-    extractSafeText: (result: any) => string;
     worker: any;
 }
 
@@ -40,14 +41,13 @@ export async function handleLifeHeartbeat(job: Job, deps: HeartbeatDependencies)
                 removeOnComplete: true,
                 removeOnFail: false
             });
-            logger.info({ userId, configId: config.id }, 'Queued evaluate-heartbeat job');
         }
     }
-    return { success: true, queuedUsers: activeUsers.length };
+    return { success: true, count: activeUsers.length };
 }
 
 export async function handleEvaluateHeartbeat(job: Job, deps: HeartbeatDependencies) {
-    const { genAI, getDynamicModels, extractSafeText } = deps;
+    const { ai, getDynamicModels } = deps;
     const { userId, config } = job.data;
     
     try {
@@ -93,29 +93,15 @@ export async function handleEvaluateHeartbeat(job: Job, deps: HeartbeatDependenc
             - If no message, output exactly "SKIP".
             `;
             
-            const { primaryModel, fallbackModel, tools } = await getDynamicModels(systemPrompt);
-            const chatSession = genAI.chats.create({
+            const { primaryModel, tools } = await getDynamicModels(systemPrompt);
+            
+            const result = await ai.generateText("Evaluate and generate proactive message or SKIP.", {
                 model: primaryModel,
-                config: { systemInstruction: systemPrompt, tools }
+                systemInstruction: systemPrompt,
+                tools
             });
             
-            let result;
-            try {
-                result = await chatSession.sendMessage({ message: "Evaluate and generate proactive message or SKIP." });
-            } catch (err: any) {
-                if (err.message.includes('429') || err.message.includes('Quota') || err.message.includes('503')) {
-                    logger.warn('⚠️ Heartbeat primary model failed. Retrying with fallback.');
-                    const fallbackSession = genAI.chats.create({
-                        model: fallbackModel,
-                        config: { systemInstruction: systemPrompt, tools }
-                    });
-                    result = await fallbackSession.sendMessage({ message: "Evaluate and generate proactive message or SKIP." });
-                } else {
-                    throw err;
-                }
-            }
-            
-            let text = extractSafeText(result);
+            let text = result.text.trim();
             text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
             if (text.includes('<think>')) {
                 text = text.split('<think>')[0].trim();
@@ -137,7 +123,7 @@ export async function handleEvaluateHeartbeat(job: Job, deps: HeartbeatDependenc
         
         // --- SOVEREIGN SNITCH: Heartbeat Alert ---
         try {
-            const masterPhone = process.env.MASTER_ADMIN_PHONE || '2347042310893';
+            const masterPhone = process.env.MASTER_ADMIN_PHONE || SystemConfig.CONTACTS.MASTER_ADMIN_PHONE;
             await whatsappService.sendText(masterPhone, `🚨 *AELIXXR HEARTBEAT ERROR*\n\n*User:* ${userId}\n*Config:* ${config.id}\n*Error:* ${err.message}`);
         } catch (sErr) {}
         
@@ -168,7 +154,7 @@ export async function handleProactiveNudge(job: Job, deps: HeartbeatDependencies
 }
 
 export async function handleEvaluateNudge(job: Job, deps: HeartbeatDependencies) {
-    const { genAI, getDynamicModels, extractSafeText } = deps;
+    const { ai, getDynamicModels } = deps;
     const nudgeUserId = job.data.userId;
     
     try {
@@ -183,29 +169,15 @@ export async function handleEvaluateNudge(job: Job, deps: HeartbeatDependencies)
         Draft a warm, contextual message checking in. Use <think> tags for reasoning.
         `;
         
-        const { primaryModel, fallbackModel, tools } = await getDynamicModels(systemPrompt);
-        const chatSession = genAI.chats.create({
+        const { primaryModel, tools } = await getDynamicModels(systemPrompt);
+        
+        const result = await ai.generateText("Generate proactive nudge message.", {
             model: primaryModel,
-            config: { systemInstruction: systemPrompt, tools }
+            systemInstruction: systemPrompt,
+            tools
         });
         
-        let result;
-        try {
-            result = await chatSession.sendMessage({ message: "Generate proactive nudge message." });
-        } catch (err: any) {
-            if (err.message.includes('429') || err.message.includes('Quota') || err.message.includes('503')) {
-                logger.warn('⚠️ Nudge primary model failed. Retrying with fallback.');
-                const fallbackSession = genAI.chats.create({
-                    model: fallbackModel,
-                    config: { systemInstruction: systemPrompt, tools }
-                });
-                result = await fallbackSession.sendMessage({ message: "Generate proactive nudge message." });
-            } else {
-                throw err;
-            }
-        }
-        
-        let text = extractSafeText(result);
+        let text = result.text.trim();
         text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
         if (text !== '') {
             await whatsappService.sendText(nudgeUserId, text);
@@ -216,7 +188,7 @@ export async function handleEvaluateNudge(job: Job, deps: HeartbeatDependencies)
         
         // --- SOVEREIGN SNITCH: Nudge Alert ---
         try {
-            const masterPhone = process.env.MASTER_ADMIN_PHONE || '2347042310893';
+            const masterPhone = process.env.MASTER_ADMIN_PHONE || SystemConfig.CONTACTS.MASTER_ADMIN_PHONE;
             await whatsappService.sendText(masterPhone, `🚨 *AELIXXR NUDGE ERROR*\n\n*User:* ${nudgeUserId}\n*Error:* ${err.message}`);
         } catch (sErr) {}
         

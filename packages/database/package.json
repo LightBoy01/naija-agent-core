@@ -1,0 +1,29 @@
+{
+  "name": "@naija-agent/database",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "generate": "drizzle-kit generate",
+    "push": "drizzle-kit push"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.30.10",
+    "mysql2": "^3.9.7",
+    "@naija-agent/types": "*"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.20.17",
+    "dotenv": "^16.4.5"
+  }
+}

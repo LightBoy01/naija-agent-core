@@ -9,6 +9,16 @@
 - **Credit Awareness:** Gemini is now balance-aware (Context Injection) and responds to balance queries.
 
 ## Recent Changes
+- **Phase 9.2 Alajo Sovereign Financial System (May 2026):**
+    - **Unified Vault Architecture:** Transitioned Aelixxr into a Sovereign Financial Manager. Every user now has a personalized Monnify Virtual Account that funds a unified `vaultBalanceNaira`.
+    - **Automated Recharges:** Users can now convert Vault Naira into Aelixxr Energy Credits instantly via the `convert_vault_to_energy` tool.
+    - **Iron Shield Security Hardening:**
+        - Implemented **Salted Bcrypt** hashing for user PINs (stored in `user_profiles`).
+        - Developed a **Deterministic PIN Interceptor** in `handleLifeChat` to prevent AI hallucination of 4-digit PINs.
+        - Enforced a **3-Strike Lockout** policy (15-minute vault lock after 3 incorrect attempts).
+        - Integrated context-aware PII scrubbing to protect PINs in the Vault while allowing conversational numbers (years/quantities).
+    - **Utility Vending:** Integrated Monnify VAS for Airtime, Data, and Electricity with a built-in **₦100 platform fee** and automated commission collection.
+    - **Trust Anchor:** Implemented Monnify Payouts (Withdrawals) to allow users to withdraw Vault funds to personal bank accounts.
 - **Phase 9.1 Universal SDK Migration (April 2026):**
     - **SDK Upgrade:** Migrated from legacy `@google/generative-ai` to the modern `@google/genai` Universal SDK.
     - **Global Publisher Endpoint:** Re-routed all AI traffic through `https://aiplatform.googleapis.com/v1/publishers/google` for enhanced model availability (Gemini 2.5/3) without complex OAuth.

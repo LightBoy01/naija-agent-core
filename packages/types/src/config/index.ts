@@ -50,5 +50,10 @@ export const SystemConfig = {
         TIMEZONE: 'Africa/Lagos',
         CURRENCY: 'NGN',
         LOCALE: 'en-NG',
+    },
+    // Contacts
+    CONTACTS: {
+        MASTER_ADMIN_PHONE: '2347042310893', // Sovereign Boss / Developer
+        AELIXXR_PHONE_ID_DISPLAY: '2347042310893', // Used for invite generation
     }
 } as const;

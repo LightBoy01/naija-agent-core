@@ -123,6 +123,43 @@ export class StudyBuddyService {
             throw new Error("I couldn't generate the quiz right now. Abeg try again.");
         }
     }
+
+    async summarizeMaterial(content: string, format: 'bullets' | 'detailed' | 'flashcards' = 'bullets'): Promise<string> {
+        logger.info({ format }, '📚 Summarizing Study Material...');
+
+        const prompt = `
+        Summarize the following study material for a Nigerian student.
+        Format: ${format}
+        
+        Guidelines:
+        - Use simple, easy-to-understand language.
+        - Relate complex concepts to everyday Nigerian life (e.g. market economics, transport, tech).
+        - If format is "flashcards", provide a list of "Q: ... A: ..." pairs.
+        - End with a "3 Key Takeaways" section.
+
+        MATERIAL:
+        ${content}
+        `;
+
+        try {
+            const result = await this.ai.models.generateContent({
+                model: SystemConfig.MODELS.AELIXXR_WORKER,
+                contents: prompt
+            });
+
+            let text = "";
+            if (result.candidates?.[0]?.content?.parts) {
+                text = result.candidates[0].content.parts.filter((p: any) => p.text).map((p: any) => p.text).join("");
+            } else {
+                text = result.text || "";
+            }
+
+            return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        } catch (error: any) {
+            logger.error({ error: error.message }, '❌ Failed to summarize material');
+            throw new Error("I couldn't summarize that right now o! Abeg try again later.");
+        }
+    }
 }
 
 export const studyBuddy = new StudyBuddyService();

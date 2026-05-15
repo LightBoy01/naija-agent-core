@@ -9,3 +9,17 @@ dump.rdb
 nf-env*.json
 *.log
 logs.*.json
+
+# Temporary Files and Logs
+*.txt
+*.js.map
+*.ogg
+*.jpg
+*.png
+*.mjs.map
+
+# Sandbox/Test Scripts
+test-*.ts
+test-*.js
+test-*.mjs
+

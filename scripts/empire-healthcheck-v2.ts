@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { getDb } from '../packages/firebase/src/index.ts';
 import { Storage } from '@google-cloud/storage';
 import { GoogleGenAI } from '@google/genai';
+import { v2 as cloudinary } from 'cloudinary';
 
 dotenv.config();
 
@@ -17,67 +18,77 @@ const redisConfig = {
 async function runEmpireHealthCheck() {
   console.log('\n🌟 --- NAIJA AGENT EMPIRE HEALTH CHECK V2 (Phase 9/Empire Era) --- 🌟');
   console.log(`Timestamp: ${new Date().toLocaleString()}\n`);
-// 1. Storage & Multimodal Check (GCS)
-console.log('🔍 [1/6] Checking Multimodal Storage (GCS)...');
-try {
-  let credentials;
-  const localKeyPath = './packages/firebase/serviceAccountKey.json';
 
-  if (fs.existsSync(localKeyPath)) {
-    console.log('📄 Using local serviceAccountKey.json');
-    credentials = JSON.parse(fs.readFileSync(localKeyPath, 'utf8'));
-  } else if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
-    const cleanBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64.replace(/[^A-Za-z0-9+/=]/g, '');
-    const decoded = Buffer.from(cleanBase64, 'base64').toString('utf8');
-    const sanitized = decoded.replace(/[\n\r]/g, '');
-    try {
-      credentials = JSON.parse(sanitized);
-      console.log(`📡 Credential Project ID: ${credentials.project_id}`);
-    } catch (parseErr: any) {
-      console.error('❌ JSON Parse Error:', parseErr.message);
-      console.log('Decoded start:', decoded.substring(0, 50));
-      throw parseErr;
+  // 1. Storage & Multimodal Check (Cloudinary + GCS Fallback)
+  console.log('🔍 [1/6] Checking Multimodal Storage...');
+  try {
+    if (process.env.CLOUDINARY_URL) {
+      cloudinary.config(process.env.CLOUDINARY_URL);
+      const result = await cloudinary.api.ping();
+      if (result.status === 'ok') {
+        console.log('✅ Cloudinary (Primary Storage) is ONLINE.');
+      } else {
+        console.warn('⚠️ Cloudinary Ping returned unexpected status:', result.status);
+      }
+    } else {
+      console.log('ℹ️ Cloudinary URL not set, skipping Cloudinary check.');
     }
-  }
 
-  const storage = new Storage({
-    projectId: process.env.FIREBASE_PROJECT_ID || 'naija-agent-core',
-    ...(credentials ? { credentials } : {})
-  });
+    let credentials;
+    const localKeyPath = './packages/firebase/serviceAccountKey.json';
+    if (fs.existsSync(localKeyPath)) {
+      credentials = JSON.parse(fs.readFileSync(localKeyPath, 'utf8'));
+    }
+
+    const storage = new Storage({
+      projectId: process.env.FIREBASE_PROJECT_ID || 'naija-agent-core',
+      ...(credentials ? { credentials } : {})
+    });
     const BUCKET_NAME = process.env.FIREBASE_STORAGE_BUCKET || 'naija-agent-core.firebasestorage.app';
     const bucket = storage.bucket(BUCKET_NAME);
     const [exists] = await bucket.exists();
     if (exists) {
-      console.log(`✅ GCS Bucket [${BUCKET_NAME}] is ONLINE.`);
+      console.log(`✅ GCS Bucket [${BUCKET_NAME}] (Fallback) is ONLINE.`);
     } else {
-      console.error(`❌ GCS Bucket [${BUCKET_NAME}] NOT FOUND.`);
-      // Attempt to list buckets to see what's available
-      const [buckets] = await storage.getBuckets();
-      console.log('📝 Available Buckets:', buckets.map(b => b.name).join(', '));
+      console.warn(`⚠️ GCS Bucket [${BUCKET_NAME}] NOT FOUND (Optional if using Cloudinary).`);
     }
   } catch (err: any) {
-    console.error('❌ GCS Connection FAILED:', err.message);
+    console.error('❌ Storage Connection FAILED:', err.message);
   }
 
-  // 2. AI & Embedding Model Check
-  console.log('\n🔍 [2/6] Checking AI Models (Gemini Embedding 2)...');
+  // 2. AI & Embedding Model Check (Production Endpoint)
+  console.log('\n🔍 [2/6] Checking AI Models (Global Publisher Endpoint)...');
   try {
     const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error('GEMINI_API_KEY is missing');
     
-    // Try standard endpoint first
-    const genAI = new GoogleGenAI(apiKey);
+    // Using production endpoint config
+    const genAI = new GoogleGenAI({
+      apiKey,
+      httpOptions: { 
+        baseUrl: 'https://aiplatform.googleapis.com', 
+        apiVersion: 'v1/publishers/google' 
+      }
+    });
     
     // Test a small embedding to verify model access
+    // Try text-embedding-004 as it is more stable across endpoints
     const result = await genAI.models.embedContent({
-      model: 'models/gemini-embedding-2-preview',
+      model: 'models/text-embedding-004',
       contents: [{ parts: [{ text: 'Health check' }] }]
     });
     
-    if (result.embeddings?.[0]?.values) {
-        console.log('✅ Gemini Embedding 2 (Multimodal) is ACCESSIBLE.');
+    if (result.embeddings?.[0]?.values || result.embedding?.values) {
+        console.log('✅ AI Embedding Model (Production) is ACCESSIBLE.');
     } else {
-        console.warn('⚠️ Gemini Embedding 2 returned no values.');
+        console.warn('⚠️ AI Embedding Model returned no values.');
+    }
+
+    // Verify chat model connectivity
+    const chat = genAI.chats.create({ model: 'models/gemini-3-flash-preview' });
+    const response = await chat.sendMessage({ message: 'ping' });
+    if (response.text) {
+        console.log('✅ Gemini 3 Flash (Production) is RESPONDING.');
     }
   } catch (err: any) {
     console.error('❌ AI Model Check FAILED:', err.message);

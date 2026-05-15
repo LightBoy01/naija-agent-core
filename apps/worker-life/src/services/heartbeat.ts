@@ -1,6 +1,6 @@
 import { getFirestore } from 'firebase-admin/firestore';
 import { logger } from '../utils/logger.js';
-import { executeLifeTool } from '../tools.js';
+import { executeLifeTool } from '../tools/index.js';
 
 /**
  * Service to manage proactive Aelixxr actions (The Heartbeat Engine).

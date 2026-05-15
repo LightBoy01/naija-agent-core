@@ -12,6 +12,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@naija-agent/ai": "*",
+    "@naija-agent/database": "*",
     "@google/genai": "^1.50.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@naija-agent/firebase": "*",

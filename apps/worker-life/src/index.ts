@@ -1,14 +1,15 @@
 import { Worker, Job, Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import 'dotenv/config';
-import { GoogleGenAI } from '@google/genai';
 import { SystemConfig } from '@naija-agent/types';
 import { logger } from './utils/logger.js';
-import { getLifeTools, getOrchestratorTools } from './tools.js';
+import { getLifeTools, getOrchestratorTools } from './tools/index.js';
 import { mcpClient } from './services/mcpClient.js';
-import { extractSafeText } from './utils/ai.js';
 import { promptService } from './services/promptService.js';
 import path from 'path';
+
+// --- AI Abstraction ---
+import { AIOrchestrator, GeminiProvider, OpenAIProvider } from '@naija-agent/ai';
 
 // --- Handlers ---
 import { handleLifeChat, handleLifeChatResume, ChatDependencies } from './handlers/chatHandler.js';
@@ -22,12 +23,6 @@ import {
 import { handleSLMTask, SLMDependencies } from './handlers/slmHandler.js';
 import { handleConsolidateMemory, handleMarketScrape } from './handlers/maintenanceHandler.js';
 
-// --- Termux/Android Environment Fix ---
-if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === undefined && process.platform === 'android') {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-    logger.info('🛡️ [TERMUX FIX]: TLS Verification disabled.');
-}
-
 // --- Redis & AI Configuration ---
 const redisUrl = process.env.REDIS_URL_LOS || process.env.REDIS_URL; 
 const redisClient = new Redis(redisUrl || 'redis://localhost:6379', {
@@ -36,9 +31,17 @@ const redisClient = new Redis(redisUrl || 'redis://localhost:6379', {
 });
 
 const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || 'mock-key';
-const genAI = new GoogleGenAI({
-  apiKey,
-  httpOptions: { baseUrl: 'https://aiplatform.googleapis.com', apiVersion: 'v1/publishers/google' }
+const deepseekApiKey = process.env.DEEPSEEK_API_KEY;
+
+// --- Initialize AI Orchestrator with Smart Fallback ---
+const primaryAI = new GeminiProvider(apiKey);
+const fallbackAI = deepseekApiKey 
+    ? new OpenAIProvider(deepseekApiKey, 'https://api.deepseek.com/v1') 
+    : new GeminiProvider(apiKey);
+
+const aiOrchestrator = new AIOrchestrator({
+    primary: primaryAI,
+    fallback: fallbackAI
 });
 
 // --- Dynamic Tools & MCP Setup ---
@@ -78,18 +81,16 @@ const worker: Worker = new Worker(
     logger.info({ jobId: job.id, name: job.name }, 'Processing Life Task');
 
     const deps: ChatDependencies & HeartbeatDependencies & SLMDependencies = {
-        genAI,
+        ai: aiOrchestrator, // Use the abstracted orchestrator
         getDynamicModels,
         lifeQueue,
         apiKey,
-        extractSafeText,
         globalLifeTools,
         getLifeTools,
         worker 
         };
     try {
         switch (job.name) {
-            // --- Phase 3: Administrative Control ---
             case 'admin-refresh-prompts':
                 logger.info('👮 Admin Command: Refreshing Prompts');
                 return { success: promptService.refresh() };

@@ -265,7 +265,8 @@ fastify.post('/webhook/paystack', async (request, reply) => {
 
   try {
     const amountVal = amount / 100; // Paystack sends amount in Kobo/Cents
-    const result = await topupTenant(orgId, amountVal, reference);
+    const { topupOrg } = await import('@naija-agent/database');
+    const result = await topupOrg(orgId, amountVal, reference);
 
     if (result) {
       const org = await getOrgById(orgId);
@@ -315,6 +316,40 @@ fastify.post('/webhook/monnify', async (request, reply) => {
 
   const payload = request.body as any;
   const reference = payload.eventData?.paymentReference;
+  const amountPaid = payload.eventData?.amountPaid || payload.eventData?.amount;
+  const accountReference = payload.eventData?.accountReference;
+
+  // 1. Check for Aelixxr Vault Deposit (Automated Virtual Account)
+  // Strict prefix prevents collision with business tenant Virtual Accounts.
+  if (accountReference && accountReference.startsWith('aelixxr_vault_')) {
+      const userPhone = accountReference.replace('aelixxr_vault_', '');
+      logger.info({ phone: userPhone, amountPaid, reference }, '🏦 [MONNIFY] Automated Vault Deposit Detected');
+      
+      try {
+          const { lifeMemory } = await import('../../worker-life/src/services/lifeMemory.js');
+          const newBalance = await lifeMemory.addVaultBalance(userPhone, amountPaid, reference || payload.eventData?.transactionReference);
+          
+          if (newBalance !== null) {
+              const notificationJob: JobData = {
+                  type: 'text',
+                  orgId: 'system',
+                  phoneId: process.env.AELIXXR_PHONE_ID,
+                  from: userPhone,
+                  messageId: `BR-${Date.now()}`,
+                  timestamp: Date.now(),
+                  content: { text: `✅ *Vault Deposit Successful!*\n\nOga, your Monnify transfer of ₦${amountPaid} was received.\n\nYour new Vault balance is *₦${newBalance}*. Send me a message to convert it to Energy!` }
+              };
+              await whatsappQueue.add('process-message', notificationJob, { removeOnComplete: true });
+          }
+      } catch (err: any) {
+          if (err.message === 'DUPLICATE_REFERENCE') {
+             logger.info({ reference }, '⏭️ [MONNIFY] Duplicate vault deposit ignored.');
+          } else {
+             logger.error({ reference, error: err.message }, '❌ Vault deposit processing error');
+          }
+      }
+      return reply.status(200).send('OK');
+  }
   
   let orgId: string | undefined = undefined;
   if (reference && reference.startsWith('refill_')) {
@@ -344,10 +379,11 @@ fastify.post('/webhook/monnify', async (request, reply) => {
     return reply.status(200).send('Ignored');
   }
 
-  const amountPaid = payload.eventData.amountPaid;
-
+  // Use the already declared amountPaid (line 318)
+  
   try {
-    const result = await topupTenant(orgId, amountPaid, reference);
+    const { topupOrg } = await import('@naija-agent/database');
+    const result = await topupOrg(orgId, amountPaid, reference);
 
     if (result) {
       logger.info({ orgId, amount: amountPaid, reference }, `✅ [MONNIFY] Processed top-up.`);
@@ -443,7 +479,7 @@ fastify.post('/webhook', async (request, reply) => {
   }
 
   // --- UX: TRIGGER TYPING INDICATOR ---
-  const apiToken = org.config?.apiToken || process.env.WHATSAPP_API_TOKEN;
+  const apiToken = org.config?.whatsappToken || process.env.WHATSAPP_API_TOKEN;
   if (apiToken) {
     sendTypingIndicator(businessPhoneId, message.id, apiToken);
   }

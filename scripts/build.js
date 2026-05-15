@@ -41,6 +41,8 @@ async function build(appName, entryPath, outPath) {
         '@naija-agent/payments': path.resolve(process.cwd(), 'packages/payments/src/index.ts'),
         '@naija-agent/storage': path.resolve(process.cwd(), 'packages/storage/src/index.ts'),
         '@naija-agent/logistics': path.resolve(process.cwd(), 'packages/logistics/src/index.ts'),
+        '@naija-agent/ai': path.resolve(process.cwd(), 'packages/ai/src/index.ts'),
+        '@naija-agent/database': path.resolve(process.cwd(), 'packages/database/src/index.ts'),
       },
     });
     console.log(`✅ ${appName} built successfully!`);
@@ -59,7 +61,7 @@ async function main() {
   // Compile all packages together to save memory (Termux OOM fix)
   console.log(`🔨 Compiling all packages via TypeScript Project References...`);
   try {
-    execSync('npx tsc -b packages/types packages/firebase packages/payments packages/storage packages/logistics', { stdio: 'inherit' });
+    execSync('npx tsc -b packages/types packages/firebase packages/payments packages/storage packages/logistics packages/ai packages/database', { stdio: 'inherit' });
   } catch (e) {
     console.error(`❌ Package compilation failed`);
     process.exit(1);

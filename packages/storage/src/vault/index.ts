@@ -151,9 +151,17 @@ async function extractMultimodalMetadata(
   });
 
   const prompt = `
-  You are an expert Document Classification and Extraction AI for a "Life OS" Vault.
+  You are an elite Forensic Analyst and Document Classification AI for the "Aelixxr Sovereign Vault".
   Analyze this file thoroughly. It is a ${mimeType}.
   
+  [FORENSIC MANDATE]:
+  If this image appears to be a financial receipt or invoice, you MUST perform a rigorous forensic examination:
+  1. Inspect for Photoshop artifacts around text blocks (especially the amount, date, and reference ID).
+  2. Check for font inconsistencies (different sizes, kerning issues, blurry text against sharp backgrounds).
+  3. Validate that the date makes logical sense.
+  4. Ensure the Transaction Reference/ID matches standard patterns for the issuer (e.g., OPay, Monnify, Zenith).
+  If you detect any signs of tampering, flag it strictly in the 'forensicAnalysis' field.
+
   Extract the following JSON structure:
   {
     "title": "A concise, descriptive title for this file",
@@ -167,7 +175,7 @@ async function extractMultimodalMetadata(
     "receiver": "Name of the recipient or null",
     "reference": "The unique Transaction Reference/ID. LOOK CLOSELY for strings like 'Ref:', 'Txn ID:', 'Session ID:', or a long 10-20 digit sequence. Return null if absolutely not found.",
     "duration": Number or null,
-    "forensicAnalysis": "Strict forensic evaluation (Tampering detection, font consistency, alignment check). If it's a receipt, state 'PASS' or 'FAIL' and provide reasons.",
+    "forensicAnalysis": "Strict forensic evaluation (Tampering detection, font consistency, alignment check). State 'PASS' or 'FAIL' as the first word, followed by detailed reasons (e.g., 'FAIL: The amount text has a different font weight and noticeable jpeg compression artifacts around the numbers compared to the rest of the document.').",
     "tags": ["List", "of", "5-10", "search", "keywords"]
   }
   RETURN JSON ONLY, no markdown formatting blocks.

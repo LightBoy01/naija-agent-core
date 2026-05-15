@@ -98,6 +98,19 @@ export interface Chat {
 
 // --- AELIXXR (Life OS) Schemas ---
 
+export interface VaultAuditLog {
+    id: string;
+    userId: string; // Phone number
+    toolName: string;
+    amount?: number;
+    currency?: string;
+    direction: 'in' | 'out';
+    status: 'success' | 'failed' | 'pending';
+    reference?: string; // Transaction reference or internal ID
+    metadata?: Record<string, unknown>;
+    timestamp: FirestoreTimestamp | Date;
+}
+
 export interface LifeContext {
     fullName?: string;
     family?: {
@@ -122,6 +135,10 @@ export interface LifeContext {
     lastInteraction?: FirestoreTimestamp | Date;
     lastFeedbackAt?: FirestoreTimestamp | Date; // Rate limiting for feedback tool
     energyCredits?: number; // Added for the Battery/Energy System
+    vaultBalanceNaira?: number; // Real Money Ledger for Savings/Bills
+    pin?: string; // Hashed 4-digit PIN for security
+    pinAttempts?: number; // Added for lockout logic
+    pinLockUntil?: FirestoreTimestamp | Date; // Added for lockout logic
 }
 
 export interface FeedbackEvent {
