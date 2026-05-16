@@ -26,7 +26,9 @@ export class AIOrchestrator implements AIProvider {
           err.message?.includes('429') || 
           err.message?.includes('Quota') || 
           err.message?.includes('503') ||
-          err.message?.includes('overloaded')
+          err.message?.includes('overloaded') ||
+          err.message?.includes('RESOURCE_EXHAUSTED') ||
+          err.status === 429
       )) {
         console.warn(`⚠️ Primary provider [${this.primary.name}] failed. Falling back to [${this.fallback.name}]...`);
         
@@ -36,6 +38,12 @@ export class AIOrchestrator implements AIProvider {
             fallbackOptions.model = this.fallbackModelOverride;
         } else if (fallbackOptions && this.fallback.name === 'openai') {
             fallbackOptions.model = 'deepseek-chat'; // default to deepseek chat if no override
+        } else if (fallbackOptions && this.fallback.name === 'gemini') {
+             // If falling back to Gemini itself (e.g., using a different tier or just retrying), 
+             // ensure we try a lighter model if the primary was heavy.
+             if (fallbackOptions.model?.includes('gemini-3-flash')) {
+                 fallbackOptions.model = 'gemini-2.5-flash';
+             }
         }
 
         return await fn(this.fallback, fallbackOptions);
