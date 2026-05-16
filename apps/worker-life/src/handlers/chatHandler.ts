@@ -130,7 +130,12 @@ ${ctx.ingestionSummary}
             let toolResponses: any[] = [];
             for (const call of functionCalls) {
                 if (call.name === 'delegate_task') {
-                    await lifeQueue.add('execute-slm-task', { ...job.data, sector: call.args.sector, instruction: call.args.instruction });
+                    await lifeQueue.add('execute-slm-task', { 
+                        ...job.data, 
+                        chatId, // Explicitly pass the generated chatId
+                        sector: call.args.sector, 
+                        instruction: call.args.instruction 
+                    });
                     const replyMsg = `I'm consulting my ${call.args.sector} expert... ⏳`;
                     await whatsappService.sendText(ctx.userPhone, replyMsg);
                     await saveMessage(chatId, { role: 'user', content: ctx.message || "[Media]", type: ctx.type as any });
@@ -143,25 +148,34 @@ ${ctx.ingestionSummary}
                 
                 const toolResult = await executeLifeTool(call.name, { ...call.args, userId: ctx.userPhone, sessionId: chatId }, job.id);
                 toolResponses.push({ functionResponse: { name: call.name, response: toolResult } });
-            }
-            
-            if (toolResponses.length > 0) {
-                toolHistory.push({ role: 'function', parts: toolResponses });
+                }
+
+                if (toolResponses.length > 0) {
+                const toolHistory = [...normalizedHistory, result, { role: 'function', parts: toolResponses }] as AIMessage[];
                 const followUp = await ai.chat(toolHistory, "Continue based on tool results.", {
                     model: primaryModel,
                     systemInstruction: systemPrompt,
                     tools
                 });
                 text = followUp.text;
-            }
-        }
+                if (followUp.thinking) {
+                    logger.info({ userPhone: ctx.userPhone, thinking: followUp.thinking }, '🧠 [Agentic Thought - FollowUp]');
+                }
+                }
+                }
 
-        if (text) {
-            await billingService.billForMessage(ctx.userPhone);
-            await whatsappService.sendText(ctx.userPhone, Formatter.format(text));
-            await saveMessage(chatId, { role: 'user', content: ctx.message || "[Media]", type: ctx.type as any });
-            await saveMessage(chatId, { role: 'assistant', content: text, type: 'text' });
-        }
+                if (text) {
+                await billingService.billForMessage(ctx.userPhone);
+                await whatsappService.sendText(ctx.userPhone, Formatter.format(text));
+                await saveMessage(chatId, { role: 'user', content: ctx.message || "[Media]", type: ctx.type as any });
+
+                // Save the message, optionally including the reasoning if it exists
+                const assistantMsg: any = { role: 'assistant', content: text, type: 'text' };
+                if (result.thinking) {
+                assistantMsg.reasoning = result.thinking;
+                }
+                await saveMessage(chatId, assistantMsg);
+                }
         
         return { success: true };
     } catch (apiError: any) {
