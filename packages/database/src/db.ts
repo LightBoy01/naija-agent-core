@@ -1,10 +1,9 @@
-import { drizzle } from 'drizzle-orm/mysql2';
-import mysql from 'mysql2/promise';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 import * as schema from './schema.js';
 import { organizations, transactions } from './schema.js';
 import { eq, sql } from 'drizzle-orm';
 import dotenv from 'dotenv';
-import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 
@@ -15,48 +14,15 @@ dotenv.config({ path: path.resolve(currentDir, '../../../.env') });
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
-// Path to the CA certificate
-const possibleCaPaths = [
-  path.resolve(currentDir, '../isrgrootx1.pem'), // Legacy relative
-  path.resolve(process.cwd(), 'packages/database/isrgrootx1.pem'), // Root-relative (Monorepo dev/container)
-  path.resolve(process.cwd(), 'isrgrootx1.pem'), // Root-direct
-  '/app/packages/database/isrgrootx1.pem', // Fixed container path
-];
-
-let caPath = '';
-for (const p of possibleCaPaths) {
-  if (fs.existsSync(p)) {
-    caPath = p;
-    break;
-  }
-}
-
-const sslConfig = caPath 
-  ? { ssl: { ca: fs.readFileSync(caPath) } }
-  : {};
-
-if (!caPath && DATABASE_URL?.includes('tidbcloud.com')) {
-  console.warn('⚠️ [DB] TiDB detected but no SSL certificate (isrgrootx1.pem) found. Connection might fail.');
-}
-
-export const connection = DATABASE_URL 
-  ? mysql.createPool({
-      uri: DATABASE_URL,
-      database: 'test',
-      ...sslConfig
-    })
-  : null;
-
-export const db = connection 
-  ? drizzle(connection, { schema, mode: 'default' }) 
-  : null;
+export const client = DATABASE_URL ? postgres(DATABASE_URL, { prepare: false }) : null;
+export const db = client ? drizzle(client, { schema }) : null;
 
 /**
  * Helper to ensure DB is available before executing queries.
  */
 export function getDb() {
   if (!db) {
-    throw new Error('❌ SQL Database not initialized. Ensure DATABASE_URL is set.');
+    throw new Error('❌ PostgreSQL Database not initialized. Ensure DATABASE_URL is set.');
   }
   return db;
 }
@@ -78,7 +44,7 @@ export async function addOrgBalance(orgId: string, amountKobo: number): Promise<
       
       if (result.length === 0) throw new Error('Organization not found');
       
-      newBalance = (result[0].balanceKobo || 0) + amountKobo;
+      newBalance = Number(result[0].balanceKobo || 0) + amountKobo;
       
       await tx.update(organizations)
         .set({ balanceKobo: newBalance })
@@ -106,7 +72,7 @@ export async function deductOrgBalance(orgId: string, amountKobo: number): Promi
       
       if (result.length === 0) throw new Error('Organization not found');
       
-      const currentBalance = result[0].balanceKobo || 0;
+      const currentBalance = Number(result[0].balanceKobo || 0);
       if (currentBalance < amountKobo) {
         throw new Error('Insufficient balance');
       }
@@ -138,7 +104,7 @@ export async function topupOrg(orgId: string, amountNaira: number, reference: st
       const txExists = await tx.select().from(transactions).where(eq(transactions.reference, reference)).limit(1);
       if (txExists.length > 0) throw new Error('DUPLICATE_REFERENCE');
 
-      // 2. Fetch & Lock
+      // 2. Fetch
       const result = await tx.select({ balanceKobo: organizations.balanceKobo })
         .from(organizations)
         .where(eq(organizations.id, orgId))
@@ -146,7 +112,7 @@ export async function topupOrg(orgId: string, amountNaira: number, reference: st
       
       if (result.length === 0) throw new Error('Organization not found');
 
-      newBalance = (result[0].balanceKobo || 0) + amountKobo;
+      newBalance = Number(result[0].balanceKobo || 0) + amountKobo;
 
       // 3. Update Balance
       await tx.update(organizations)

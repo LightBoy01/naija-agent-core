@@ -30,8 +30,7 @@ export class AIOrchestrator implements AIProvider {
           err.message?.includes('RESOURCE_EXHAUSTED') ||
           err.status === 429
       )) {
-        console.warn(`⚠️ Primary provider [${this.primary.name}] failed. Falling back to [${this.fallback.name}]...`);
-        
+        console.warn(`⚠️ Primary provider [${this.primary.name}] failed: ${err.message}. Falling back to [${this.fallback.name}]...`);
         // Override model if fallback model string is provided, otherwise it will try to use the primary model string (e.g. 'gemini-3-flash') which might fail on DeepSeek
         const fallbackOptions = options ? { ...options } : undefined;
         if (fallbackOptions && this.fallbackModelOverride) {

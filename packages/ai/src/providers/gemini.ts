@@ -146,6 +146,7 @@ export class GeminiProvider implements AIProvider {
         }],
         config: {
             systemInstruction: options?.systemInstruction,
+            tools: options?.tools,
             responseMimeType: options?.responseMimeType,
             responseSchema: options?.responseSchema
         }

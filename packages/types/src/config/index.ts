@@ -41,10 +41,14 @@ export const SystemConfig = {
         ROUTER_PRIMARY: 'gemini-3-flash-preview',
         ROUTER_FALLBACK: 'gemini-2.5-flash',
 
+        // --- DEEPSEEK (V4) ---
+        DEEPSEEK_PRO: 'deepseek-v4-pro',
+        DEEPSEEK_FLASH: 'deepseek-v4-flash',
+
         // Legacy keys to prevent immediate breakage (deprecated)
         DEFAULT: 'gemini-3-flash-preview',
         FALLBACK_L2: 'gemini-2.5-flash',
-        FALLBACK_L3: 'gemini-1.5-flash',
+        FALLBACK_L3: 'gemini-2.5-flash',
     },    // Defaults
     DEFAULTS: {
         TIMEZONE: 'Africa/Lagos',

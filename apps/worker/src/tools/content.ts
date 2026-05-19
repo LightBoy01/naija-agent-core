@@ -2,9 +2,9 @@ import { HandlerContext } from './definitions.js';
 import { 
   saveKnowledge, 
   deleteKnowledge, 
-  deductBalance,
   queryEntity 
 } from '@naija-agent/firebase';
+import { deductOrgBalance } from '@naija-agent/database';
 import { formatCurrency } from '../utils/currency.js';
 import { SystemConfig } from '@naija-agent/types';
 
@@ -129,7 +129,7 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
         const { GoogleGenAI } = await import('@google/genai');
 
         if (!isAdmin && !isStaff) {
-           const deductResult = await deductBalance(orgId, imageGenFee);
+           const deductResult = await deductOrgBalance(orgId, imageGenFee);
            if (deductResult === null) {
               const formattedFee = formatCurrency(imageGenFee / 100, currency.locale, currency.code);
               return { status: 'error', message: `Oga, your balance no reach for this creative work. Image generation costs ${formattedFee}.` };

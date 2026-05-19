@@ -50,4 +50,6 @@ export interface AIProvider {
 
 export * from './providers/gemini.js';
 export * from './providers/openai.js';
+export * from './providers/dashscope.js';
 export * from './orchestrator.js';
+export * from './factory.js';

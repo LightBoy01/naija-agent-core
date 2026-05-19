@@ -86,9 +86,24 @@ if (!firebaseAdmin.apps.length) {
       storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'naija-agent-core.firebasestorage.app'
     });
   } else {
-    throw new Error('[FIREBASE_INIT_ERROR] Credential could not be initialized.');
+    // throw new Error('[FIREBASE_INIT_ERROR] Credential could not be initialized.');
+    console.warn('[FIREBASE_INIT_WARN] Firebase initialized without credentials (Read-only/Public mode).');
+    firebaseAdmin.initializeApp({
+        projectId: process.env.FIREBASE_PROJECT_ID || 'naija-agent-core'
+    });
   }
 }
 
+// Global state to track if settings were applied
+const globalSymbol = Symbol.for('firebase.firestore.settings_applied');
 export const db = getFirestore();
-db.settings({ ignoreUndefinedProperties: true });
+
+if (!(global as any)[globalSymbol]) {
+    try {
+        db.settings({ ignoreUndefinedProperties: true });
+        (global as any)[globalSymbol] = true;
+    } catch (e) {
+        // Silently fail if settings already applied by another module/import
+        (global as any)[globalSymbol] = true;
+    }
+}

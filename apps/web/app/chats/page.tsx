@@ -1,5 +1,5 @@
 import { formatTimestamp } from '../../lib/utils';
-import { getNetworkChats } from '@naija-agent/firebase';
+import { getNetworkChats } from '@naija-agent/database';
 import { Chat } from '@naija-agent/types';
 import Link from 'next/link';
 

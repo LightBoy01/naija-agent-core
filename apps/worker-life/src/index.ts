@@ -9,7 +9,7 @@ import { promptService } from './services/promptService.js';
 import path from 'path';
 
 // --- AI Abstraction ---
-import { AIOrchestrator, GeminiProvider, OpenAIProvider } from '@naija-agent/ai';
+import { AIOrchestrator, GeminiProvider, OpenAIProvider, AIFactory } from '@naija-agent/ai';
 
 // --- Handlers ---
 import { handleLifeChat, handleLifeChatResume, ChatDependencies } from './handlers/chatHandler.js';
@@ -22,6 +22,7 @@ import {
 } from './handlers/heartbeatHandler.js';
 import { handleSLMTask, SLMDependencies } from './handlers/slmHandler.js';
 import { handleConsolidateMemory, handleMarketScrape } from './handlers/maintenanceHandler.js';
+import { handleSovereignCronTick, SovereignCronDependencies } from './handlers/cronHandler.js';
 
 // --- Redis & AI Configuration ---
 const redisUrl = process.env.REDIS_URL_LOS || process.env.REDIS_URL; 
@@ -30,19 +31,25 @@ const redisClient = new Redis(redisUrl || 'redis://localhost:6379', {
     tls: redisUrl?.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
 });
 
-const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || 'mock-key';
-const deepseekApiKey = process.env.DEEPSEEK_API_KEY;
+// --- Initialize AI Orchestrator with Smart Fallback (Provider-Based) ---
+const primaryProviderType = (process.env.AI_PROVIDER_PRIMARY || 'gemini') as any;
+const fallbackProviderType = (process.env.AI_PROVIDER_FALLBACK || 'gemini') as any;
 
-// --- Initialize AI Orchestrator with Smart Fallback ---
-const primaryAI = new GeminiProvider(apiKey);
-const fallbackAI = deepseekApiKey 
-    ? new OpenAIProvider(deepseekApiKey, 'https://api.deepseek.com/v1') 
-    : new GeminiProvider(apiKey);
+const aiOrchestrator = AIFactory.createOrchestrator(
+    {
+        type: primaryProviderType,
+        apiKey: process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY,
+        model: process.env.GEMINI_MODEL_LOS || SystemConfig.MODELS.AELIXXR_PRIMARY
+    },
+    {
+        type: fallbackProviderType,
+        apiKey: process.env.DEEPSEEK_API_KEY || process.env.GEMINI_API_KEY,
+        baseURL: process.env.DEEPSEEK_BASE_URL || (fallbackProviderType === 'commandcode' ? 'https://api.commandcode.ai/v1' : undefined),
+        model: SystemConfig.MODELS.AELIXXR_FALLBACK
+    }
+);
 
-const aiOrchestrator = new AIOrchestrator({
-    primary: primaryAI,
-    fallback: fallbackAI
-});
+const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || '';
 
 // --- Dynamic Tools & MCP Setup ---
 let globalLifeTools: any[] | null = null;
@@ -80,7 +87,7 @@ const worker: Worker = new Worker(
   async (job: Job): Promise<any> => {
     logger.info({ jobId: job.id, name: job.name }, 'Processing Life Task');
 
-    const deps: ChatDependencies & HeartbeatDependencies & SLMDependencies = {
+    const deps: ChatDependencies & HeartbeatDependencies & SLMDependencies & SovereignCronDependencies = {
         ai: aiOrchestrator, // Use the abstracted orchestrator
         getDynamicModels,
         lifeQueue,
@@ -103,6 +110,9 @@ const worker: Worker = new Worker(
 
             case 'execute-slm-task':
                 return await handleSLMTask(job, deps);
+
+            case 'sovereign-cron-tick':
+                return await handleSovereignCronTick(job, deps);
 
             case 'life-heartbeat':
                 return await handleLifeHeartbeat(job, deps);
@@ -131,7 +141,15 @@ const worker: Worker = new Worker(
         throw err;
     }
   },
-  { connection: redisClient, concurrency: 5 }
+  { 
+    connection: redisClient, 
+    concurrency: 20, 
+    limiter: {
+      max: 5,
+      duration: 1000,
+      groupKey: 'userPhone'
+    }
+  }
 );
 
 worker.on('failed', (job: Job | undefined, err: Error) => {

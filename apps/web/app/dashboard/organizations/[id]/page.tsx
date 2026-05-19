@@ -1,4 +1,6 @@
 import { getOrgById } from '@naija-agent/firebase';
+import { getDb as getSqlDb, organizations } from '@naija-agent/database';
+import { eq } from 'drizzle-orm';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { updateOrgStatus, topUpBalance } from './actions';
@@ -10,12 +12,19 @@ interface PageProps {
 
 export default async function OrgManagePage({ params }: PageProps) {
   const { id: orgId } = await params;
+  
+  // 1. Fetch metadata from Firestore
   const org = await getOrgById(orgId);
+  if (!org) notFound();
 
-  if (!org) {
-    notFound();
-  }
-
+  // 2. Fetch Balance of Record from PostgreSQL
+  const db = getSqlDb();
+  const sqlOrg = await db.select({ balanceKobo: organizations.balanceKobo })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+  
+  const balanceKobo = sqlOrg[0]?.balanceKobo || 0;
   const currency = org.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
 
   return (
@@ -43,7 +52,7 @@ export default async function OrgManagePage({ params }: PageProps) {
             <div className="mb-8">
               <p className="text-xs text-zinc-500 mb-1">Current Balance</p>
               <div className="text-4xl font-black text-zinc-900">
-                {formatCurrency(org.balance / 100, currency.locale, currency.code, currency.symbol)}
+                {formatCurrency(balanceKobo / 100, currency.locale, currency.code, currency.symbol)}
               </div>
             </div>
 

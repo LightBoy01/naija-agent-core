@@ -12,8 +12,8 @@ import {
   setAdminAuth, 
   getActivitiesByCustomer, 
   getRecentActivities,
-  getChatHistory
 } from '@naija-agent/firebase';
+import { getChatHistory } from '@naija-agent/database';
 import { Queue } from 'bullmq';
 import { parseAndFormatPhone, formatPhoneForDisplay } from '../utils/phone.js';
 import { logger } from '../utils/logger.js';

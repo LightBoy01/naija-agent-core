@@ -1,5 +1,6 @@
 import { formatTimestamp } from '../../../lib/utils';
-import { getChatHistory, getDb } from '@naija-agent/firebase';
+import { getDb } from '@naija-agent/firebase';
+import { getChatHistory } from '@naija-agent/database';
 import { Message, Chat } from '@naija-agent/types';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';

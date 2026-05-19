@@ -16,6 +16,7 @@ import {
   removeFromCart, 
   bookSlot 
 } from '@naija-agent/firebase';
+import { syncCartState } from '@naija-agent/database';
 import { formatCurrency } from '../utils/currency.js';
 
 export async function handleCommerceTools(name: string, args: any, ctx: HandlerContext): Promise<any> {
@@ -77,6 +78,7 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
       });
 
       await clearCart(orgId, from);
+      await syncCartState(`${orgId}_${from}`, false);
 
       return { status: 'success', summary: summaryBlock, totalNaira: total, orderId };
     }
@@ -337,6 +339,9 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
         args.productId, 
         args.quantity || 1
       );
+      if (addResult.success) {
+        await syncCartState(`${orgId}_${from}`, true);
+      }
       return addResult.success 
         ? { status: 'success', message: `Added to cart.` } 
         : { status: 'error', message: addResult.message };
@@ -344,7 +349,10 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
 
     case 'view_cart': {
       const cartData = await getCart(orgId, from);
-      if (cartData.items.length === 0) return { status: 'success', message: 'Your cart is empty.', total: 0 };
+      if (cartData.items.length === 0) {
+        await syncCartState(`${orgId}_${from}`, false);
+        return { status: 'success', message: 'Your cart is empty.', total: 0 };
+      }
 
       const itemList = cartData.items.map(item => `- ${item.name} (x${item.quantity}): ${formatCurrency(item.price, currency.locale, currency.code)}`).join('\n');
       const totalNaira = cartData.totalKobo / 100;
@@ -362,6 +370,10 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
       const removeResult = await removeFromCart(
         orgId, from, args.productId, args.quantity
       );
+      
+      const cart = await getCart(orgId, from);
+      await syncCartState(`${orgId}_${from}`, cart.items.length > 0);
+
       return removeResult.success 
         ? { status: 'success', message: `Updated cart: ${removeResult.message}` }
         : { status: 'error', message: removeResult.message };
@@ -369,6 +381,7 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
 
     case 'clear_cart': {
       await clearCart(orgId, from);
+      await syncCartState(`${orgId}_${from}`, false);
       return { status: 'success', message: 'Cart cleared.' };
     }
 

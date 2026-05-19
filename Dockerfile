@@ -1,45 +1,59 @@
-# Stage 1: Builder
-FROM node:20-alpine AS builder
+# Stage 1: Polyglot Builder
+FROM node:20-bookworm AS builder
 
 WORKDIR /app
 
-# Monorepo optimization: Install ALL dependencies for building
+# 1. Install Build Tools (Python for Hermes, Go for Sidecar)
+RUN apt-get update && apt-get install -y \
+    python3 python3-pip python3-venv \
+    golang-go \
+    curl build-essential \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/root/.local/bin:$PATH"
 ENV NODE_ENV=development
 
+# 2. Monorepo Dependency Optimization
 COPY package.json package-lock.json ./
-COPY packages/firebase/package.json packages/firebase/
-COPY packages/types/package.json packages/types/
-COPY packages/payments/package.json packages/payments/
-COPY packages/storage/package.json packages/storage/
-COPY packages/logistics/package.json packages/logistics/
+COPY packages/ packages/
 COPY apps/api/package.json apps/api/
 COPY apps/worker/package.json apps/worker/
 COPY apps/worker-life/package.json apps/worker-life/
+COPY apps/whatsapp-sidecar/go.mod apps/whatsapp-sidecar/go.sum apps/whatsapp-sidecar/
 
-# Pre-create dist folders to satisfy monorepo links before build
-RUN mkdir -p packages/firebase/dist packages/types/dist packages/payments/dist packages/storage/dist packages/logistics/dist
-RUN touch packages/firebase/dist/index.js packages/types/dist/index.js packages/payments/dist/index.js packages/storage/dist/index.js packages/logistics/dist/index.js
-
-# Install dependencies
+# Pre-install Node dependencies
 RUN npm install
 
-# Copy the rest of the source code
-COPY . .
+# 3. Build Go Sovereign Sidecar
+COPY apps/whatsapp-sidecar/ apps/whatsapp-sidecar/
+RUN cd apps/whatsapp-sidecar && go build -o sidecar-binary main.go
 
-# Build all bundled apps
+# 4. Build Node.js Apps
+COPY . .
 RUN npm run build
 
-# Stage 2: Production Runner (Lean)
-FROM node:20-alpine AS runner
+# 5. Provision Hermes Python Environment
+RUN cd hermes-agent && uv venv && uv pip install .
+
+# --- Stage 2: Institutional Runner ---
+FROM node:20-bookworm-slim AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Copy the entire workspace with node_modules and dist files
-# This guarantees all workspace dependencies (like bullmq) are present.
-COPY --from=builder /app ./
+# Install Runtime Dependencies
+RUN apt-get update && apt-get install -y \
+    python3 python3-pip python3-venv \
+    ffmpeg ripgrep curl ca-certificates \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# SAFETY CHECK
-RUN ls -la apps/api/dist/index.js && ls -la apps/worker/dist/index.js && ls -la apps/worker-life/dist/index.js
+# Copy built artifacts from builder
+COPY --from=builder /app /app
+ENV PATH="/app/hermes-agent/.venv/bin:/root/.local/bin:$PATH"
 
+# Expose API and Sidecar ports
+EXPOSE 3000 8080
+
+# Default command starts the API, but Compose will override this for individual roles
 CMD ["npm", "run", "start:api"]

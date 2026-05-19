@@ -1,17 +1,15 @@
 import { Job } from 'bullmq';
 import { WhatsAppService } from '../services/whatsapp.js';
 import { 
-  getAbandonedCarts, 
-  markCartNudged, 
   getLowStockItems,
   getOrgById,
   getActiveOrganizations,
   getUpcomingBookingsForReminders,
   markReminderSent,
-  deductBalance,
   releaseStock,
   getDb
 } from '@naija-agent/firebase';
+import { getAbandonedCarts, markCartNudged, deductOrgBalance } from '@naija-agent/database';
 import { Product, SystemConfig } from '@naija-agent/types';
 import { formatInTimeZone } from 'date-fns-tz';
 import { logger } from '../utils/logger.js';
@@ -223,8 +221,8 @@ export async function handleScheduledReminder(job: Job, defaultWhatsAppService: 
        return { success: false, reason: 'Low balance' };
     }
 
-    const result = await deductBalance(orgId, cost);
-    if (result === null) throw new Error('Balance deduction failed');
+    const result = await deductOrgBalance(orgId, cost);
+    if (result === null) throw new Error('Balance deduction failed in SQL');
 
     const waService = org?.config?.whatsappToken 
       ? new WhatsAppService(org.config.whatsappToken, org.whatsappPhoneId!, org.config.appSecret)

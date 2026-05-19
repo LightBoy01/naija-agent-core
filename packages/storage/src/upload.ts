@@ -1,18 +1,27 @@
 import { v2 as cloudinary } from 'cloudinary';
-import admin from 'firebase-admin';
 import { getStorage } from 'firebase-admin/storage';
+import { AlibabaOSSProvider } from './providers/alibaba.js';
+import { StorageProvider } from './interfaces.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// --- Cloudinary Configuration (High Volume / Free Tier Scalable) ---
-if (process.env.CLOUDINARY_URL) {
-  cloudinary.config(process.env.CLOUDINARY_URL);
+/**
+ * Strategy Selector: Prioritize Alibaba OSS for Sovereign Stack, 
+ * fallback to Cloudinary for free tier, and finally Firebase.
+ */
+let activeProvider: StorageProvider | null = null;
+
+if (process.env.ALIBABA_OSS_ACCESS_KEY_ID) {
+  activeProvider = new AlibabaOSSProvider({
+    region: process.env.ALIBABA_OSS_REGION || 'oss-ap-southeast-1',
+    accessKeyId: process.env.ALIBABA_OSS_ACCESS_KEY_ID,
+    accessKeySecret: process.env.ALIBABA_OSS_ACCESS_KEY_SECRET || '',
+    bucket: process.env.ALIBABA_OSS_BUCKET || 'naija-agent-media',
+    endpoint: process.env.ALIBABA_OSS_ENDPOINT
+  });
 }
 
-/**
- * Uploads to Cloudinary (Scalable/Free) OR Firebase (Fallback)
- */
 export async function uploadMedia(
   orgId: string,
   fileName: string,
@@ -20,37 +29,44 @@ export async function uploadMedia(
   mimeType: string,
   metadata: Record<string, string> = {}
 ): Promise<string> {
-  // --- Strategy: Use Cloudinary if configured (Auto-optimization/Scalable) ---
-  if (process.env.CLOUDINARY_URL) {
-    return new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: `naija-agent/orgs/${orgId}`,
-          public_id: fileName.split('.')[0],
-          resource_type: 'auto',
-          context: metadata,
-          tags: [orgId, 'naija-agent']
-        },
-        (error, result) => {
-          if (error) {
-             console.error('❌ [CLOUDINARY] Upload error:', error.message);
-             // Fallback to Firebase on error
-             return resolve(uploadToFirebase(orgId, fileName, buffer, mimeType, metadata));
-          }
-          resolve(result?.secure_url || '');
-        }
-      );
-      uploadStream.end(buffer);
-    });
+  // 1. Sovereign Priority (Alibaba OSS)
+  if (activeProvider) {
+    try {
+       return await activeProvider.upload(orgId, fileName, buffer, mimeType, metadata);
+    } catch (e: any) {
+       console.error('⚠️ [ALIBABA OSS] Upload failed, falling back:', e.message);
+    }
   }
 
-  // --- Fallback: Firebase (Expensive at volume / Not auto-optimized) ---
+  // 2. High-Volume Fallback (Cloudinary)
+  if (process.env.CLOUDINARY_URL) {
+    cloudinary.config(process.env.CLOUDINARY_URL);
+    try {
+      return await new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            folder: `naija-agent/orgs/${orgId}`,
+            public_id: fileName.split('.')[0],
+            resource_type: 'auto',
+            context: metadata,
+            tags: [orgId, 'naija-agent']
+          },
+          (error, result) => {
+            if (error) return reject(error);
+            resolve(result?.secure_url || '');
+          }
+        );
+        uploadStream.end(buffer);
+      });
+    } catch (e: any) {
+      console.error('❌ [CLOUDINARY] Upload error:', e.message);
+    }
+  }
+
+  // 3. Infrastructure Fallback (Firebase)
   return uploadToFirebase(orgId, fileName, buffer, mimeType, metadata);
 }
 
-/**
- * Native Firebase Upload Logic
- */
 async function uploadToFirebase(
   orgId: string,
   fileName: string,
@@ -78,13 +94,15 @@ async function uploadToFirebase(
 }
 
 export async function getSignedMediaUrl(path: string): Promise<string> {
+  if (activeProvider && !path.includes('googleapis.com')) {
+    return activeProvider.getSignedUrl(path);
+  }
+  
   const bucket = getStorage().bucket();
   const file = bucket.file(path);
-
   const [url] = await file.getSignedUrl({
     action: 'read',
     expires: Date.now() + 60 * 60 * 1000, 
   });
-
   return url;
 }

@@ -1,11 +1,13 @@
 import { Job } from 'bullmq';
 import { Type } from '@google/genai';
+import path from 'path';
 import { SystemConfig } from '@naija-agent/types';
 import { logger } from '../utils/logger.js';
 import { executeLifeTool } from '../tools/index.js';
 import { whatsappService } from '../services/whatsapp.js';
 import { billingService } from '../services/billingService.js';
 import { promptService } from '../services/promptService.js';
+import { mcpClient } from '../services/mcpClient.js';
 import { SECTOR_PACKS, DEFAULT_SECTOR_CONFIG } from '../config/sectors.js';
 import { AIProvider, AIMessage } from '@naija-agent/ai';
 
@@ -18,8 +20,75 @@ export interface SLMDependencies {
 
 export async function handleSLMTask(job: Job, deps: SLMDependencies) {
     const { ai, lifeQueue, globalLifeTools, getLifeTools } = deps;
+    const { 
+        sector, 
+        instruction: slmInst, 
+        originalMessage: slmOrig, 
+        userPhone: slmPhone, 
+        chatId: slmChatId, 
+        orgId: slmOrgId, 
+        energyCredits: initialEnergy,
+        budgetNaira,
+        isHermesDelegation 
+    } = job.data;
+
+    let slmReport = "";
+    let cleanedReport = "";
+
+    if (isHermesDelegation) {
+        logger.info({ sector, userPhone: slmPhone, budget: budgetNaira }, '🚀 [HERMES BRIDGE] Executing high-autonomy delegation...');
+        
+        try {
+            // Retrieve Organization/Tenant info from PostgreSQL for proxy/config injection
+            const { getDb, organizations } = await import('@naija-agent/database');
+            const { eq } = await import('drizzle-orm');
+            const sqlDb = getDb();
+            const orgsResult = await sqlDb.select().from(organizations).where(eq(organizations.id, slmOrgId)).limit(1);
+            const org = orgsResult[0];
+
+            // Trigger the Hermes Sovereign "Body"
+            const hermesBin = process.env.HERMES_BIN || "hermes";
+            const hermesArgs = hermesBin === "hermes" ? ["mcp", "serve"] : [path.join(process.cwd(), "hermes-agent/cli.py"), "mcp", "serve"];
+            const hermesCmd = hermesBin === "hermes" ? "hermes" : "python3";
+
+            const hermesResponse = await mcpClient.executeStatefulTool(
+                hermesCmd, 
+                hermesArgs, 
+                {
+                    userPhone: slmPhone,
+                    orgId: slmOrgId,
+                    proxyUrl: org?.proxyUrl || '',
+                    sectorPack: sector
+                },
+                "hermes_research", 
+                { instruction: slmInst, budget: budgetNaira || 500 }
+            );
+
+            cleanedReport = JSON.stringify({
+                status: hermesResponse.error ? "error" : "success",
+                report: hermesResponse.error || hermesResponse.data?.summary || "Hermes operation completed.",
+                data: hermesResponse.data?.details || []
+            });
+
+        } catch (e: any) {
+            logger.error({ error: e.message }, '❌ [HERMES BRIDGE] Bridge execution failed');
+            cleanedReport = JSON.stringify({ status: "error", report: "I tried to delegate this to my autonomous engine but the connection was lost." });
+        }
+
+        // Return early for Hermes delegation
+        await lifeQueue.add('life-chat-resume', {
+            orgId: slmOrgId,
+            userPhone: slmPhone,
+            chatId: slmChatId,
+            originalMessage: slmOrig,
+            slmReport: cleanedReport,
+            sector
+        }, { removeOnComplete: true });
+
+        return { success: true, slmReport: cleanedReport };
+    }
+
     logger.info('🤖 Starting SLM Worker...');
-    const { sector, instruction: slmInst, originalMessage: slmOrig, userPhone: slmPhone, chatId: slmChatId, orgId: slmOrgId, energyCredits: initialEnergy } = job.data;
     
     let currentEnergy = initialEnergy ?? 0;
 
@@ -82,7 +151,6 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
 
     const fallbackModel = SystemConfig.MODELS.AELIXXR_FALLBACK || 'gemini-2.5-flash';
     let slmUsedModel = SystemConfig.MODELS.AELIXXR_WORKER;
-    let slmReport = "";
 
     const runSlm = async (model: string) => {
         let history: AIMessage[] = [{ role: 'user', parts: [{ text: fullInstruction }] }];
@@ -150,7 +218,7 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
         }
     }
 
-    let cleanedReport = slmReport;
+    cleanedReport = slmReport;
     const jsonMatch = slmReport.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
         try {
@@ -163,18 +231,24 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
         cleanedReport = JSON.stringify({ status: "success", report: slmReport || "Completed." });
     }
 
-    // Pass the baton back to Aelixxr (The Soul)
-    await lifeQueue.add('life-chat-resume', {
-        orgId: slmOrgId,
-        userPhone: slmPhone,
-        chatId: slmChatId,
-        originalMessage: slmOrig,
-        slmReport: cleanedReport,
-        sector
-    }, { 
-        removeOnComplete: true, 
-        removeOnFail: false 
-    });
+    if (job.data.isCron) {
+        logger.info({ cronJobId: job.data.cronJobId }, 'Background Cron SLM completed. Logging to DB instead of chat.');
+        const { advanceCronJob } = await import('@naija-agent/database');
+        await advanceCronJob(job.data.cronJobId, cleanedReport, true);
+    } else {
+        // Pass the baton back to Aelixxr (The Soul)
+        await lifeQueue.add('life-chat-resume', {
+            orgId: slmOrgId,
+            userPhone: slmPhone,
+            chatId: slmChatId,
+            originalMessage: slmOrig,
+            slmReport: cleanedReport,
+            sector
+        }, { 
+            removeOnComplete: true, 
+            removeOnFail: false 
+        });
+    }
 
     return { success: true, slmReport: cleanedReport };
 }

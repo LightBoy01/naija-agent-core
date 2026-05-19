@@ -2,10 +2,12 @@ import { Job } from 'bullmq';
 import { SystemConfig, formatCurrency } from '@naija-agent/types';
 import { 
     getOrgById, 
+} from '@naija-agent/firebase';
+import { 
     getChatHistory, 
     findOrCreateChat, 
     saveMessage 
-} from '@naija-agent/firebase';
+} from '@naija-agent/database';
 import { logger } from '../utils/logger.js';
 import { executeLifeTool } from '../tools/index.js';
 import { whatsappService } from '../services/whatsapp.js';
@@ -20,6 +22,8 @@ import { ContextInterceptor } from '../pipeline/interceptors/context.js';
 import { SecurityInterceptor } from '../pipeline/interceptors/security.js';
 import { BatteryInterceptor } from '../pipeline/interceptors/battery.js';
 import { MediaInterceptor } from '../pipeline/interceptors/media.js';
+
+import { redactPII } from '../utils/security.js';
 
 export interface ChatDependencies {
     ai: AIProvider;
@@ -107,7 +111,8 @@ ${ctx.ingestionSummary}
         if (ctx.mediaBuffer && ctx.mediaMime) {
             result = await ai.analyzeImage(ctx.mediaBuffer, ctx.mediaMime, ctx.message || "Analyze this", {
                 model: primaryModel,
-                systemInstruction: systemPrompt
+                systemInstruction: systemPrompt,
+                tools
             });
         } else {
             result = await ai.chat(normalizedHistory, ctx.message || "", {
@@ -138,8 +143,10 @@ ${ctx.ingestionSummary}
                     });
                     const replyMsg = `I'm consulting my ${call.args.sector} expert... ⏳`;
                     await whatsappService.sendText(ctx.userPhone, replyMsg);
-                    await saveMessage(chatId, { role: 'user', content: ctx.message || "[Media]", type: ctx.type as any });
+                    const safeUserMessage = ctx.message ? redactPII(ctx.message) : (ctx.type === 'text' ? '[Empty Message]' : `[${ctx.type.toUpperCase()}]`);
+                    await saveMessage(chatId, { role: 'user', content: safeUserMessage, type: ctx.type as any });
                     await saveMessage(chatId, { role: 'assistant', content: replyMsg, type: 'text' });
+
                     return { success: true, delegated: true };
                 }
 
@@ -167,7 +174,8 @@ ${ctx.ingestionSummary}
                 if (text) {
                 await billingService.billForMessage(ctx.userPhone);
                 await whatsappService.sendText(ctx.userPhone, Formatter.format(text));
-                await saveMessage(chatId, { role: 'user', content: ctx.message || "[Media]", type: ctx.type as any });
+                const safeUserMessage = ctx.message ? redactPII(ctx.message) : (ctx.type === 'text' ? '[Empty Message]' : `[${ctx.type.toUpperCase()}]`);
+                await saveMessage(chatId, { role: 'user', content: safeUserMessage, type: ctx.type as any });
 
                 // Save the message, optionally including the reasoning if it exists
                 const assistantMsg: any = { role: 'assistant', content: text, type: 'text' };

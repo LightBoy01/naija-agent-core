@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import pino from 'pino';
 import { safeParseJSON } from '../utils/json.js';
+import { uploadMedia } from '../upload.js';
 
 const logger = pino({ name: 'vault-service' });
 
@@ -57,9 +58,9 @@ export const VaultDocumentSchema = z.object({
     duration: z.number().optional(),
     forensicAnalysis: z.string().optional(),
   }),
-  storageUrl: z.string().optional(), // Public/Signed URL (Cloudinary or GCS)
+  storageUrl: z.string().optional(), // Public/Signed URL (OSS, Cloudinary or GCS)
   gcsUri: z.string().optional(), // gs:// path if on GCS
-  provider: z.enum(['cloudinary', 'gcs']).optional(),
+  provider: z.enum(['cloudinary', 'gcs', 'alibaba-oss']).optional(),
   originalMediaId: z.string().optional(),
   mimeType: z.string(),
   caption: z.string().optional(),
@@ -92,47 +93,24 @@ async function uploadToGCS(userId: string, buffer: Buffer, mimeType: string): Pr
     };
 }
 
-async function uploadToVault(userId: string, buffer: Buffer, mimeType: string): Promise<{ url: string; gcsUri?: string; provider: 'cloudinary' | 'gcs' }> {
-  // 1. Primary: Cloudinary (Free & Scalable "Bridge")
-  const cloudUrl = process.env.CLOUDINARY_URL;
-  logger.info({ hasUrl: !!cloudUrl }, '🔍 Checking Cloudinary URL...');
-  
-  if (cloudUrl) {
-    cloudinary.config({
-      cloudinary_url: cloudUrl,
-      secure: true
-    });
-    
-    logger.info({ userId }, '☁️ Uploading to Cloudinary Bridge...');
-    try {
-        const result: any = await new Promise((resolve, reject) => {
-            const uploadStream = cloudinary.uploader.upload_stream(
-              {
-                folder: `aelixxr/vault/${userId}`,
-                resource_type: 'auto',
-                tags: [userId, 'aelixxr-vault'],
-                timeout: 60000 // 60 seconds
-              },
-              (error, result) => {
-                if (error) return reject(error);
-                resolve(result);
-              }
-            );
-            uploadStream.end(buffer);
-          });
-          return {
-            url: result.secure_url,
-            provider: 'cloudinary'
-          };
-    } catch (error: any) {
-        logger.warn({ error: error.message }, '⚠️ Cloudinary upload failed, falling back to GCS...');
-        return uploadToGCS(userId, buffer, mimeType);
-    }
-  }
+async function uploadToVault(userId: string, buffer: Buffer, mimeType: string, orgId?: string): Promise<{ url: string; gcsUri?: string; provider: 'cloudinary' | 'gcs' | 'alibaba-oss' }> {
+  const fileId = uuidv4();
+  const extension = mimeType.split('/')[1] || 'bin';
+  const fileName = `${fileId}.${extension}`;
 
-  // 2. Fallback: GCS (Native / Blaze Plan)
-  return uploadToGCS(userId, buffer, mimeType);
+  const url = await uploadMedia(orgId || 'vault', fileName, buffer, mimeType, { userId });
+  
+  let provider: 'cloudinary' | 'gcs' | 'alibaba-oss' = 'gcs';
+  if (url.includes('cloudinary')) provider = 'cloudinary';
+  else if (url.includes('aliyuncs.com')) provider = 'alibaba-oss';
+
+  return { 
+    url, 
+    provider,
+    gcsUri: provider === 'gcs' ? `gs://${BUCKET_NAME}/orgs/${orgId || 'vault'}/media/${fileName}` : undefined
+  };
 }
+
 
 async function extractMultimodalMetadata(
     buffer: Buffer, 
@@ -290,8 +268,8 @@ export async function ingestDocument(
   logger.info({ userId, mimeType }, '📥 Ingesting file into Multi-Modal Vault...');
 
   // 1. Upload to Cloud (Bridge Strategy)
-  const { url, gcsUri, provider } = await uploadToVault(userId, buffer, mimeType);
-  logger.info({ userId, provider, url }, '☁️ Uploaded to Cloud Provider');
+  const { url, gcsUri, provider } = await uploadToVault(userId, buffer, mimeType, options?.orgId);
+  logger.info({ userId, provider, url, orgId: options?.orgId }, '☁️ Uploaded to Cloud Provider');
 
   // 2. Extract Data (Using GCS URI or Raw Buffer)
   const analysis = await extractMultimodalMetadata(buffer, mimeType, gcsUri, options?.caption, apiKey);

@@ -120,6 +120,12 @@ export class WhatsAppService {
 
   // Download Media (Audio/Image)
   async downloadMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
+    // If it's a whatsmeow ID (usually starts with a prefix or doesn't look like a Meta ID)
+    // or if we detect the sidecar context. For now, check if phoneId is 'baileys-'
+    if (this.phoneId.startsWith('baileys-')) {
+       return this.downloadMediaFromSovereign(mediaId);
+    }
+
     try {
       // 1. Get Media URL
       const urlResponse = await axios.get(`${this.baseUrl}/${mediaId}`, {
@@ -156,6 +162,26 @@ export class WhatsAppService {
          throw new Error('File too large (exceeded 5MB limit)');
       }
       throw new Error('Failed to download media');
+    }
+  }
+
+  /**
+   * Fetches media from the Sovereign Go Sidecar instead of Meta.
+   */
+  private async downloadMediaFromSovereign(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
+    const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
+    try {
+      const response = await axios.get(`${sidecarUrl}/download/${mediaId}`, {
+        responseType: 'arraybuffer'
+      });
+      
+      return {
+        buffer: Buffer.from(response.data),
+        mimeType: response.headers['content-type'] || 'image/jpeg'
+      };
+    } catch (e: any) {
+      console.error('❌ [SOVEREIGN DOWNLOAD] Failed:', e.message);
+      throw new Error('Failed to download media from Sovereign gateway');
     }
   }
 

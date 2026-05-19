@@ -2,10 +2,13 @@ import { Job } from 'bullmq';
 import { JobData, Message, StaffData } from '@naija-agent/types';
 import { WhatsAppService } from '../services/whatsapp.js';
 import { 
-  findOrCreateChat, getChatHistory, saveMessage, deductBalance,
+  deductBalance,
   verifyAdminSession, getAllKnowledge, getProducts, logSystemEvent,
   Organization
 } from '@naija-agent/firebase';
+import {
+  findOrCreateChat, getChatHistory, saveMessage
+} from '@naija-agent/database';
 import { Type } from '@google/genai';
 import { PaymentProvider } from '@naija-agent/payments';
 import { Redis } from 'ioredis';
@@ -129,7 +132,7 @@ ${globalProtocol}
       parts: [{ text: m.content }]
   }));
 
-  const tenantModelName = org.config?.model || "gemini-1.5-flash";
+  const tenantModelName = org.config?.model || SystemConfig.MODELS.ZYNUX_PRIMARY;
   let userMessageContent = "";
   let mediaBuffer: Buffer | null = null;
   let mediaMime: string | null = null;
@@ -149,6 +152,7 @@ ${globalProtocol}
       aiResponse = await ai.analyzeImage(mediaBuffer, mediaMime, content.caption || "Analyze this", {
           model: tenantModelName,
           systemInstruction: systemPrompt,
+          tools: tenantTools,
           responseMimeType: "application/json",
           responseSchema
       });

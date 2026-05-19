@@ -1,6 +1,7 @@
 'use server';
 
-import { getDb, addBalance } from '@naija-agent/firebase';
+import { getDb as getFirebase } from '@naija-agent/firebase';
+import { topupOrg } from '@naija-agent/database';
 import { revalidatePath } from 'next/cache';
 import { verifySovereignSession } from '../../../../lib/auth';
 
@@ -11,7 +12,7 @@ export async function updateOrgStatus(formData: FormData): Promise<void> {
   const type = formData.get('type') as string;
 
   try {
-    const db = getDb();
+    const db = getFirebase();
     const orgRef = db.collection('organizations').doc(orgId);
 
     if (type === 'bridge') {
@@ -43,11 +44,10 @@ export async function topUpBalance(formData: FormData): Promise<void> {
     return;
   }
 
-  // Convert to kobo
-  const amountKobo = Math.floor(amountNaira * 100);
-
   try {
-    await addBalance(orgId, amountKobo);
+    // topupOrg handles conversion to Kobo and idempotency internally
+    const reference = `MANUAL_${orgId}_${Date.now()}`;
+    await topupOrg(orgId, amountNaira, reference);
     
     revalidatePath(`/dashboard/organizations/${orgId}`);
     revalidatePath('/dashboard');

@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { SystemConfig } from '@naija-agent/types';
-import { getChatHistory, findOrCreateChat } from '@naija-agent/firebase';
+import { getChatHistory, findOrCreateChat } from '@naija-agent/database';
 import { lifeMemory } from './lifeMemory.js';
 import { logger } from '../utils/logger.js';
 import 'dotenv/config';

@@ -9,8 +9,6 @@ import { getTenantTools } from './tools.js';
 import { logger } from './utils/logger.js';
 import { 
   getOrgById, 
-  deductBalance,
-  addBalance,
   getOrgOnboarding,
   getStaff,
   checkFraud,
@@ -18,7 +16,7 @@ import {
 } from '@naija-agent/firebase';
 
 // --- AI Abstraction ---
-import { AIOrchestrator, GeminiProvider } from '@naija-agent/ai';
+import { AIOrchestrator, GeminiProvider, AIFactory } from '@naija-agent/ai';
 
 import { handleDailyReport, handleMasterReport } from './handlers/reporting.js';
 import { handleOnboarding } from './handlers/onboarding.js';
@@ -73,14 +71,23 @@ if (redisUrl) {
   redisClient = new Redis(redisConfig);
 }
 
-// --- AI Orchestrator with Smart Fallback ---
-const apiKey = process.env.GEMINI_API_KEY || '';
-const primaryAI = new GeminiProvider(apiKey);
-const fallbackAI = new GeminiProvider(apiKey); // Future: DeepSeek
-const aiOrchestrator = new AIOrchestrator({
-    primary: primaryAI,
-    fallback: fallbackAI
-});
+// --- AI Orchestrator with Smart Fallback (Provider-Based) ---
+const primaryProviderType = (process.env.AI_PROVIDER_PRIMARY || 'gemini') as any;
+const fallbackProviderType = (process.env.AI_PROVIDER_FALLBACK || 'gemini') as any;
+
+const aiOrchestrator = AIFactory.createOrchestrator(
+    {
+        type: primaryProviderType,
+        apiKey: process.env.GEMINI_API_KEY,
+        model: process.env.GEMINI_MODEL || SystemConfig.MODELS.ZYNUX_PRIMARY
+    },
+    {
+        type: fallbackProviderType,
+        apiKey: process.env.DEEPSEEK_API_KEY || process.env.GEMINI_API_KEY,
+        baseURL: process.env.DEEPSEEK_BASE_URL || (fallbackProviderType === 'commandcode' ? 'https://api.commandcode.ai/v1' : undefined),
+        model: SystemConfig.MODELS.ZYNUX_FALLBACK
+    }
+);
 
 let globalPaymentProvider: PaymentProvider | null = null;
 if (process.env.PAYSTACK_SECRET_KEY) {
@@ -102,10 +109,12 @@ import { RateLimitInterceptor } from './pipeline/interceptors/rate-limit.js';
 import { FraudInterceptor } from './pipeline/interceptors/fraud.js';
 import { SecurityInterceptor } from './pipeline/interceptors/security.js';
 import { BillingInterceptor } from './pipeline/interceptors/billing.js';
+import { MediaInterceptor } from './pipeline/interceptors/media.js';
 
 // Setup Pipeline
 const messagePipeline = new MessagePipeline()
   .use(OrgLoadInterceptor)
+  .use(MediaInterceptor)
   .use(RateLimitInterceptor)
   .use(FraudInterceptor)
   .use(SecurityInterceptor)
@@ -203,7 +212,15 @@ const worker = new Worker<JobData>(
       return { success: false, reason: error.message };
     }
   },
-  { connection: redisClient as any, concurrency: 5 }
+  { 
+    connection: redisClient as any, 
+    concurrency: 50, // Global maximum for the worker instance
+    limiter: {
+      max: 10,       // Max 10 jobs...
+      duration: 1000, // ...per 1 second...
+      groupKey: 'orgId' // ...per Organization
+    }
+  }
 );
 
 worker.on('failed', async (job, err) => {

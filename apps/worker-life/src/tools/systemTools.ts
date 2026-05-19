@@ -5,8 +5,22 @@ import { getDb } from '@naija-agent/firebase';
 import { lifeMemory } from '../services/lifeMemory.js';
 import { FeedbackEvent, SystemConfig } from '@naija-agent/types';
 import { whatsappService } from '../services/whatsapp.js';
+import { redactPII } from '../utils/security.js';
 
 export const SYSTEM_TOOLS = [
+    {
+      name: 'delegate_to_hermes',
+      description: 'Hand off a complex, long-running task to the Hermes Agent (The Body). Use this for deep research, terminal/shell automation, code execution, or tasks requiring many steps. You MUST provide a budget.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          sector: { type: Type.STRING, enum: ["ResearchPack", "CodePack", "SecurityPack", "AutomationPack"], description: 'The specialized sector Hermes should operate in.' },
+          instruction: { type: Type.STRING, description: 'Comprehensive instruction for Hermes. Include all required context, goals, and constraints.' },
+          budget_naira: { type: Type.NUMBER, description: 'Energy budget in Naira (e.g., 500 for a complex task).' }
+        },
+        required: ['sector', 'instruction', 'budget_naira']
+      }
+    },
     {
       name: 'create_reminder',
       description: 'Schedule a proactive WhatsApp message. To calculate triggerTime: Take the Current UNIX Timestamp provided in the system context and add the required duration in milliseconds (e.g., 30 mins = 1,800,000ms). Use this for "Remind me to...", "Tell me when it is...", or alerts.',
@@ -33,11 +47,11 @@ export const SYSTEM_TOOLS = [
     },
     {
       name: 'delegate_task',
-      description: 'Delegate a specialized task to a sub-agent. Choose the sector carefully: \n- "EducationPack": For quizzes, study plans, and educational research.\n- "LifePack": For searching the user\'s Vault (receipts, notes, alerts) or deleting data.\n- "ResearchPack": For browsing the live internet, fetching webpages, and general news.\n- "CommercePack": For shopping, pricing, and market comparisons.',
+      description: 'Delegate a specialized task to a sub-agent. Choose the sector carefully: \n- "EducationPack": For quizzes, study plans, and educational research.\n- "LifePack": For searching the user\'s Vault (receipts, notes, alerts) or deleting data.\n- "ResearchPack": For browsing the live internet, fetching webpages, and general news.\n- "CommercePack": For shopping, pricing, and market comparisons.\n- "PropertyPack": For real estate searches, tenancy laws, and property management.\n- "LegalPack": For Nigerian law research, bureaucracy defense, and contract analysis.',
       parameters: {
         type: Type.OBJECT,
         properties: {
-          sector: { type: Type.STRING, enum: ["EducationPack", "LifePack", "ResearchPack", "CommercePack"], description: 'The specialized sector pack required.' },
+          sector: { type: Type.STRING, enum: ["EducationPack", "LifePack", "ResearchPack", "CommercePack", "PropertyPack", "LegalPack"], description: 'The specialized sector pack required.' },
           instruction: { type: Type.STRING, description: 'Clear, detailed instructions for the sub-agent. Include all context needed to execute the task.' }
         },
         required: ['sector', 'instruction']
@@ -58,26 +72,6 @@ export const SYSTEM_TOOLS = [
       }
     }
 ];
-
-const redactPII = (text: string): string => {
-  let redacted = text.replace(/[\w.-]+@[\w.-]+\.\w+/gi, '[EMAIL]');
-  
-  // Accurately target phone numbers (Nigerian local, international, with or without spaces/dashes)
-  // Matches: 08012345678, +2348012345678, 234-80-1234-5678, 070-123-4567
-  redacted = redacted.replace(/(?:\+?234|0)[-\s]?(?:70|80|81|90|91)[-\s]?\d{3}[-\s]?\d{4}/g, '[PHONE REDACTED]');
-  
-  // Target 10-digit Nigerian Bank Account numbers (often standalone or preceded by words like 'acct', 'account')
-  // We use word boundaries \b to avoid matching the middle of a 12-digit number.
-  redacted = redacted.replace(/\b\d{10}\b/g, '[ACCOUNT REDACTED]');
-  
-  // Target 16-19 digit Credit/Debit Card numbers (with optional spaces/dashes)
-  redacted = redacted.replace(/\b(?:\d{4}[-\s]?){3,4}\d{1,3}\b/g, '[CARD REDACTED]');
-
-  // Target PINs and OTPs specifically associated with keywords
-  redacted = redacted.replace(/(?:pin|code|otp|password)[:\s]*\b\d{4,6}\b/gi, '[PIN/OTP REDACTED]');
-  
-  return redacted;
-};
 
 const sanitizeLearnedRule = (rule: string): string | null => {
   const lowercaseRule = rule.toLowerCase();
@@ -103,6 +97,31 @@ const sanitizeLearnedRule = (rule: string): string | null => {
 
 export async function executeSystemTool(name: string, args: Record<string, any>, jobId?: string): Promise<any> {
     switch (name) {
+      case 'delegate_to_hermes':
+          // Phase 10: The Bridge to the Sovereign Body
+          logger.info({ sector: args.sector, budget: args.budget_naira }, '🌉 Delegating task to Hermes Agent...');
+          
+          const sanitizedInstruction = redactPII(args.instruction);
+          const sanitizedOriginal = redactPII(args.originalMessage || '');
+
+          // In production, this will trigger the Hermes MCP Server or a dedicated BullMQ queue for Python workers.
+          // For now, we queue it to the SLM worker to handle the handoff.
+          const { lifeQueue } = await import('../index.js');
+          await lifeQueue.add('execute-slm-task', {
+              userId: args.userId,
+              sector: args.sector,
+              instruction: sanitizedInstruction,
+              originalMessage: sanitizedOriginal,
+              energyCredits: args.budget_naira / 1000, // Convert Naira to Kobo/Energy
+              budgetNaira: args.budget_naira,
+              isHermesDelegation: true
+          });
+          
+          return { 
+              status: 'success', 
+              message: `Task successfully delegated to Hermes (${args.sector}). I will notify you when the background operation is complete.` 
+          };
+
       case 'create_reminder':
         const triggerTime = Number(args.triggerTime);
         const delay = Math.max(0, triggerTime - Date.now());

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.50.1",
+    "@naija-agent/database": "^1.0.0",
     "@naija-agent/firebase": "^1.0.0",
     "@naija-agent/storage": "^1.0.0",
     "@naija-agent/types": "^1.0.0",

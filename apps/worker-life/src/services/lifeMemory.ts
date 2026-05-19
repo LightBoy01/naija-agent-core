@@ -6,11 +6,9 @@ import { logger } from '../utils/logger.js';
 import { randomUUID } from 'crypto';
 
 export class LifeMemoryService {
-  private collection = '_life'; // Firebase collection for non-financial data
-
   /**
    * Hybrid Get Context: 
-   * Fetches financial data from TiDB, merges with semantic context.
+   * Fetches financial data from PostgreSQL, merges with semantic context.
    */
   async getContext(phone: string): Promise<LifeContext> {
     try {
@@ -28,7 +26,7 @@ export class LifeMemoryService {
           vaultBalanceNaira: '0.00',
           context: {}
         });
-        logger.info({ phone }, '🎁 New user registered in TiDB! Granted 100 Welcome Bonus Credits.');
+        logger.info({ phone }, '🎁 New user registered in Database! Granted 100 Welcome Bonus Credits.');
         
         // --- CHECK FOR REFERRAL (VIRAL LOOP) ---
         await this.completeReferral(phone);
@@ -59,7 +57,7 @@ export class LifeMemoryService {
         lastInteraction: user.updatedAt
       };
     } catch (error: any) {
-      logger.error({ phone, error: error.message }, 'Failed to fetch Life Context from TiDB');
+      logger.error({ phone, error: error.message }, 'Failed to fetch Life Context from Database');
       return {};
     }
   }
@@ -73,7 +71,7 @@ export class LifeMemoryService {
     const sqlDb = getDb();
     const referralId = randomUUID();
     
-    // STRICT NORMALIZATION: Ensure E.164 format. If AI passes "08012345678", make it "+2348012345678"
+    // STRICT NORMALIZATION: Ensure E.164 format.
     const referredPhone = parseAndFormatPhone(referredPhoneRaw) || referredPhoneRaw.replace(/\D/g, '');
 
     try {
@@ -124,8 +122,7 @@ export class LifeMemoryService {
           // 2. Reward the Referrer
           const referrerResult = await tx.select({ currentEnergy: users.energyCredits })
             .from(users)
-            .where(eq(users.phone, pending.referrerPhone))
-            .for('update');
+            .where(eq(users.phone, pending.referrerPhone));
           
           if (referrerResult[0]) {
              const newEnergy = referrerResult[0].currentEnergy + pending.rewardAmount;
@@ -159,10 +156,10 @@ export class LifeMemoryService {
       let newBalance: number | null = null;
 
       await sqlDb.transaction(async (tx) => {
-        const userResult = await tx.select().from(users).where(eq(users.phone, phone)).for('update');
+        const userResult = await tx.select().from(users).where(eq(users.phone, phone));
         const user = userResult[0];
         
-        if (!user) throw new Error('User profile not found in TiDB');
+        if (!user) throw new Error('User profile not found in Database');
 
         const currentBalance = user.energyCredits;
         if (currentBalance < amount && (currentBalance - amount < -2)) {
@@ -178,7 +175,7 @@ export class LifeMemoryService {
 
       return newBalance;
     } catch (e: any) {
-      logger.warn({ phone, error: e.message }, 'Energy deduction failed in TiDB');
+      logger.warn({ phone, error: e.message }, 'Energy deduction failed');
       return null;
     }
   }
@@ -197,7 +194,7 @@ export class LifeMemoryService {
             }
         }
 
-        const userResult = await tx.select().from(users).where(eq(users.phone, phone)).for('update');
+        const userResult = await tx.select().from(users).where(eq(users.phone, phone));
         let user = userResult[0];
 
         if (!user) {
@@ -223,14 +220,14 @@ export class LifeMemoryService {
         }
       });
 
-      logger.info({ phone, added: amount, newBalance, reference }, '🔋 Energy Added Successfully via TiDB');
+      logger.info({ phone, added: amount, newBalance, reference }, '🔋 Energy Added Successfully');
       return newBalance;
     } catch (e: any) {
       if (e.message === 'DUPLICATE_REFERENCE') {
           logger.warn({ phone, reference }, 'Blocked duplicate energy top-up attempt');
           throw e; 
       }
-      logger.warn({ phone, error: e.message }, 'Energy addition failed in TiDB');
+      logger.warn({ phone, error: e.message }, 'Energy addition failed');
       return null;
     }
   }
@@ -246,7 +243,7 @@ export class LifeMemoryService {
             if (txExists.length > 0) throw new Error('DUPLICATE_REFERENCE');
         }
 
-        const userResult = await tx.select().from(users).where(eq(users.phone, phone)).for('update');
+        const userResult = await tx.select().from(users).where(eq(users.phone, phone));
         let user = userResult[0];
 
         if (!user) {
@@ -271,11 +268,11 @@ export class LifeMemoryService {
         }
       });
 
-      logger.info({ phone, added: amountNaira, newBalance, reference }, '🏦 Vault Deposit Successful via TiDB');
+      logger.info({ phone, added: amountNaira, newBalance, reference }, '🏦 Vault Deposit Successful');
       return newBalance;
     } catch (e: any) {
       if (e.message === 'DUPLICATE_REFERENCE') throw e; 
-      logger.warn({ phone, error: e.message }, 'Vault deposit failed in TiDB');
+      logger.warn({ phone, error: e.message }, 'Vault deposit failed');
       return null;
     }
   }
@@ -286,10 +283,10 @@ export class LifeMemoryService {
       let newBalance: number | null = null;
 
       await sqlDb.transaction(async (tx) => {
-        const userResult = await tx.select().from(users).where(eq(users.phone, phone)).for('update');
+        const userResult = await tx.select().from(users).where(eq(users.phone, phone));
         const user = userResult[0];
         
-        if (!user) throw new Error('User profile not found in TiDB');
+        if (!user) throw new Error('User profile not found in Database');
 
         const currentBalance = parseFloat(user.vaultBalanceNaira as string) || 0;
 
@@ -303,7 +300,7 @@ export class LifeMemoryService {
 
       return newBalance;
     } catch (e: any) {
-      logger.warn({ phone, error: e.message }, 'Vault deduction failed in TiDB');
+      logger.warn({ phone, error: e.message }, 'Vault deduction failed');
       return null;
     }
   }
@@ -329,7 +326,7 @@ export class LifeMemoryService {
         lastInteraction: new Date()
       }, { merge: true });
       
-      // Also update the JSON context in TiDB for hybrid sync
+      // Also update the JSON context in SQL for hybrid sync
       const sqlDb = getDb();
       const userResult = await sqlDb.select({ context: users.context }).from(users).where(eq(users.phone, phone)).limit(1);
       if (userResult[0]) {

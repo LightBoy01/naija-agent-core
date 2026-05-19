@@ -2,6 +2,7 @@ import { LifePipelineContext, LifeInterceptor } from '../types.js';
 import { whatsappService } from '../../services/whatsapp.js';
 import { ingestDocument } from '@naija-agent/storage';
 import { lifeMemory } from '../../services/lifeMemory.js';
+import { redactPII } from '../../utils/security.js';
 
 export const MediaInterceptor: LifeInterceptor = {
   name: 'LifeMediaIngestion',
@@ -14,10 +15,13 @@ export const MediaInterceptor: LifeInterceptor = {
         ctx.mediaBuffer = buffer;
         ctx.mediaMime = mimeType;
         
+        // PII Scrub the caption before saving
+        const safeCaption = ctx.message ? redactPII(ctx.message) : undefined;
+
         // 2. Ingest to Vault (Cloud Storage + Vector Search parsing)
         const doc = await ingestDocument(ctx.userPhone, buffer, mimeType || 'image/jpeg', ctx.apiKey, {
             orgId: ctx.orgId, 
-            caption: ctx.message, 
+            caption: safeCaption, 
             originalMediaId: mediaId
         });
         

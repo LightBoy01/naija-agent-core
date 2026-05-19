@@ -27,13 +27,17 @@ import {
   getDb,
   findPendingTransaction,
   confirmTransaction,
-  topupTenant,
   getOrgById,
   getActiveOrganizations,
   getOrgDailyStats,
   getOrgByBridgeSecret,
   getNetworkStats
 } from '@naija-agent/firebase';
+import { 
+  topupOrg as topupOrgSql, 
+  getDb as getSqlDb 
+} from '@naija-agent/database';
+import { syncCartState } from '@naija-agent/database';
 import { getProvider } from '@naija-agent/payments';
 import { formatCurrency } from './utils/currency.js';
 import legacyBridgeRoutes from './routes/legacy-bridge.js';
@@ -265,8 +269,7 @@ fastify.post('/webhook/paystack', async (request, reply) => {
 
   try {
     const amountVal = amount / 100; // Paystack sends amount in Kobo/Cents
-    const { topupOrg } = await import('@naija-agent/database');
-    const result = await topupOrg(orgId, amountVal, reference);
+    const result = await topupOrgSql(orgId, amountVal, reference);
 
     if (result) {
       const org = await getOrgById(orgId);
@@ -382,8 +385,7 @@ fastify.post('/webhook/monnify', async (request, reply) => {
   // Use the already declared amountPaid (line 318)
   
   try {
-    const { topupOrg } = await import('@naija-agent/database');
-    const result = await topupOrg(orgId, amountPaid, reference);
+    const result = await topupOrgSql(orgId, amountPaid, reference);
 
     if (result) {
       logger.info({ orgId, amount: amountPaid, reference }, `✅ [MONNIFY] Processed top-up.`);
@@ -727,7 +729,21 @@ fastify.get('/cron/life-heartbeat', async (request, reply) => {
   return reply.send({ status: 'success' });
 });
 
-// 7b. CRON: Release Abandoned Cart Locks (Ghost Locks)
+// 7c. CRON: Sovereign Cron Tick (Hermes Background Tasks)
+fastify.get('/cron/sovereign-tick', async (request, reply) => {
+  const cronSecret = request.headers['x-cron-secret'];
+  if (cronSecret !== process.env.CRON_SECRET) return reply.status(401).send('Unauthorized');
+
+  const jobData: any = {
+    type: 'system',
+    timestamp: Date.now()
+  };
+
+  // Push to lifeQueue to let Aelixxr process the due cron jobs
+  await lifeQueue.add('sovereign-cron-tick', jobData, { removeOnComplete: true });
+  logger.info('📡 [CRON] Triggered Sovereign Cron Tick.');
+  return reply.send({ status: 'success' });
+});
 fastify.get('/cron/release-abandoned-locks', async (request, reply) => {
   const cronSecret = request.headers['x-cron-secret'];
   if (cronSecret !== process.env.CRON_SECRET) return reply.status(401).send('Unauthorized');
@@ -742,6 +758,7 @@ fastify.get('/cron/release-abandoned-locks', async (request, reply) => {
     let releasedCount = 0;
     for (const cart of abandonedCarts) {
       await clearCart(cart.orgId, cart.userPhone);
+      await syncCartState(`${cart.orgId}_${cart.userPhone}`, false);
       logger.info({ orgId: cart.orgId, phone: cart.userPhone }, "✅ Released abandoned cart locks.");
       releasedCount++;
     }

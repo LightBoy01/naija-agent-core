@@ -127,27 +127,55 @@ class MCPClientService {
   /**
    * IronClaw Identity Vault:
    * Executes a stateful tool ephemerally with securely injected user credentials.
+   * Now enhanced for "Fusion v2" with persistent per-user profiles.
    */
   async executeStatefulTool(command: string, args: string[], env: Record<string, string>, toolName: string, toolArgs: any): Promise<any> {
-    const tempClient = new Client({ name: "aelixxr-ephemeral", version: "1.0.0" }, { capabilities: {} });
+    const tempClient = new Client({ name: "aelixxr-sovereign", version: "2.0.0" }, { capabilities: {} });
     
-    // Sanitize process.env to satisfy Record<string, string>
-    const safeProcessEnv: Record<string, string> = {};
-    for (const [key, value] of Object.entries(process.env)) {
-        if (value !== undefined) {
-            safeProcessEnv[key] = value;
+    // 1. Identify User Profile
+    const userPhone = env.userPhone || 'default';
+    
+    // 2. Provision Infrastructure Environment (Whitelisted)
+    const safeProcessEnv: Record<string, string> = {
+        'AELIXXR_USER_PHONE': userPhone,
+        'AELIXXR_ORG_ID': env.orgId || '',
+        'AELIXXR_PROXY_URL': env.proxyUrl || '',
+    };
+
+    const allowedKeys = [
+        'PATH', 'NODE_ENV', 'GEMINI_API_KEY', 'GEMINI_API_KEY_LOS', 
+        'DEEPSEEK_API_KEY', 'DASHSCOPE_API_KEY', 'DATABASE_URL',
+        'REDIS_URL', 'AI_PROVIDER_PRIMARY', 'AI_PROVIDER_FALLBACK',
+        'LANG', 'HOME', 'USER',
+        'BROWSERBASE_API_KEY', 'FAL_KEY', 'OPENROUTER_API_KEY' // Unlock Body Tools
+    ];
+
+    for (const key of allowedKeys) {
+        if (process.env[key] !== undefined) {
+            safeProcessEnv[key] = process.env[key] as string;
         }
+    }
+
+    // 3. Inject Profile Flag into Hermes Arguments (Sovereign Body Logic)
+    let profileArgs: string[] = [];
+    if (command === 'python3' || command === 'node') {
+        // If wrapper is used, first arg is the script path
+        const [script, ...rest] = args;
+        profileArgs = [script, "-p", userPhone, ...rest];
+    } else {
+        // Direct binary call
+        profileArgs = ["-p", userPhone, ...args];
     }
 
     const tempTransport = new StdioClientTransport({
         command,
-        args,
+        args: profileArgs,
         env: { ...safeProcessEnv, ...env }
     });
 
     try {
         await tempClient.connect(tempTransport);
-        logger.info({ tool: toolName }, '🔐 Ephemeral MCP connection established');
+        logger.info({ tool: toolName }, '🔐 Ephemeral MCP connection established (Secure Env)');
         
         const response = await tempClient.callTool({ name: toolName, arguments: toolArgs });
 

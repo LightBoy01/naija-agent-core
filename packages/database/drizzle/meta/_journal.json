@@ -15,6 +15,13 @@
       "when": 1778817634144,
       "tag": "0001_smart_colleen_wing",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1778916084212,
+      "tag": "0002_lying_bushwacker",
+      "breakpoints": true
     }
   ]
 }
