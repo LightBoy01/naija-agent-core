@@ -106,8 +106,9 @@ export async function executeUtilityTool(name: string, args: Record<string, any>
       case 'vend_utility':
         if (!monnify) return { error: "Monnify is not configured for vending." };
 
-        const vendAmount = Number(args.amountNaira);
-        const totalToDeduct = vendAmount + 100; // ₦100 convenience fee
+        const vendAmountNaira = Number(args.amountNaira);
+        const vendAmountKobo = vendAmountNaira * 100;
+        const totalToDeductKobo = vendAmountKobo + 10000; // ₦100 convenience fee = 10000 Kobo
 
         const userContext = await lifeMemory.getContext(args.userId);
         if (!userContext.pin) {
@@ -120,7 +121,7 @@ export async function executeUtilityTool(name: string, args: Record<string, any>
                 await auditService.logVaultAction({
                     userId: args.userId,
                     toolName: 'vend_utility',
-                    amount: totalToDeduct,
+                    amountKobo: totalToDeductKobo,
                     currency: 'NGN',
                     direction: 'out',
                     status: 'failed',
@@ -136,7 +137,7 @@ export async function executeUtilityTool(name: string, args: Record<string, any>
         const auditLogId = await auditService.logVaultAction({
             userId: args.userId,
             toolName: 'vend_utility',
-            amount: totalToDeduct,
+            amountKobo: totalToDeductKobo,
             currency: 'NGN',
             direction: 'out',
             status: 'pending',
@@ -144,33 +145,32 @@ export async function executeUtilityTool(name: string, args: Record<string, any>
         }, jobId);
 
         try {
-            const newBalance = await lifeMemory.deductVaultBalance(args.userId, totalToDeduct);
-            if (newBalance === null) {
+            const newBalanceKobo = await lifeMemory.deductVaultBalance(args.userId, totalToDeductKobo);
+            if (newBalanceKobo === null) {
                 if (auditLogId) await auditService.updateLogStatus(auditLogId, 'failed', { error: 'Insufficient Vault Funds' });
-                return { error: 'Oga, you no get enough money for your Vault for this ₦' + vendAmount + ' purchase + ₦100 fee.' };
+                return { error: 'Oga, you no get enough money for your Vault for this ₦' + vendAmountNaira + ' purchase + ₦100 fee.' };
             }
 
             const vendRes = await monnify.vendUtility({
                 productCode: args.productCode,
                 customerId: args.customerId,
-                amount: vendAmount,
+                amount: vendAmountNaira,
                 reference: 'vend_' + args.userId + '_' + Date.now(),
                 validationReference: args.validationReference
             });
 
             if (vendRes.success) {
-                if (auditLogId) await auditService.updateLogStatus(auditLogId, 'success', { vendReference: vendRes.responseBody?.reference, newBalance });
+                if (auditLogId) await auditService.updateLogStatus(auditLogId, 'success', { vendReference: vendRes.responseBody?.reference, newBalanceKobo });
                 return {
                     status: 'success',
-                    message: 'Purchase of ₦' + vendAmount + ' successful! Your service go activate now.',
-                    responseBody: vendRes.responseBody,
-                    remainingBalance: newBalance,
-                    instructions: 'Enthusiastically inform the user that their purchase was successful. Their remaining balance is ₦' + newBalance + '.'
+                    message: 'Purchase of ₦' + vendAmountNaira + ' successful! Your service go activate now.',
+                    remainingBalance: newBalanceKobo / 100,
+                    instructions: 'Enthusiastically inform the user that their purchase was successful. Their remaining balance is ₦' + (newBalanceKobo / 100) + '.'
                 };
             } else {
-                await lifeMemory.addVaultBalance(args.userId, totalToDeduct, 'rollback_vend_' + Date.now(), 'refund');
+                await lifeMemory.addVaultBalance(args.userId, totalToDeductKobo, 'rollback_vend_' + Date.now(), 'refund');
                 if (auditLogId) await auditService.updateLogStatus(auditLogId, 'failed', { error: vendRes.message });
-                return { error: 'Payment gateway reject the request: ' + vendRes.message + '. I don refund your ₦' + totalToDeduct + ' to your Vault.' };
+                return { error: 'Payment gateway reject the request: ' + vendRes.message + '. I don refund your ₦' + (totalToDeductKobo / 100) + ' to your Vault.' };
             }
         } catch (e: any) {
             logger.error({ error: e.message, userId: args.userId }, 'Failed vend_utility');

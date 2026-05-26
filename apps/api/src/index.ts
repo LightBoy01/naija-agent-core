@@ -559,6 +559,7 @@ fastify.post('/webhook', async (request, reply) => {
             documentId: jobData.content.documentId,
             mimeType: jobData.content.mimeType
         }, {
+            jobId: `life-chat-${message.id}`, // Deduplication at BullMQ level
             removeOnComplete: true,
             attempts: 3
         });

@@ -45,9 +45,55 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
       return { status: 'error', message: 'Top-up failed. Reference might be used.' };
     }
 
+    case 'suspend_tenant': {
+      if (!isAdmin || !orgConfig?.isMaster) return { status: 'error', code: 'UNAUTHORIZED' };
+      
+      // --- DYNAMIC MFA PROTECTION (PHASE 9.3) ---
+      if (process.env.NODE_ENV === 'production') {
+          const { verifyMfaCode, setMfaCode } = await import('@naija-agent/firebase');
+          const isVerified = args.mfa_code ? await verifyMfaCode(orgId, args.mfa_code) : false;
+
+          if (!isVerified) {
+              const code = Math.floor(100000 + Math.random() * 900000).toString();
+              await setMfaCode(orgId, code, 5); // 5 min expiry
+              return { 
+                status: 'error', 
+                code: 'MFA_REQUIRED', 
+                message: "Oga, suspending a business is a heavy action. I have generated a 6-digit security code. Please check your logs and call 'suspend_tenant' again with the 'mfa_code' to confirm." 
+              };
+          }
+      }
+
+      const { suspendOrganization } = await import('@naija-agent/firebase');
+      await suspendOrganization(args.tenantId, args.reason);
+      await logSystemEvent('naija-agent-master', 'TENANT_SUSPENDED', `Tenant ${args.tenantId} was suspended by Sovereign.`, { reason: args.reason, suspendedBy: from });
+      
+      return { status: 'success', message: `Tenant '${args.tenantId}' has been instantly SUSPENDED. All AI and API services are now blocked.` };
+    }
+
     case 'broadcast_to_bosses': {
       if (!isAdmin || !orgConfig?.isMaster) return { status: 'error', code: 'UNAUTHORIZED' };
       
+      // --- DYNAMIC MFA PROTECTION (PHASE 9.3) ---
+      if (process.env.NODE_ENV === 'production') {
+          const { verifyMfaCode, setMfaCode } = await import('@naija-agent/firebase');
+          const isVerified = args.mfa_code ? await verifyMfaCode(orgId, args.mfa_code) : false;
+
+          if (!isVerified) {
+              const code = Math.floor(100000 + Math.random() * 900000).toString();
+              await setMfaCode(orgId, code, 10); // 10 min expiry
+              
+              logger.info({ orgId }, '🔐 [SECURITY] Sovereign MFA Challenge generated for Broadcast');
+              
+              // In a production Empire, we would send this to the Sovereign's PRIVATE backup channel (e.g. Email)
+              return { 
+                status: 'error', 
+                code: 'MFA_REQUIRED', 
+                message: "Oga, this broadcast will hit 1,000+ people. I have generated a 6-digit security code for your protection. Please check your system logs or secondary channel and call 'broadcast_to_bosses' again with the 'mfa_code'." 
+              };
+          }
+      }
+
       await logSystemEvent('naija-agent-master', 'GLOBAL_BROADCAST', `Sovereign HQ sent a network-wide broadcast to all Bosses.`, { message: args.message });
 
       const orgs = await getActiveOrganizations();
@@ -132,8 +178,30 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
 
     case 'report_fraud': {
       if (!isAdmin || !orgConfig?.isMaster) return { status: 'error', code: 'UNAUTHORIZED' };
+      
+      // 1. Log to legacy Firestore (Raw phone)
       await reportFraud(args.phone, args.reason);
-      return { status: 'success', message: `Customer ${args.phone} added to Global Fraud Blacklist.` };
+      
+      // 2. Log to Privacy-First Global Registry (Hashed phone)
+      const phoneHash = (await import('crypto')).createHash('sha256').update(args.phone).digest('hex');
+      const { getDb, fraudRegistry } = await import('@naija-agent/database');
+      const db = getDb();
+      
+      // We use the Reporting Org ID to ensure consensus logic works
+      await db.insert(fraudRegistry).values({
+        phoneHash,
+        orgId: args.orgId || orgId, // Allow Master to report on behalf of others
+        reason: args.reason,
+        evidenceUrl: args.evidenceUrl || null
+      }).onConflictDoUpdate({
+          target: [fraudRegistry.phoneHash, fraudRegistry.orgId],
+          set: { 
+            reason: args.reason,
+            createdAt: new Date() // Refresh report date
+          }
+      });
+
+      return { status: 'success', message: `Customer ${args.phone} added to Global Fraud Blacklist (Network Protected).` };
     }
 
     case 'register_trial_interest': {

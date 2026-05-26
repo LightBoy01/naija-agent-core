@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"regexp"
 	"sync"
 
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/types"
+	waProto "go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types/events"
@@ -25,7 +26,6 @@ type Manager struct {
 	clients   map[string]*whatsmeow.Client
 	mu        sync.RWMutex
 	log       waLog.Logger
-	pinRegex  []*regexp.Regexp // Pre-compiled patterns
 }
 
 func NewManager(container *sqlstore.Container, db *sql.DB, publisher *queue.Publisher) *Manager {
@@ -35,11 +35,6 @@ func NewManager(container *sqlstore.Container, db *sql.DB, publisher *queue.Publ
 		publisher: publisher,
 		clients:   make(map[string]*whatsmeow.Client),
 		log:       waLog.Stdout("Manager", "INFO", true),
-		pinRegex: []*regexp.Regexp{
-			regexp.MustCompile(`^\d{4}$`),
-			regexp.MustCompile(`^#\d{4}$`),
-			regexp.MustCompile(`^PIN\s+\d{4}$`),
-		},
 	}
 	// Automatically load existing sessions
 	go mgr.LoadSessions()
@@ -76,7 +71,7 @@ func (m *Manager) getProxyForOrg(orgID string) string {
 }
 
 func (m *Manager) LoadSessions() {
-	devices, err := m.container.GetAllDevices()
+	devices, err := m.container.GetAllDevices(context.Background())
 	if err != nil {
 		m.log.Errorf("Failed to fetch devices from store: %v", err)
 		return
@@ -84,17 +79,23 @@ func (m *Manager) LoadSessions() {
 
 	m.log.Infof("Hydrating %d WhatsApp sessions...", len(devices))
 
+	var wg sync.WaitGroup
 	for _, device := range devices {
 		// Temporary: Using JID as orgID for auto-hydration until mapping table is ready
-		orgID := device.ID.String() 
-		
-		err := m.ConnectClientWithDevice(orgID, device)
-		if err != nil {
-			m.log.Errorf("Failed to hydrate session for %s: %v", orgID, err)
-		}
-	}
-}
+		orgID := device.ID.String()
 
+		wg.Add(1)
+		go func(o string, d *store.Device) {
+			defer wg.Done()
+			err := m.ConnectClientWithDevice(o, d)
+			if err != nil {
+				m.log.Errorf("Failed to hydrate session for %s: %v", o, err)
+			}
+		}(orgID, device)
+	}
+	wg.Wait()
+	m.log.Infof("✅ All %d sessions hydrated and ready.", len(devices))
+}
 func (m *Manager) ConnectClientWithDevice(orgID string, device *store.Device) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -179,22 +180,6 @@ func (m *Manager) handleMessage(orgID string, evt *events.Message) {
 	from := evt.Info.Sender.ToNonAD().String()
 	text := evt.Message.GetConversation()
 
-	// 🛡️ [IRON SHIELD]: PIN Interceptor (Gateway Level)
-	if text != "" {
-		isPinMatch := false
-		for _, re := range m.pinRegex {
-			if re.MatchString(text) {
-				isPinMatch = true
-				break
-			}
-		}
-
-		if isPinMatch {
-			m.log.Infof("🛡️ [PIN INTERCEPT] Intercepted potential PIN from %s for Org %s", from, orgID)
-			return 
-		}
-	}
-	
 	// Determine if it's Life Chat based on orgID
 	jobType := "text"
 	if orgID == "naija-agent-master" || orgID == "aelixxr" { 
@@ -227,12 +212,12 @@ func (m *Manager) SendMessage(orgID, to, text string) error {
 		return err
 	}
 
-	jid, err := whatsmeow.ParseJID(to)
+	jid, err := types.ParseJID(to)
 	if err != nil {
 		return fmt.Errorf("invalid JID: %v", err)
 	}
 
-	_, err = client.SendMessage(context.Background(), jid, &whatsmeow.Message{
+	_, err = client.SendMessage(context.Background(), jid, &waProto.Message{
 		Conversation: &text,
 	})
 	return err

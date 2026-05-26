@@ -7,8 +7,30 @@ import {
   boolean, 
   jsonb, 
   decimal,
-  integer
+  integer,
+  customType,
+  primaryKey
 } from 'drizzle-orm/pg-core';
+
+// --- Custom Types ---
+export const vector = customType<{
+  data: number[];
+  driverData: string;
+}>({
+  dataType() {
+    return 'vector(768)'; // Optimized for Matryoshka (Gemini Embedding 2)
+  },
+  toDriver(value: number[]): string {
+    if (!Array.isArray(value)) return '[]';
+    return `[${value.join(',')}]`;
+  },
+  fromDriver(value: string): number[] {
+    return value
+      .slice(1, -1)
+      .split(',')
+      .map((v) => parseFloat(v));
+  },
+});
 
 // --- Organizations (Tenants) ---
 export const organizations = pgTable('organizations', {
@@ -32,11 +54,13 @@ export const users = pgTable('users', {
   phone: varchar('phone', { length: 20 }).primaryKey(), // Primary key is the E.164 phone number
   name: varchar('name', { length: 255 }),
   energyCredits: integer('energy_credits').default(100).notNull(),
-  vaultBalanceNaira: decimal('vault_balance_naira', { precision: 20, scale: 2 }).default('0.00').notNull(),
+  vaultBalanceKobo: bigint('vault_balance_kobo', { mode: 'number' }).default(0).notNull(),
   pinHash: varchar('pin_hash', { length: 255 }), // Salted Bcrypt
   pinLockUntil: timestamp('pin_lock_until'),
   pinAttempts: integer('pin_attempts').default(0).notNull(),
   context: jsonb('context'), // Goals, Preferences, Family, etc.
+  sessionStatus: varchar('session_status', { length: 50 }), // e.g. 'IDLE', 'AWAITING_PIN'
+  sessionExpiry: timestamp('session_expiry'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -62,7 +86,7 @@ export const memories = pgTable('memories', {
   orgId: varchar('org_id', { length: 64 }).references(() => organizations.id),
   category: varchar('category', { length: 50 }).notNull(), // 'fact', 'preference', 'episodic'
   content: text('content').notNull(),
-  embedding: text('embedding'), // Store vector as text for now
+  embedding: vector('embedding'), // Optimized vector storage
   importance: integer('importance').default(1).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
@@ -101,6 +125,7 @@ export const messages = pgTable('messages', {
   role: varchar('role', { length: 20 }).notNull(), // 'user', 'assistant', 'system', 'function'
   content: text('content').notNull(),
   type: varchar('type', { length: 20 }).default('text').notNull(), // 'text', 'image', 'audio', etc.
+  embedding: vector('embedding'), // Semantic search across history
   reasoning: text('reasoning'), // Stores the <think> tags from DeepSeek
   metadata: jsonb('metadata'), // Can store media IDs or function call args
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -133,4 +158,17 @@ export const cronJobs = pgTable('cron_jobs', {
   lastResult: text('last_result'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// --- Global Fraud Registry (Phase 9.3: Scam-Shield) ---
+export const fraudRegistry = pgTable('fraud_registry', {
+  phoneHash: varchar('phone_hash', { length: 64 }).notNull(), // SHA-256 hash
+  orgId: varchar('org_id', { length: 64 }).references(() => organizations.id).notNull(),
+  reason: text('reason').notNull(),
+  evidenceUrl: text('evidence_url'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => {
+  return {
+    pk: primaryKey({ columns: [table.phoneHash, table.orgId] }),
+  };
 });

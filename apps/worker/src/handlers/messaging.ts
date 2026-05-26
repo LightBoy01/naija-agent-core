@@ -17,9 +17,10 @@ import { AUTH_REQUIRED_TOOLS as PIN_PROTECTED_TOOLS } from '../tools/definitions
 import { getPriceGuardRegex, formatCurrency, parsePrice } from '../utils/currency.js';
 import { formatInTimeZone } from 'date-fns-tz';
 import { logger } from '../utils/logger.js';
-import { SectorPack } from '@naija-agent/types';
+import { SectorPack, SystemConfig } from '@naija-agent/types';
 import { AIProvider, AIMessage } from '@naija-agent/ai';
 import { promptService } from '../services/promptService.js';
+import { PriceGuard } from '../services/priceGuard.js';
 
 export interface MessagingDependencies {
   org: Organization;
@@ -39,28 +40,47 @@ export async function handleMessage(job: Job<JobData>, deps: MessagingDependenci
   const { org, isAdmin, isStaff, staffData, tenantWhatsAppService, tenantPaymentProvider, ai, redisClient, tenantTools } = deps;
 
   const isManager = isAdmin || isStaff;
-  const expectingPinKey = `expecting_pin:${orgId}:${from}`;
-  const isExpectingPin = await redisClient.get(expectingPinKey);
   const textTrimmed = content.text?.trim() || '';
 
-  let isPinAttempt = false;
-  let pinAttempt = '';
+  // --- STATE-AWARE PIN INTERCEPTOR (PHASE 9.3) ---
+  let isAwaitingPin = false;
+  const sessionStatus = org.config?.sessionStatus;
+  const sessionExpiry = org.config?.sessionExpiry;
+  if (sessionStatus === 'AWAITING_PIN' && sessionExpiry) {
+      if (new Date(sessionExpiry).getTime() > Date.now()) {
+          isAwaitingPin = true;
+      }
+  }
+
+  let isPinAttempt = !!job.data.isPinAttempt;
+  let pinAttempt = textTrimmed;
 
   if (isManager && type === 'text' && textTrimmed) {
-      if (isExpectingPin && /^\d{4}$/.test(textTrimmed)) { isPinAttempt = true; pinAttempt = textTrimmed; }
+      // Standalone 4-digits: ONLY if state says we are waiting for it
+      if (!isPinAttempt && isAwaitingPin && /^\d{4}$/.test(textTrimmed)) { 
+          isPinAttempt = true; 
+      }
+      // Explicit overrides: Always allowed for managers
       else if (/^#\d{4}$/.test(textTrimmed)) { isPinAttempt = true; pinAttempt = textTrimmed.substring(1); }
       else if (/^PIN\s+\d{4}$/i.test(textTrimmed)) { isPinAttempt = true; pinAttempt = textTrimmed.split(/\s+/)[1]; }
   }
 
   if (isPinAttempt) {
-      await redisClient.del(expectingPinKey);
+      // Clear state on any attempt
+      if (isAwaitingPin) {
+          const { getDb } = await import('@naija-agent/firebase');
+          await getDb().collection('organizations').doc(orgId).update({
+              'config.sessionStatus': 'IDLE',
+              'config.sessionExpiry': null
+          });
+      }
+
       const { setAdminAuth } = await import('@naija-agent/firebase');
       const bcrypt = await import('bcrypt');
       let isAuthenticated = false;
       if (isAdmin) {
           const storedHash = org.config?.adminPin;
           if (storedHash) { if (await bcrypt.compare(pinAttempt, storedHash)) { await setAdminAuth(orgId, from); isAuthenticated = true; } }
-          else if (pinAttempt === '1234') { await setAdminAuth(orgId, from); isAuthenticated = true; }
       } 
       if (isAuthenticated) await tenantWhatsAppService.sendText(from, `✅ *PIN Accepted!* Admin Mode unlocked.`);
       else await tenantWhatsAppService.sendText(from, `❌ *Incorrect PIN.*`);
@@ -180,7 +200,11 @@ ${globalProtocol}
       for (const call of functionCalls) {
           const isProtected = PIN_PROTECTED_TOOLS.includes(call.name);
           if (isProtected && (!isAdmin || !isAuth)) {
-              await redisClient.setex(expectingPinKey, 300, '1');
+              const { getDb } = await import('@naija-agent/firebase');
+              await getDb().collection('organizations').doc(orgId).update({
+                  'config.sessionStatus': 'AWAITING_PIN',
+                  'config.sessionExpiry': new Date(Date.now() + 300000).toISOString() // 5 mins
+              });
               toolResponseParts.push({ functionResponse: { name: call.name, response: { status: 'error', code: 'AUTH_REQUIRED' } } });
               continue;
           }
@@ -219,15 +243,29 @@ ${globalProtocol}
   let finalMessage = responseText || "Oga, try talk again.";
   
   if (!isAdmin && !isStaff) {
-      const priceRegex = getPriceGuardRegex(currency.symbol, currency.code);
-      if (priceRegex.test(finalMessage)) {
-          const allProducts = await getProducts(orgId);
-          const matches = [...finalMessage.matchAll(priceRegex)];
-          for (const match of matches) {
-              const p = parsePrice(match[0], currency.symbol, currency.code);
-              if (p && !allProducts.some(prod => Math.abs(prod.price - p) < 1)) {
-                  finalMessage = finalMessage.replace(match[0], `${currency.symbol}[Verification Pending]`);
-              }
+      // --- DETERMINISTIC PRICE GUARD (PHASE 9.3) ---
+      const priceGuard = new PriceGuard(ai);
+      const guardResult = await priceGuard.validateResponse(finalMessage, businessKnowledge, currency);
+      
+      if (!guardResult.isSafe) {
+          logger.error({ reason: guardResult.mismatchReason }, "🛑 [PRICE GUARD] Hallucination Blocked!");
+          
+          // Re-try once with correction instruction
+          const correctionPrompt = `The previous response contained a price hallucination: ${guardResult.mismatchReason}\n\n${guardResult.suggestedCorrection}\n\nRegenerate the response with the CORRECT prices. Output JSON.`;
+          const recovery = await ai.chat(normalizedHistory, correctionPrompt, {
+              model: tenantModelName,
+              systemInstruction: systemPrompt,
+              tools: tenantTools,
+              responseMimeType: "application/json",
+              responseSchema
+          });
+          
+          try {
+              const parsed = JSON.parse(recovery.text);
+              finalMessage = parsed.whatsapp_message || finalMessage;
+              logger.info("✅ [PRICE GUARD] Response corrected and recovered.");
+          } catch (e) {
+              finalMessage = "I'm sorry, I encountered an internal error verifying our prices. Please ask me again or check with the Boss.";
           }
       }
   }

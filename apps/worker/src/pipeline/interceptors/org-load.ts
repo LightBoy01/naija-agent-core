@@ -76,6 +76,8 @@ export const OrgLoadInterceptor: Interceptor = {
     const sectorId = org.sector || 'commerce';
     
     ctx.sectorPack = getSectorPack(sectorId, currency, region);
+    ctx.isLegacy = !!org.config?.legacy_whitelist;
+    
     ctx.tenantTools = getTenantTools(
         ctx.isAdmin, 
         ctx.isStaff, 
@@ -83,7 +85,8 @@ export const OrgLoadInterceptor: Interceptor = {
         !!ctx.tenantPaymentProvider, 
         currency, 
         region, 
-        ctx.sectorPack
+        ctx.sectorPack,
+        ctx.isLegacy
     );
 
     return ctx;

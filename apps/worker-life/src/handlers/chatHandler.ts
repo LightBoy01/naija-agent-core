@@ -82,6 +82,27 @@ export async function handleLifeChat(job: Job, deps: ChatDependencies) {
 
     try {
         const soulPrompt = promptService.getPrompt('Aelixxr.Soul.md');
+        let semanticMemories = '';
+
+        if (ctx.message) {
+            // Retrieve long-term memories relevant to current input
+            const embeddingResult = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key=${process.env.GEMINI_API_KEY_EMBEDDING || apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: { parts: [{ text: ctx.message }] } })
+            });
+            const embedData = await embeddingResult.json() as any;
+            const vector = (embedData.embedding?.values || []).slice(0, 768);
+            
+            if (vector.length === 768) {
+                const { lifeMemory } = await import('../services/lifeMemory.js');
+                const memoryResults = await lifeMemory.searchSemanticMemory(ctx.userPhone, vector, 3);
+                if (memoryResults && memoryResults.length > 0) {
+                    semanticMemories = `\n[LONG-TERM RECALL (Relevant to current context)]:\n${memoryResults.map(m => `- ${m.content}`).join('\n')}`;
+                    logger.info({ memories: memoryResults.map(m => m.content), userPhone }, '🧠 Retrieved Semantic Memories');
+                }
+            }
+        }
 
         const systemPrompt = `
 ${soulPrompt}
@@ -94,7 +115,7 @@ ${ctx.ingestionSummary}
 - Local: ${ctx.localTime} (${ctx.timezone})
 - Energy: ${ctx.energyCredits}
 - Goals: ${JSON.stringify(ctx.lifeContext.goals || [])}
-- Active Monitors: ${JSON.stringify(ctx.activeMonitors)}
+- Active Monitors: ${JSON.stringify(ctx.activeMonitors)}${semanticMemories}
 ---`;
 
         const chatId = await findOrCreateChat(ctx.orgId || 'naija-agent-master', `${ctx.userPhone}_life`, 'User');
@@ -137,9 +158,11 @@ ${ctx.ingestionSummary}
                 if (call.name === 'delegate_task') {
                     await lifeQueue.add('execute-slm-task', { 
                         ...job.data, 
-                        chatId, // Explicitly pass the generated chatId
+                        chatId, 
                         sector: call.args.sector, 
-                        instruction: call.args.instruction 
+                        instruction: call.args.instruction,
+                        rawParameters: call.args.raw_parameters,
+                        hops: (job.data.hops || 0) + 1
                     });
                     const replyMsg = `I'm consulting my ${call.args.sector} expert... ⏳`;
                     await whatsappService.sendText(ctx.userPhone, replyMsg);
@@ -151,9 +174,18 @@ ${ctx.ingestionSummary}
                 }
 
                 const billResult = await billingService.billForTool(ctx.userPhone, call.name, ctx.energyCredits);
-                if (!billResult.success) { text = "Insufficient energy."; break; }
+                if (!billResult.success) { 
+                    text = billResult.errorText || "Insufficient energy."; 
+                    break; 
+                }
                 
                 const toolResult = await executeLifeTool(call.name, { ...call.args, userId: ctx.userPhone, sessionId: chatId }, job.id);
+                
+                if (toolResult && toolResult.error) {
+                    logger.error({ toolName: call.name, error: toolResult.error }, '🛠️ Tool Execution Returned Error. Triggering Refund.');
+                    await billingService.refundCredits(ctx.userPhone, billResult.costInCredits);
+                }
+                
                 toolResponses.push({ functionResponse: { name: call.name, response: toolResult } });
                 }
 

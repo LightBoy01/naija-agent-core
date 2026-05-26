@@ -43,6 +43,13 @@ export class WhatsAppService {
     }
     const finalBody = body || "I'm sorry, I couldn't generate a response. Please try again.";
 
+    // --- SOVEREIGN ROUTING ---
+    if (this.phoneId.startsWith('baileys-')) {
+       const orgId = this.phoneId.replace('baileys-', '');
+       await this.sendToSovereign(orgId, to, finalBody);
+       return `SOV-${Date.now()}`;
+    }
+
     const maxLen = 4096;
     const chunks = [];
     for (let i = 0; i < finalBody.length; i += maxLen) {
@@ -82,6 +89,14 @@ export class WhatsAppService {
 
   // Send Image Message
   async sendImage(to: string, imageUrl: string | Buffer, caption?: string): Promise<string> {
+    // --- SOVEREIGN ROUTING ---
+    if (this.phoneId.startsWith('baileys-')) {
+       const orgId = this.phoneId.replace('baileys-', '');
+       const text = caption ? `${caption}\n\n${imageUrl}` : `${imageUrl}`;
+       await this.sendToSovereign(orgId, to, text);
+       return `SOV-IMG-${Date.now()}`;
+    }
+
     if (Buffer.isBuffer(imageUrl)) {
        // --- UPLOAD TO META (PHASE 7.10) ---
        // For now, we log and throw as we primarily use URLs
@@ -166,13 +181,40 @@ export class WhatsAppService {
   }
 
   /**
+   * Dispatches a message to the Sovereign Go Sidecar.
+   */
+  private async sendToSovereign(orgId: string, to: string, text: string): Promise<void> {
+    const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
+    const apiKey = process.env.ADMIN_API_KEY;
+
+    try {
+      await axios.post(
+        `${sidecarUrl}/send`,
+        { orgId, to, text },
+        {
+          headers: {
+            'X-API-Key': apiKey || '',
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+    } catch (e: any) {
+      console.error('❌ [SOVEREIGN SEND] Failed:', e.response?.data || e.message);
+      throw new Error(`Failed to dispatch message via Sovereign engine: ${e.message}`);
+    }
+  }
+
+  /**
    * Fetches media from the Sovereign Go Sidecar instead of Meta.
    */
   private async downloadMediaFromSovereign(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
     const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
+    const apiKey = process.env.ADMIN_API_KEY;
+    
     try {
       const response = await axios.get(`${sidecarUrl}/download/${mediaId}`, {
-        responseType: 'arraybuffer'
+        responseType: 'arraybuffer',
+        headers: apiKey ? { 'X-API-Key': apiKey } : {}
       });
       
       return {
@@ -186,6 +228,13 @@ export class WhatsAppService {
   }
 
   async sendTemplate(to: string, templateName: string, languageCode: string = 'en_US'): Promise<string> {
+    // --- SOVEREIGN ROUTING ---
+    if (this.phoneId.startsWith('baileys-')) {
+       const orgId = this.phoneId.replace('baileys-', '');
+       await this.sendToSovereign(orgId, to, `[TEMPLATE: ${templateName}]`);
+       return `SOV-TMP-${Date.now()}`;
+    }
+
     try {
       const response = await axios.post(
         `${this.baseUrl}/${this.phoneId}/messages`, 

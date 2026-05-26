@@ -29,8 +29,31 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
         orgId: slmOrgId, 
         energyCredits: initialEnergy,
         budgetNaira,
-        isHermesDelegation 
+        isHermesDelegation,
+        hops,
+        rawParameters
     } = job.data;
+
+    const currentHops = hops || 0;
+    if (currentHops > 3) {
+        logger.error({ userPhone: slmPhone, hops: currentHops }, '🚫 [SLM GUARD] Maximum delegation hops reached. Preventing infinite loop.');
+        const errorReport = JSON.stringify({ 
+            status: "error", 
+            report: "Oga, this task is becoming too complex for my sub-agents. Let's simplify what we are trying to do." 
+        });
+
+        await lifeQueue.add('life-chat-resume', {
+            orgId: slmOrgId,
+            userPhone: slmPhone,
+            chatId: slmChatId,
+            originalMessage: slmOrig,
+            slmReport: errorReport,
+            sector,
+            hops: currentHops
+        }, { removeOnComplete: true });
+
+        return { success: false, error: 'max_hops_reached' };
+    }
 
     let slmReport = "";
     let cleanedReport = "";
@@ -82,7 +105,8 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
             chatId: slmChatId,
             originalMessage: slmOrig,
             slmReport: cleanedReport,
-            sector
+            sector,
+            hops: currentHops + 1
         }, { removeOnComplete: true });
 
         return { success: true, slmReport: cleanedReport };
@@ -114,7 +138,8 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
 }
 [FULL DETAILS MANDATE]: Provide the absolute most detailed raw data possible. Do not summarize aggressively.`;
 
-    const fullInstruction = `[USER_ID]: ${slmPhone}\n<untrusted_user_instruction>\n${slmInst}\n</untrusted_user_instruction>`;
+    const rawParamsStr = rawParameters ? `\n[RAW_PARAMETERS_FROM_SUPERVISOR]: ${JSON.stringify(rawParameters)}` : '';
+    const fullInstruction = `[USER_ID]: ${slmPhone}${rawParamsStr}\n<untrusted_user_instruction>\n${slmInst}\n</untrusted_user_instruction>`;
 
     // --- TOOL SCOPING (Sector Packs) ---
     const rawTools = globalLifeTools || await getLifeTools();
@@ -243,7 +268,8 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
             chatId: slmChatId,
             originalMessage: slmOrig,
             slmReport: cleanedReport,
-            sector
+            sector,
+            hops: currentHops + 1
         }, { 
             removeOnComplete: true, 
             removeOnFail: false 

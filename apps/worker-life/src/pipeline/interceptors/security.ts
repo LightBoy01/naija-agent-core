@@ -5,13 +5,33 @@ import { logger } from '../../utils/logger.js';
 export const SecurityInterceptor: LifeInterceptor = {
   name: 'LifeSecurityGuard',
   execute: async (ctx: LifePipelineContext) => {
-    // 1. Detect 4-digit PINs (Standalone OR preceded by keywords)
-    const exactPinMatch = /^\d{4}$/.test(ctx.message?.trim() || "");
-    const keywordPinMatch = /(?:pin|code|password|otp)\s*(?:is\s*)?[:=-]*\s*(\d{4})\b|\b(\d{4})\b\s*(?:is\s*(?:the\s*|my\s*)?(?:pin|code|password|otp))/i.exec(ctx.message || "");
+    // 1. Determine if a PIN is expected (State-Aware Hardening)
+    const sessionStatus = ctx.lifeContext?.sessionStatus;
+    const sessionExpiry = ctx.lifeContext?.sessionExpiry;
+    
+    let isAwaitingPin = false;
+    if (sessionStatus === 'AWAITING_PIN') {
+       let expiryMillis = 0;
+       if (sessionExpiry instanceof Date) expiryMillis = sessionExpiry.getTime();
+       else if (sessionExpiry && typeof (sessionExpiry as any).seconds === 'number') expiryMillis = (sessionExpiry as any).seconds * 1000;
+       else if (typeof sessionExpiry === 'string') expiryMillis = Date.parse(sessionExpiry);
+
+       if (expiryMillis > Date.now()) {
+          isAwaitingPin = true;
+       }
+    }
+
+    // 2. Detect 4-digit PINs
+    const text = ctx.message?.trim() || "";
+    const exactPinMatch = /^\d{4}$/.test(text);
+    
+    // JS Regex for PIN: Needs to be careful with capturing groups for the replace step
+    const pinRegex = /(?:pin|code|password|otp)\s*(?:is\s*)?[:=-]*\s*(?<![₦NK])(\d{4})\b(?!\s*(?:naira|ngn|kobo|credits))|\b(?<![₦NK])(\d{4})\b(?!\s*(?:naira|ngn|kobo|credits))\s*(?:is\s*(?:the\s*|my\s*)?(?:pin|code|password|otp))/i;
+    const keywordPinMatch = pinRegex.exec(text);
     
     let pin: string | null = null;
-    if (exactPinMatch) {
-        pin = ctx.message!.trim();
+    if (exactPinMatch && isAwaitingPin) {
+        pin = text;
     } else if (keywordPinMatch) {
         pin = keywordPinMatch[1] || keywordPinMatch[2];
     }

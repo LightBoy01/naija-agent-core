@@ -23,11 +23,15 @@ export async function addBalance(orgId: string, amount: number): Promise<number 
 
       newBalance = currentBalance + amount;
       t.update(orgRef, { balance: newBalance });
+
+      // Update global vault total atomically
+      const metaRef = db.collection('network_metadata').doc('global');
+      t.set(metaRef, {
+        totalVaultKobo: FieldValue.increment(amount),
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
     });
 
-    // Update global vault total
-    await incrementNetworkStats({ koboDelta: amount });
-    
     return newBalance;
   } catch (e) {
     console.warn(`Balance addition failed for ${orgId}:`, e);
@@ -53,20 +57,14 @@ export async function deductBalance(orgId: string, amount: number): Promise<numb
       
       newBalance = currentBalance - amount;
       t.update(orgRef, { balance: newBalance });
-    });
 
-    // Update global vault total (Decrement) - Fire-and-Forget with Safety Log
-    try {
-      await incrementNetworkStats({ koboDelta: -amount });
-    } catch (statsErr: any) {
-      console.warn(`⚠️ [LEDGER DRIFT] Failed to update global stats for deduction: ${statsErr.message}`);
-      await db.collection('failed_ledger_updates').add({
-        orgId,
-        delta: -amount,
-        reason: statsErr.message,
-        timestamp: FieldValue.serverTimestamp()
-      });
-    }
+      // Update global vault total (Decrement) atomically
+      const metaRef = db.collection('network_metadata').doc('global');
+      t.set(metaRef, {
+        totalVaultKobo: FieldValue.increment(-amount),
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+    });
 
     return newBalance;
   } catch (e) {

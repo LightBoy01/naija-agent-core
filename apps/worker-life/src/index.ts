@@ -146,8 +146,7 @@ const worker: Worker = new Worker(
     concurrency: 20, 
     limiter: {
       max: 5,
-      duration: 1000,
-      groupKey: 'userPhone'
+      duration: 1000
     }
   }
 );

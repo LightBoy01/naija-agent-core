@@ -6,6 +6,8 @@ import { logger } from '../utils/logger.js';
 import { randomUUID } from 'crypto';
 
 export class LifeMemoryService {
+  private collection = 'life_contexts';
+
   /**
    * Hybrid Get Context: 
    * Fetches financial data from PostgreSQL, merges with semantic context.
@@ -13,7 +15,7 @@ export class LifeMemoryService {
   async getContext(phone: string): Promise<LifeContext> {
     try {
       const sqlDb = getDb();
-      const userResult = await sqlDb.select().from(users).where(eq(users.phone, phone)).limit(1);
+      const userResult = await sqlDb.select().from(users).where(sql`${users.phone} = ${phone}` as any).limit(1);
       
       let user = userResult[0];
       
@@ -23,7 +25,7 @@ export class LifeMemoryService {
           phone: phone,
           name: 'User',
           energyCredits: 100,
-          vaultBalanceNaira: '0.00',
+          vaultBalanceKobo: 0,
           context: {}
         });
         logger.info({ phone }, '🎁 New user registered in Database! Granted 100 Welcome Bonus Credits.');
@@ -35,7 +37,7 @@ export class LifeMemoryService {
           phone,
           name: 'User',
           energyCredits: 100,
-          vaultBalanceNaira: '0.00',
+          vaultBalanceKobo: 0,
           pinHash: null,
           pinLockUntil: null,
           pinAttempts: 0,
@@ -51,10 +53,12 @@ export class LifeMemoryService {
       return {
         ...noSqlContext,
         energyCredits: user.energyCredits,
-        vaultBalanceNaira: parseFloat(user.vaultBalanceNaira as string) || 0,
-        pinLockUntil: user.pinLockUntil,
-        pinHash: user.pinHash,
-        lastInteraction: user.updatedAt
+        vaultBalanceKobo: user.vaultBalanceKobo,
+        pinLockUntil: user.pinLockUntil || undefined,
+        pinHash: user.pinHash || undefined,
+        lastInteraction: user.updatedAt,
+        sessionStatus: user.sessionStatus || undefined,
+        sessionExpiry: user.sessionExpiry || undefined
       };
     } catch (error: any) {
       logger.error({ phone, error: error.message }, 'Failed to fetch Life Context from Database');
@@ -76,7 +80,7 @@ export class LifeMemoryService {
 
     try {
       // Check if user already exists
-      const existingUser = await sqlDb.select().from(users).where(eq(users.phone, referredPhone)).limit(1);
+      const existingUser = await sqlDb.select().from(users).where(sql`${users.phone} = ${referredPhone}` as any).limit(1);
       if (existingUser.length > 0) {
         logger.info({ referrerPhone, referredPhone }, '🚫 Referral failed: User already exists');
         return null;
@@ -108,7 +112,7 @@ export class LifeMemoryService {
       // Find pending referrals for this new user
       const pendingResult = await sqlDb.select()
         .from(referrals)
-        .where(and(eq(referrals.referredPhone, newUserId), eq(referrals.status, 'pending')))
+        .where(sql`${referrals.referredPhone} = ${newUserId} AND ${referrals.status} = 'pending'` as any)
         .limit(1);
 
       const pending = pendingResult[0];
@@ -117,18 +121,18 @@ export class LifeMemoryService {
           // 1. Mark referral as completed
           await tx.update(referrals)
             .set({ status: 'rewarded', completedAt: new Date() })
-            .where(eq(referrals.id, pending.id));
+            .where(sql`${referrals.id} = ${pending.id}` as any);
 
           // 2. Reward the Referrer
           const referrerResult = await tx.select({ currentEnergy: users.energyCredits })
             .from(users)
-            .where(eq(users.phone, pending.referrerPhone));
+            .where(sql`${users.phone} = ${pending.referrerPhone}` as any);
           
           if (referrerResult[0]) {
              const newEnergy = referrerResult[0].currentEnergy + pending.rewardAmount;
              await tx.update(users)
                .set({ energyCredits: newEnergy })
-               .where(eq(users.phone, pending.referrerPhone));
+               .where(sql`${users.phone} = ${pending.referrerPhone}` as any);
 
              // 3. Log Reward Transaction
              await tx.insert(transactions).values({
@@ -156,7 +160,7 @@ export class LifeMemoryService {
       let newBalance: number | null = null;
 
       await sqlDb.transaction(async (tx) => {
-        const userResult = await tx.select().from(users).where(eq(users.phone, phone));
+        const userResult = await tx.select().from(users).where(sql`${users.phone} = ${phone}` as any);
         const user = userResult[0];
         
         if (!user) throw new Error('User profile not found in Database');
@@ -170,7 +174,7 @@ export class LifeMemoryService {
         
         await tx.update(users)
           .set({ energyCredits: newBalance })
-          .where(eq(users.phone, phone));
+          .where(sql`${users.phone} = ${phone}` as any);
       });
 
       return newBalance;
@@ -188,13 +192,13 @@ export class LifeMemoryService {
       await sqlDb.transaction(async (tx) => {
         // Idempotency Check
         if (reference && reference.toLowerCase() !== 'unknown') {
-            const txExists = await tx.select().from(transactions).where(eq(transactions.reference, reference)).limit(1);
+            const txExists = await tx.select().from(transactions).where(sql`${transactions.reference} = ${reference}` as any).limit(1);
             if (txExists.length > 0) {
                 throw new Error('DUPLICATE_REFERENCE');
             }
         }
 
-        const userResult = await tx.select().from(users).where(eq(users.phone, phone));
+        const userResult = await tx.select().from(users).where(sql`${users.phone} = ${phone}` as any);
         let user = userResult[0];
 
         if (!user) {
@@ -203,7 +207,7 @@ export class LifeMemoryService {
             newBalance = amount;
         } else {
             newBalance = user.energyCredits + amount;
-            await tx.update(users).set({ energyCredits: newBalance }).where(eq(users.phone, phone));
+            await tx.update(users).set({ energyCredits: newBalance }).where(sql`${users.phone} = ${phone}` as any);
         }
 
         // Log transaction
@@ -232,27 +236,27 @@ export class LifeMemoryService {
     }
   }
 
-  async addVaultBalance(phone: string, amountNaira: number, reference?: string, type: 'deposit' | 'refund' = 'deposit'): Promise<number | null> {
+  async addVaultBalance(phone: string, amountKobo: number, reference?: string, type: 'deposit' | 'refund' = 'deposit'): Promise<number | null> {
     try {
       const sqlDb = getDb();
       let newBalance: number | null = null;
 
       await sqlDb.transaction(async (tx) => {
         if (reference && reference.toLowerCase() !== 'unknown') {
-            const txExists = await tx.select().from(transactions).where(eq(transactions.reference, reference)).limit(1);
+            const txExists = await tx.select().from(transactions).where(sql`${transactions.reference} = ${reference}` as any).limit(1);
             if (txExists.length > 0) throw new Error('DUPLICATE_REFERENCE');
         }
 
-        const userResult = await tx.select().from(users).where(eq(users.phone, phone));
+        const userResult = await tx.select().from(users).where(sql`${users.phone} = ${phone}` as any);
         let user = userResult[0];
 
         if (!user) {
-            newBalance = amountNaira;
-            await tx.insert(users).values({ phone, vaultBalanceNaira: amountNaira.toString() });
+            newBalance = amountKobo;
+            await tx.insert(users).values({ phone, vaultBalanceKobo: amountKobo });
         } else {
-            const currentBalance = parseFloat(user.vaultBalanceNaira as string) || 0;
-            newBalance = currentBalance + amountNaira;
-            await tx.update(users).set({ vaultBalanceNaira: newBalance.toFixed(2) }).where(eq(users.phone, phone));
+            const currentBalance = user.vaultBalanceKobo || 0;
+            newBalance = currentBalance + amountKobo;
+            await tx.update(users).set({ vaultBalanceKobo: newBalance }).where(sql`${users.phone} = ${phone}` as any);
         }
 
         if (reference && reference.toLowerCase() !== 'unknown') {
@@ -260,7 +264,7 @@ export class LifeMemoryService {
                 id: randomUUID(),
                 userId: phone,
                 type: `vault_${type}`,
-                amount: amountNaira.toString(),
+                amount: (amountKobo / 100).toString(), // Store as Naira string in decimal column
                 currency: 'NGN',
                 status: 'success',
                 reference: reference
@@ -268,7 +272,7 @@ export class LifeMemoryService {
         }
       });
 
-      logger.info({ phone, added: amountNaira, newBalance, reference }, '🏦 Vault Deposit Successful');
+      logger.info({ phone, addedKobo: amountKobo, newBalanceKobo: newBalance, reference }, '🏦 Vault Deposit Successful');
       return newBalance;
     } catch (e: any) {
       if (e.message === 'DUPLICATE_REFERENCE') throw e; 
@@ -277,25 +281,25 @@ export class LifeMemoryService {
     }
   }
 
-  async deductVaultBalance(phone: string, amountNaira: number): Promise<number | null> {
+  async deductVaultBalance(phone: string, amountKobo: number): Promise<number | null> {
     try {
       const sqlDb = getDb();
       let newBalance: number | null = null;
 
       await sqlDb.transaction(async (tx) => {
-        const userResult = await tx.select().from(users).where(eq(users.phone, phone));
+        const userResult = await tx.select().from(users).where(sql`${users.phone} = ${phone}` as any);
         const user = userResult[0];
         
         if (!user) throw new Error('User profile not found in Database');
 
-        const currentBalance = parseFloat(user.vaultBalanceNaira as string) || 0;
+        const currentBalance = user.vaultBalanceKobo || 0;
 
-        if (currentBalance < amountNaira) {
-          throw new Error('Insufficient funds in Vault: NGN' + currentBalance + ' < NGN' + amountNaira);
+        if (currentBalance < amountKobo) {
+          throw new Error('Insufficient funds in Vault: ' + currentBalance + ' < ' + amountKobo + ' Kobo');
         }
 
-        newBalance = currentBalance - amountNaira;
-        await tx.update(users).set({ vaultBalanceNaira: newBalance.toFixed(2) }).where(eq(users.phone, phone));
+        newBalance = currentBalance - amountKobo;
+        await tx.update(users).set({ vaultBalanceKobo: newBalance }).where(sql`${users.phone} = ${phone}` as any);
       });
 
       return newBalance;
@@ -308,7 +312,7 @@ export class LifeMemoryService {
   async checkExists(phone: string): Promise<boolean> {
     try {
       const sqlDb = getDb();
-      const userResult = await sqlDb.select({ phone: users.phone }).from(users).where(eq(users.phone, phone)).limit(1);
+      const userResult = await sqlDb.select({ phone: users.phone }).from(users).where(sql`${users.phone} = ${phone}` as any).limit(1);
       return userResult.length > 0;
     } catch (error: any) {
       return false;
@@ -328,10 +332,18 @@ export class LifeMemoryService {
       
       // Also update the JSON context in SQL for hybrid sync
       const sqlDb = getDb();
-      const userResult = await sqlDb.select({ context: users.context }).from(users).where(eq(users.phone, phone)).limit(1);
+      const userResult = await sqlDb.select({ context: users.context }).from(users).where(sql`${users.phone} = ${phone}` as any).limit(1);
       if (userResult[0]) {
          const currentContext = userResult[0].context as Record<string, any> || {};
-         await sqlDb.update(users).set({ context: { ...currentContext, ...updates } }).where(eq(users.phone, phone));
+         const sqlUpdates: any = { 
+           context: { ...currentContext, ...updates },
+           updatedAt: new Date()
+         };
+
+         if (updates.sessionStatus !== undefined) sqlUpdates.sessionStatus = updates.sessionStatus;
+         if (updates.sessionExpiry !== undefined) sqlUpdates.sessionExpiry = updates.sessionExpiry;
+
+         await sqlDb.update(users).set(sqlUpdates).where(sql`${users.phone} = ${phone}` as any);
       }
 
       logger.info({ phone, updates }, '💾 Updated Life Memory (Hybrid Sync)');
@@ -360,6 +372,46 @@ export class LifeMemoryService {
       return snapshot.docs.map(doc => doc.data()).reverse();
     } catch (error: any) {
       logger.error({ phone, error: error.message }, 'Failed to fetch Episodic Events');
+      return [];
+    }
+  }
+
+  // --- SEMANTIC MEMORY (PHASE 9.4: LONG-TERM RETRIEVAL) ---
+
+  async saveSemanticMemory(userId: string, orgId: string, category: string, content: string, embedding: number[], importance: number = 1): Promise<void> {
+    try {
+      const sqlDb = getDb();
+      const { memories } = await import('@naija-agent/database');
+      await sqlDb.insert(memories).values({
+        id: randomUUID(),
+        userId,
+        orgId,
+        category,
+        content,
+        embedding: sql`${'[' + embedding.join(',') + ']' }::vector` as any,
+        importance
+      });
+      logger.info({ userId, category }, '🧠 Saved Semantic Memory to PostgreSQL (pgvector)');
+    } catch (error: any) {
+      logger.error({ userId, error: error.message }, 'Failed to save Semantic Memory');
+    }
+  }
+
+  async searchSemanticMemory(userId: string, embedding: number[], limit: number = 5): Promise<any[]> {
+    try {
+      const sqlDb = getDb();
+      const { memories } = await import('@naija-agent/database');
+      
+      // Vector Similarity Search using cosine distance (<=>)
+      const results = await sqlDb.select()
+        .from(memories)
+        .where(sql`${memories.userId} = ${userId}` as any)
+        .orderBy(sql`${memories.embedding} <=> ${'[' + embedding.join(',') + ']'}` as any)
+        .limit(limit);
+        
+      return results;
+    } catch (error: any) {
+      logger.error({ userId, error: error.message }, 'Failed to search Semantic Memory');
       return [];
     }
   }

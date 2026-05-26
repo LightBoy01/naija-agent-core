@@ -49,13 +49,32 @@ export async function verifySovereignPin(phone: string, pin: string): Promise<bo
 
 export async function setUserPin(phone: string, pin: string): Promise<void> {
     const hashedPin = await bcrypt.hash(pin, 10);
+    // 1. Update NoSQL (Legacy)
     await db.collection('user_profiles').doc(phone).set({
         pin: hashedPin
     }, { merge: true });
+
+    // 2. Update SQL (Sovereign Truth)
+    const { getDb, users } = await import('@naija-agent/database');
+    const { sql } = await import('drizzle-orm');
+    await getDb().update(users)
+        .set({ pinHash: hashedPin, updatedAt: new Date() })
+        .where(sql`${users.phone} = ${phone}` as any);
 }
 
 export async function verifyUserPin(phone: string, pin: string): Promise<boolean> {
+    // 1. Try NoSQL
     const userDoc = await db.collection('user_profiles').doc(phone).get();
-    if (!userDoc.exists || !userDoc.data()?.pin) return false;
-    return bcrypt.compare(pin, userDoc.data()!.pin);
+    let hash = userDoc.exists ? userDoc.data()?.pin : null;
+
+    // 2. Fallback to SQL if NoSQL missing
+    if (!hash) {
+        const { getDb, users } = await import('@naija-agent/database');
+        const { sql } = await import('drizzle-orm');
+        const sqlResult = await getDb().select({ hash: users.pinHash }).from(users).where(sql`${users.phone} = ${phone}` as any).limit(1);
+        hash = sqlResult[0]?.hash;
+    }
+
+    if (!hash) return false;
+    return bcrypt.compare(pin, hash);
 }

@@ -45,10 +45,6 @@ export const SecurityInterceptor: Interceptor = {
                   await setAdminAuth(ctx.orgId, ctx.from); 
                   isAuthenticated = true; 
               } 
-          } else if (pinAttempt === '1234') { 
-              // Legacy fallback
-              await setAdminAuth(ctx.orgId, ctx.from); 
-              isAuthenticated = true; 
           }
       } 
 
@@ -58,11 +54,11 @@ export const SecurityInterceptor: Interceptor = {
           } else {
               await ctx.tenantWhatsAppService.sendText(ctx.from, `❌ *Incorrect PIN.*`);
           }
-      }
 
-      // We handled the PIN, don't pass this to the LLM.
-      ctx.shortCircuit = true;
-      ctx.shortCircuitReason = 'PIN_INTERCEPTED';
+          // Stop pipeline if this was a PIN attempt (handled separately)
+          ctx.shortCircuit = true;
+          return ctx;
+      }
     }
 
     return ctx;

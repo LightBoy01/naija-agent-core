@@ -1,6 +1,5 @@
-import mysql from 'mysql2/promise';
+import postgres from 'postgres';
 import dotenv from 'dotenv';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -10,23 +9,26 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const caPath = path.resolve(__dirname, '../packages/database/isrgrootx1.pem');
 
 async function main() {
-  const pool = mysql.createPool({
-    uri: DATABASE_URL,
-    ssl: {
-      ca: fs.readFileSync(caPath)
-    }
-  });
+  if (!DATABASE_URL) {
+    console.error('❌ DATABASE_URL is not set');
+    return;
+  }
+
+  const sql = postgres(DATABASE_URL);
 
   try {
-    const [rows]: any = await pool.query('SHOW TABLES');
-    console.log('Existing Tables:', rows.map((r: any) => Object.values(r)[0]));
+    const rows = await sql`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public'
+    `;
+    console.log('Existing Tables (PostgreSQL):', rows.map((r: any) => r.table_name));
   } catch (error) {
     console.error('❌ Error inspecting DB:', error);
   } finally {
-    await pool.end();
+    await sql.end();
   }
 }
 

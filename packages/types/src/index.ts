@@ -151,6 +151,9 @@ export const ConfigSchema = z.object({
   isMaster: z.boolean().optional(), // Sovereign powers flag
   staffDailyLimit: z.number().optional(),
   botPhone: z.string().optional(),
+  legacy_whitelist: z.boolean().optional(),
+  sessionStatus: z.string().optional(),
+  sessionExpiry: z.string().optional(), // ISO String
   rateLimit: z.object({
     windowSeconds: z.number().default(60),
     maxRequests: z.number().default(10)

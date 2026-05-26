@@ -54,6 +54,15 @@ export class BillingService {
     async billForMessage(userId: string): Promise<void> {
         await lifeMemory.deductEnergy(userId, 1);
     }
+
+    /**
+     * Refunds credits to the user in case of a system failure after billing.
+     */
+    async refundCredits(userId: string, credits: number): Promise<void> {
+        if (credits <= 0) return;
+        logger.info({ userId, credits }, '🔄 Refunding energy credits due to tool failure');
+        await lifeMemory.addEnergy(userId, credits, 'REFUND_' + Date.now());
+    }
 }
 
 export const billingService = new BillingService();

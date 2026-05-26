@@ -46,6 +46,7 @@ export interface AIProvider {
   generateText(prompt: string, options?: AIOptions): Promise<AIResponse>;
   chat(history: AIMessage[], message: string | AIMessagePart[], options?: AIOptions): Promise<AIResponse>;
   analyzeImage(buffer: Buffer, mimeType: string, prompt: string, options?: AIOptions): Promise<AIResponse>;
+  embedText(text: string): Promise<number[]>;
 }
 
 export * from './providers/gemini.js';

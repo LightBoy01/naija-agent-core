@@ -71,7 +71,7 @@ async function stabilize() {
 
     // 3. Fix Missing Config Fields
     if (!data.config?.adminPin) {
-        updates['config.adminPin'] = '1234';
+        console.warn(`🚨 Admin PIN missing for ${id}. Admin access will be restricted until set.`);
     }
 
     if (Object.keys(updates).length > 0) {

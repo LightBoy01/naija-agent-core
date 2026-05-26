@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
+import * as bcrypt from 'bcrypt';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -64,7 +65,7 @@ async function seed() {
         bankDetails: BOSS_BANK,
         sovereignBankDetails: SOVEREIGN_BANK,
         adminPhone: '2347042310893',
-        adminPin: '1234'
+        adminPin: await bcrypt.hash('8888', 10) // Changed from 1234 and hashed
       },
       balance: 500000, // 5000.00 NGN
       currency: 'NGN',

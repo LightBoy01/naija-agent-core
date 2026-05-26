@@ -77,6 +77,30 @@ export async function setOrgActive(orgId: string, status: boolean): Promise<void
 }
 
 /**
+ * Instantly suspends an organization (Phase 9.3 Hardening).
+ */
+export async function suspendOrganization(orgId: string, reason: string): Promise<void> {
+  await orgsRef.doc(orgId).update({
+    isActive: false,
+    status: 'SUSPENDED',
+    'config.suspensionReason': reason,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+/**
+ * Unsuspends an organization.
+ */
+export async function unsuspendOrganization(orgId: string): Promise<void> {
+  await orgsRef.doc(orgId).update({
+    isActive: true,
+    status: 'ACTIVE',
+    'config.suspensionReason': null,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+/**
  * Fetches high-level stats for a single organization.
  */
 export async function getOrgStats(orgId: string): Promise<any> {

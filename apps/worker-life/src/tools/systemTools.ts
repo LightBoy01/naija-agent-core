@@ -52,9 +52,10 @@ export const SYSTEM_TOOLS = [
         type: Type.OBJECT,
         properties: {
           sector: { type: Type.STRING, enum: ["EducationPack", "LifePack", "ResearchPack", "CommercePack", "PropertyPack", "LegalPack"], description: 'The specialized sector pack required.' },
-          instruction: { type: Type.STRING, description: 'Clear, detailed instructions for the sub-agent. Include all context needed to execute the task.' }
+          instruction: { type: Type.STRING, description: 'Clear, detailed instructions for the sub-agent. Include all context needed to execute the task.' },
+          raw_parameters: { type: Type.OBJECT, description: 'MANDATORY: Pass exact, unadulterated user data (Amounts, Dates, Transaction IDs, Phone Numbers) here to prevent data loss during delegation.' }
         },
-        required: ['sector', 'instruction']
+        required: ['sector', 'instruction', 'raw_parameters']
       }
     },
     {

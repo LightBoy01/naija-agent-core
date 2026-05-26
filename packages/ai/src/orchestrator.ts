@@ -62,4 +62,8 @@ export class AIOrchestrator implements AIProvider {
   async analyzeImage(buffer: Buffer, mimeType: string, prompt: string, options?: AIOptions): Promise<AIResponse> {
     return this.tryWithFallback((p, opts) => p.analyzeImage(buffer, mimeType, prompt, opts), options);
   }
+
+  async embedText(text: string): Promise<number[]> {
+    return this.tryWithFallback((p) => p.embedText(text));
+  }
 }

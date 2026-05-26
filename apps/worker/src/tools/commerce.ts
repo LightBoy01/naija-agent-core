@@ -16,7 +16,9 @@ import {
   removeFromCart, 
   bookSlot 
 } from '@naija-agent/firebase';
-import { syncCartState } from '@naija-agent/database';
+import { syncCartState, getDb, fraudRegistry } from '@naija-agent/database';
+import { eq, sql } from 'drizzle-orm';
+import crypto from 'crypto';
 import { formatCurrency } from '../utils/currency.js';
 
 export async function handleCommerceTools(name: string, args: any, ctx: HandlerContext): Promise<any> {
@@ -148,6 +150,36 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
       if (verifyAttempts === 1) await redisClient.expire(rateLimitKey, 300); // 5 mins
       if (verifyAttempts > 3 && !isAdmin && !isStaff) {
           return { status: 'error', code: 'RATE_LIMITED', message: "Too many verification attempts. Abeg wait 5 minutes." };
+      }
+
+      // --- SCAM-SHIELD (PHASE 9.3) ---
+      const phoneHash = crypto.createHash('sha256').update(from).digest('hex');
+      const db = getDb();
+      
+      // Check reports from OTHER organizations to determine network-wide risk
+      const fraudFlags = await db.select()
+        .from(fraudRegistry)
+        .where(and(
+            eq(fraudRegistry.phoneHash, phoneHash),
+            sql`${fraudRegistry.orgId} != ${orgId}`
+        ));
+      
+      if (fraudFlags.length > 0) {
+          const uniqueReportingOrgs = new Set(fraudFlags.map(f => f.orgId)).size;
+          const consensusMet = uniqueReportingOrgs >= 2;
+          const warning = consensusMet 
+            ? `🚨 *NETWORK ALERT:* This customer has been flagged by ${uniqueReportingOrgs} different businesses for fraud!`
+            : `⚠️ *FRAUD WARNING:* This customer has a suspicious report from another business in our network.`;
+          
+          console.warn(`🛡️ [SCAM-SHIELD] Flagged user ${from} attempting transaction for ${orgId}. uniqueOrgs: ${uniqueReportingOrgs}`);
+          
+          if (isAdmin || isStaff) {
+             // Managers get the technical warning
+             return { status: 'warning', code: 'SCAM_SHIELD_FLAG', message: `${warning}\n\nOga, use your eye check am well before you accept.`, data: fraudFlags };
+          } else {
+             // Customers get a slightly delayed response to discourage automated testing
+             await new Promise(r => setTimeout(r, 2000));
+          }
       }
 
       const formattedAmount = formatCurrency(args.amount, currency.locale, currency.code);

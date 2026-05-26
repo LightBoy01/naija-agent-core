@@ -56,7 +56,6 @@ async function update() {
         },
         model: 'gemini-2.5-flash',
         adminPhone: process.env.BOSS_PHONE_NUMBER || '2348000000000', // Your number from .env
-        adminPin: '1234'
       },
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });

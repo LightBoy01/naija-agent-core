@@ -37,7 +37,7 @@ export class AlibabaOSSProvider implements StorageProvider {
         ...metadata,
         orgId,
         uploadedAt: new Date().toISOString()
-      }
+      } as any
     });
 
     // DashScope and other tools usually need the direct URL

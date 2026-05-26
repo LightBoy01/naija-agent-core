@@ -117,7 +117,9 @@ export async function completeOnboarding(orgId: string, finalConfig: OnboardingD
   const bonusKobo = 100000; // 1,000.00 NGN Bonus
   
   // 🛡️ [SECURITY]: Hash the PIN *before* the transaction to keep it lean
-  let hashedPin = finalConfig.adminPin || '1234';
+  let hashedPin = finalConfig.adminPin;
+  if (!hashedPin) throw new Error('Security Error: Admin PIN is mandatory for onboarding completion');
+
   const isBcrypt = /^\$2[aby]\$.{56}$/.test(hashedPin);
   if (!isBcrypt) {
     hashedPin = await bcrypt.hash(hashedPin, 10);
@@ -164,7 +166,9 @@ export async function completeOnboarding(orgId: string, finalConfig: OnboardingD
 export async function completeHybridOnboarding(orgId: string, data: OnboardingData & { meta: { accessToken: string, phoneId: string, wabaId?: string } }): Promise<void> {
   const bonusKobo = 100000;
   
-  let hashedPin = data.adminPin || '1234';
+  let hashedPin = data.adminPin;
+  if (!hashedPin) throw new Error('Security Error: Admin PIN is mandatory for hybrid onboarding');
+
   const isBcrypt = /^\$2[aby]\$.{56}$/.test(hashedPin);
   if (!isBcrypt) {
     hashedPin = await bcrypt.hash(hashedPin, 10);
@@ -202,10 +206,11 @@ export async function createTenant(data: {
   name: string;
   whatsappPhoneId: string;
   adminPhone: string;
+  adminPin: string;
   systemPrompt: string;
   timezone?: string;
 }): Promise<void> {
-  const hashedPin = await bcrypt.hash('1234', 10);
+  const hashedPin = await bcrypt.hash(data.adminPin, 10);
   const bridgeSecret = crypto.randomBytes(16).toString('hex'); 
   const bonusKobo = 100000;
   const timezone = data.timezone || 'Africa/Lagos';

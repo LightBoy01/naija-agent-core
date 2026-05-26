@@ -3,29 +3,52 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 
 	"github.com/naija-agent/whatsapp-sidecar/manager"
+	"go.mau.fi/whatsmeow"
 )
 
 type Server struct {
-	mgr *manager.Manager
+	mgr    *manager.Manager
+	apiKey string
 }
 
 func NewServer(mgr *manager.Manager) *Server {
-	return &Server{mgr: mgr}
+	return &Server{
+		mgr:    mgr,
+		apiKey: os.Getenv("ADMIN_API_KEY"),
+	}
+}
+
+func (s *Server) checkAuth(w http.ResponseWriter, r *http.Request) bool {
+	if s.apiKey == "" {
+		return true // Allow if not configured (dev mode)
+	}
+	key := r.Header.Get("X-API-Key")
+	if key != s.apiKey {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return false
+	}
+	return true
 }
 
 func (s *Server) Start(port string) {
 	if port == "" {
 		port = "8080"
 	}
-	http.HandleFunc("/send", s.handleSend)
-	http.HandleFunc("/connect", s.handleConnect)
-	http.HandleFunc("/download/", s.handleDownload)
-	http.ListenAndServe(":"+port, nil)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/send", s.handleSend)
+	mux.HandleFunc("/connect", s.handleConnect)
+	mux.HandleFunc("/download/", s.handleDownload)
+
+	http.ListenAndServe(":"+port, mux)
 }
 
 func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
+	if !s.checkAuth(w, r) {
+		return
+	}
 	// Extract mediaId from path /download/{mediaId}
 	mediaID := r.URL.Path[len("/download/"):]
 	if mediaID == "" {
@@ -58,6 +81,9 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
+	if !s.checkAuth(w, r) {
+		return
+	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -74,12 +100,6 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client, err := s.mgr.GetClient(req.OrgID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-
 	if err := s.mgr.SendMessage(req.OrgID, req.To, req.Text); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -90,6 +110,9 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
+	if !s.checkAuth(w, r) {
+		return
+	}
 	var req struct {
 		OrgID string `json:"orgId"`
 	}

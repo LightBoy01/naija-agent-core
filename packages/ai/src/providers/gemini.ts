@@ -157,4 +157,26 @@ export class GeminiProvider implements AIProvider {
       functionCalls: result.functionCalls
     };
   }
+
+  async embedText(text: string): Promise<number[]> {
+    try {
+        const embedKey = process.env.GEMINI_API_KEY_EMBEDDING || (this.genAI as any).apiClient.clientOptions.apiKey;
+        // Use v1beta for gemini-embedding-2 availability
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key=${embedKey}`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                content: { parts: [{ text }] }
+            })
+        });
+        const result = await response.json() as any;
+        const fullVector = result.embedding?.values || [];
+        // Matryoshka Representation Learning: Truncate to 768 while keeping 99% accuracy
+        return fullVector.slice(0, 768);
+    } catch (e) {
+        console.error('❌ Embedding fetch failed:', e);
+        return [];
+    }
+  }
 }

@@ -11,9 +11,10 @@ import { uploadMedia } from '../upload.js';
 const logger = pino({ name: 'vault-service' });
 
 // --- Termux/Android Environment Fix: Ignore TLS issues if CA certificates are missing ---
-if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === undefined && process.platform === 'android') {
+// ONLY enabled in development mode to prevent security leakage in production.
+if (process.env.NODE_ENV !== 'production' && process.env.NODE_TLS_REJECT_UNAUTHORIZED === undefined && process.platform === 'android') {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-    logger.info('🛡️ [TERMUX FIX]: TLS Verification disabled in Storage Vault.');
+    logger.info('🛡️ [TERMUX FIX]: TLS Verification disabled in Storage Vault (Development Mode ONLY).');
 }
 
 // --- GCS Configuration with Sanitization ---

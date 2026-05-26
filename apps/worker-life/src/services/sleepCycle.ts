@@ -21,9 +21,11 @@ export class SleepCycleService {
             const currentContext = await lifeMemory.getContext(userId);
 
             const prompt = `
-You are Aelixxr's Subconscious Mind. Your job is to read the recent chat history between Aelixxr (the AI) and the User, and extract any new, permanent facts about the user's life.
-Do NOT extract transient emotions or temporary states (e.g., "user is tired today").
-DO extract:
+You are Aelixxr's Subconscious Mind. Your job is to read the recent chat history between Aelixxr (the AI) and the User, and do two things:
+1. Extract any new, permanent facts about the user's life.
+2. Summarize the key topics and "vibe" of this interaction for long-term memory.
+
+Facts to extract:
 - Names of family members or friends.
 - Long-term goals (e.g., "Japa to UK", "Buy a house").
 - Health conditions or allergies.
@@ -35,48 +37,60 @@ ${JSON.stringify(currentContext)}
 Recent Chat History:
 ${history.map((m: any) => `${m.role === 'assistant' ? 'Aelixxr' : 'User'}: ${m.content}`).join('\n')}
 
-INSTRUCTION: Compare the Current Life Context with the Recent Chat History. If you find NEW or UPDATED facts, output a JSON object containing the updates that need to be merged into the Life Context. 
-CRITICAL: If you are adding a new item to an array (like 'goals' or 'allergies'), you MUST output the ENTIRE combined array (including the old items). Do not output just the new item, or it will overwrite the old ones!
-If there is nothing new to learn, output an empty object {}.
+INSTRUCTION: 
+1. Output a JSON object containing 'updates' for the Life Context.
+2. Output a 'summary' string (1-2 sentences) of the interaction.
+3. Output an 'importance' score (1-5) for this interaction.
+
+CRITICAL: If you are adding a new item to an array (like 'goals' or 'allergies'), you MUST output the ENTIRE combined array.
+If there is nothing new to learn, 'updates' should be {}.
 `;
 
             const schema = {
                 type: Type.OBJECT,
                 properties: {
-                    fullName: { type: Type.STRING },
-                    family: {
+                    updates: {
                         type: Type.OBJECT,
                         properties: {
-                            spouse: { type: Type.STRING },
-                            children: {
-                                type: Type.ARRAY,
-                                items: {
-                                    type: Type.OBJECT,
-                                    properties: {
-                                        name: { type: Type.STRING },
-                                        age: { type: Type.NUMBER },
-                                        school: { type: Type.STRING }
+                            fullName: { type: Type.STRING },
+                            family: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    spouse: { type: Type.STRING },
+                                    children: {
+                                        type: Type.ARRAY,
+                                        items: {
+                                            type: Type.OBJECT,
+                                            properties: {
+                                                name: { type: Type.STRING },
+                                                age: { type: Type.NUMBER },
+                                                school: { type: Type.STRING }
+                                            }
+                                        }
                                     }
+                                }
+                            },
+                            health: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    allergies: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                    medications: { type: Type.ARRAY, items: { type: Type.STRING } }
+                                }
+                            },
+                            goals: { type: Type.ARRAY, items: { type: Type.STRING } },
+                            preferences: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    market: { type: Type.STRING },
+                                    diet: { type: Type.STRING }
                                 }
                             }
                         }
                     },
-                    health: {
-                        type: Type.OBJECT,
-                        properties: {
-                            allergies: { type: Type.ARRAY, items: { type: Type.STRING } },
-                            medications: { type: Type.ARRAY, items: { type: Type.STRING } }
-                        }
-                    },
-                    goals: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    preferences: {
-                        type: Type.OBJECT,
-                        properties: {
-                            market: { type: Type.STRING },
-                            diet: { type: Type.STRING }
-                        }
-                    }
-                }
+                    summary: { type: Type.STRING },
+                    importance: { type: Type.NUMBER }
+                },
+                required: ['updates', 'summary', 'importance']
             };
 
             const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY;
@@ -94,7 +108,7 @@ If there is nothing new to learn, output an empty object {}.
             });
 
             const modelName = SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-2.5-flash';
-            logger.info({ role: 'Background', model: modelName }, '💤 Sleep Cycle extracting memory');
+            logger.info({ role: 'Background', model: modelName }, '💤 Sleep Cycle extracting memory & summary');
 
             const model = genAI.models.generateContent({
                 model: modelName,
@@ -114,23 +128,56 @@ If there is nothing new to learn, output an empty object {}.
                 text = result.text || '{}';
             }
             
-            // Clean markdown code blocks if the LLM includes them
             text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
             
-            let updates = {};
+            let data: any = {};
             try {
-                updates = JSON.parse(text);
+                data = JSON.parse(text);
             } catch (e: any) {
                 logger.error({ userId, text, error: e.message }, '❌ [SLEEP CYCLE] Failed to parse JSON from LLM.');
                 return;
             }
 
-            if (Object.keys(updates).length > 0) {
-                logger.info({ userId, updates }, '🧠 [SLEEP CYCLE] New facts learned! Updating memory...');
+            const { updates, summary, importance } = data;
+
+            // 1. Update Context (Structured Memory)
+            if (updates && Object.keys(updates).length > 0) {
+                logger.info({ userId, updates }, '🧠 [SLEEP CYCLE] New facts learned! Updating context...');
                 await lifeMemory.updateContext(userId, updates);
-            } else {
-                logger.info({ userId }, '💤 [SLEEP CYCLE] No new facts learned this cycle.');
             }
+
+            // 2. Save Semantic Episodic Memory (Unstructured Vector Memory)
+            if (summary) {
+                logger.info({ userId, summary }, '📖 [SLEEP CYCLE] Saving episodic summary...');
+                const embedKey = process.env.GEMINI_API_KEY_EMBEDDING || apiKey;
+                const embedUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key=${embedKey}`;
+                
+                const response = await fetch(embedUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        content: { parts: [{ text: summary }] }
+                    })
+                });
+                
+                const result = await response.json() as any;
+                const embedding = (result.embedding?.values || []).slice(0, 768);
+                
+                if (embedding.length > 0) {
+                    await lifeMemory.saveSemanticMemory(
+                        userId, 
+                        orgId, 
+                        'episodic', 
+                        summary, 
+                        embedding,
+                        importance || 1
+                    );
+                } else {
+                    logger.warn({ userId, result }, '⚠️ [SLEEP CYCLE] Failed to generate embedding for summary.');
+                }
+            }
+
+            logger.info({ userId }, '💤 [SLEEP CYCLE] Memory consolidation complete.');
 
         } catch (error: any) {
             logger.error({ userId, error: error.message }, '❌ [SLEEP CYCLE] Memory consolidation failed.');

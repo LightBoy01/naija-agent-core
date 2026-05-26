@@ -150,11 +150,12 @@ export async function executeFinanceTool(name: string, args: Record<string, any>
         };
 
       case 'convert_vault_to_energy':
-        const amountNaira = Number(args.amountNaira);
-        if (isNaN(amountNaira) || amountNaira <= 0 || amountNaira % 10 !== 0) {
+        const amountNairaInput = Number(args.amountNaira);
+        if (isNaN(amountNairaInput) || amountNairaInput <= 0 || amountNairaInput % 10 !== 0) {
             return { error: "Invalid amount. Please specify a valid Naira amount (multiple of 10) to convert." };
         }
 
+        const amountKobo = amountNairaInput * 100;
         const userContext = await lifeMemory.getContext(args.userId);
         if (!userContext.pin) {
             await setUserPin(args.userId, args.pin);
@@ -166,7 +167,7 @@ export async function executeFinanceTool(name: string, args: Record<string, any>
                 await auditService.logVaultAction({
                     userId: args.userId,
                     toolName: 'convert_vault_to_energy',
-                    amount: amountNaira,
+                    amountKobo: amountKobo,
                     currency: 'NGN',
                     direction: 'out',
                     status: 'failed',
@@ -179,21 +180,21 @@ export async function executeFinanceTool(name: string, args: Record<string, any>
             }
         }
 
-        const energyToAdd = Math.floor(amountNaira / 10);
+        const energyToAdd = Math.floor(amountNairaInput / 10);
         
         try {
-            const newVaultBalance = await lifeMemory.deductVaultBalance(args.userId, amountNaira);
-            if (newVaultBalance === null) {
+            const newVaultBalanceKobo = await lifeMemory.deductVaultBalance(args.userId, amountKobo);
+            if (newVaultBalanceKobo === null) {
                 await auditService.logVaultAction({
                     userId: args.userId,
                     toolName: 'convert_vault_to_energy',
-                    amount: amountNaira,
+                    amountKobo: amountKobo,
                     currency: 'NGN',
                     direction: 'out',
                     status: 'failed',
                     metadata: { error: 'Insufficient Vault Funds' }
                 }, jobId);
-                return { error: 'Oga, you no get enough money for your Vault to buy ' + energyToAdd + ' Energy (₦' + amountNaira + '). Make you fund your Aelixxr Vault first.' };
+                return { error: 'Oga, you no get enough money for your Vault to buy ' + energyToAdd + ' Energy (₦' + amountNairaInput + '). Make you fund your Aelixxr Vault first.' };
             }
 
             const newEnergy = await lifeMemory.addEnergy(args.userId, energyToAdd, 'convert_' + Date.now());
@@ -201,26 +202,26 @@ export async function executeFinanceTool(name: string, args: Record<string, any>
             await auditService.logVaultAction({
                 userId: args.userId,
                 toolName: 'convert_vault_to_energy',
-                amount: amountNaira,
+                amountKobo: amountKobo,
                 currency: 'NGN',
                 direction: 'out',
                 status: 'success',
-                metadata: { energyAdded: energyToAdd, newVaultBalance, newEnergyBalance: newEnergy }
+                metadata: { energyAdded: energyToAdd, newVaultBalanceKobo, newEnergyBalance: newEnergy }
             }, jobId);
 
             return {
                 status: 'success',
-                message: 'Successfully converted ₦' + amountNaira + ' into ' + energyToAdd + ' Energy Credits!',
+                message: 'Successfully converted ₦' + amountNairaInput + ' into ' + energyToAdd + ' Energy Credits!',
                 newEnergyBalance: newEnergy,
-                newVaultBalance: newVaultBalance,
-                instructions: 'Enthusiastically inform the user that the conversion was successful. Tell them their new Energy Balance is ' + newEnergy + ' units, and their remaining Vault Balance is ₦' + newVaultBalance + '.'
+                newVaultBalanceNaira: newVaultBalanceKobo / 100,
+                instructions: 'Enthusiastically inform the user that the conversion was successful. Tell them their new Energy Balance is ' + newEnergy + ' units, and their remaining Vault Balance is ₦' + (newVaultBalanceKobo / 100) + '.'
             };
         } catch (e: any) {
             logger.error({ error: e.message, userId: args.userId }, 'Failed vault conversion');
             await auditService.logVaultAction({
                 userId: args.userId,
                 toolName: 'convert_vault_to_energy',
-                amount: amountNaira,
+                amountKobo: amountKobo,
                 currency: 'NGN',
                 direction: 'out',
                 status: 'failed',
@@ -232,14 +233,14 @@ export async function executeFinanceTool(name: string, args: Record<string, any>
       case 'get_financial_statement':
         try {
           const contextFin = await lifeMemory.getContext(args.userId);
-          const vaultBalance = contextFin.vaultBalanceNaira || 0;
+          const vaultBalanceKobo = contextFin.vaultBalanceKobo || 0;
           const energyCredits = contextFin.energyCredits || 0;
 
           return {
             status: 'success',
-            vaultBalanceNaira: vaultBalance,
+            vaultBalanceNaira: vaultBalanceKobo / 100,
             energyCredits: energyCredits,
-            instructions: 'Report the balances clearly to the user. Tell them they have ₦' + vaultBalance + ' in their Aelixxr Vault and ' + energyCredits + ' Energy Credits remaining in their battery.'
+            instructions: 'Report the balances clearly to the user. Tell them they have ₦' + (vaultBalanceKobo / 100) + ' in their Aelixxr Vault and ' + energyCredits + ' Energy Credits remaining in their battery.'
           };
         } catch (error: any) {
           logger.error({ error: error.message, userId: args.userId }, 'Failed to fetch financial statement');
@@ -248,15 +249,16 @@ export async function executeFinanceTool(name: string, args: Record<string, any>
 
       case 'verify_payment_and_topup':
         const reference = args.reference;
-        const amountPaidNaira = Number(args.amountPaidNaira || 0);
+        const amountPaidNairaInput = Number(args.amountPaidNaira || 0);
+        const amountPaidKobo = amountPaidNairaInput * 100;
 
         if (!reference || reference === 'unknown' || reference === 'null' || reference.length < 5) {
-            if (amountPaidNaira > 0) {
-                logger.warn({ userId: args.userId, amountNaira: amountPaidNaira }, '💳 [SECURITY] Receipt found but reference ID missing. Marking for Manual Review.');
+            if (amountPaidNairaInput > 0) {
+                logger.warn({ userId: args.userId, amountNaira: amountPaidNairaInput }, '💳 [SECURITY] Receipt found but reference ID missing. Marking for Manual Review.');
                 
                 try {
                    const masterPhone = process.env.MASTER_ADMIN_PHONE || SystemConfig.CONTACTS.MASTER_ADMIN_PHONE;
-                   const snitchMsg = '⏳ *AELIXXR MANUAL REVIEW*\n\n*User:* ' + args.userId + '\n*Amount:* ₦' + amountPaidNaira + '\n\nOga, user send receipt but I no fit find reference ID. Abeg check your dashboard or OPay to confirm and topup manually.';
+                   const snitchMsg = '⏳ *AELIXXR MANUAL REVIEW*\n\n*User:* ' + args.userId + '\n*Amount:* ₦' + amountPaidNairaInput + '\n\nOga, user send receipt but I no fit find reference ID. Abeg check your dashboard or OPay to confirm and topup manually.';
                    await whatsappService.sendText(masterPhone, snitchMsg);
                 } catch (snitchErr: any) {
                    logger.error({ error: snitchErr.message }, 'Failed to snitch manual review');
@@ -265,7 +267,7 @@ export async function executeFinanceTool(name: string, args: Record<string, any>
                 await auditService.logVaultAction({
                     userId: args.userId,
                     toolName: 'verify_payment_and_topup',
-                    amount: amountPaidNaira,
+                    amountKobo: amountPaidKobo,
                     currency: 'NGN',
                     direction: 'in',
                     status: 'pending',
@@ -273,7 +275,7 @@ export async function executeFinanceTool(name: string, args: Record<string, any>
                 }, jobId);
                 return { 
                     status: 'pending', 
-                    message: 'Oga, I see say you pay ₦' + amountPaidNaira + ', but I no fit find the clear Transaction ID on the receipt. I don log am for the Boss to check and approve manually for you. I go let you know once e done!',
+                    message: 'Oga, I see say you pay ₦' + amountPaidNairaInput + ', but I no fit find the clear Transaction ID on the receipt. I don log am for the Boss to check and approve manually for you. I go let you know once e done!',
                     instructions: "Inform the user that the receipt is logged for manual review because the reference ID was unclear."
                 };
             }
@@ -283,7 +285,7 @@ export async function executeFinanceTool(name: string, args: Record<string, any>
         const auditLogIdTopup = await auditService.logVaultAction({
             userId: args.userId,
             toolName: 'verify_payment_and_topup',
-            amount: amountPaidNaira,
+            amountKobo: amountPaidKobo,
             currency: 'NGN',
             direction: 'in',
             status: 'pending',
@@ -295,7 +297,7 @@ export async function executeFinanceTool(name: string, args: Record<string, any>
         if (reference.startsWith('TEST_')) {
              verifiedAmountNaira = 1000; 
         } else if (monnify && !reference.includes('HACK') && !reference.includes('DEBUG')) {
-             const tx = await monnify.verify(reference, amountPaidNaira > 0 ? amountPaidNaira : 0);
+             const tx = await monnify.verify(reference, amountPaidNairaInput > 0 ? amountPaidNairaInput : 0);
              if (tx && tx.status === 'success') {
                  verifiedAmountNaira = tx.amount;
              } else {
@@ -306,7 +308,7 @@ export async function executeFinanceTool(name: string, args: Record<string, any>
              if (auditLogIdTopup) await auditService.updateLogStatus(auditLogIdTopup, 'failed', { error: 'Fraud Attempt Detected' });
              return { error: "FRAUD ALERT: This transaction reference looks like a test attempt. I cannot process this." };
         } else {
-             verifiedAmountNaira = amountPaidNaira > 0 ? amountPaidNaira : 2000; 
+             verifiedAmountNaira = amountPaidNairaInput > 0 ? amountPaidNairaInput : 2000; 
         }
 
         const energyToAddVer = Math.floor(verifiedAmountNaira / 10);
@@ -358,9 +360,10 @@ export async function executeFinanceTool(name: string, args: Record<string, any>
       case 'withdraw_vault_funds':
         if (!monnify) return { error: "Monnify is not configured for withdrawals." };
 
-        const withdrawAmount = Number(args.amountNaira);
-        if (isNaN(withdrawAmount) || withdrawAmount < 500) return { error: "Minimum withdrawal amount is ₦500." };
+        const withdrawAmountNaira = Number(args.amountNaira);
+        if (isNaN(withdrawAmountNaira) || withdrawAmountNaira < 500) return { error: "Minimum withdrawal amount is ₦500." };
 
+        const withdrawAmountKobo = withdrawAmountNaira * 100;
         const withdrawContext = await lifeMemory.getContext(args.userId);
         if (!withdrawContext.pin) {
             await setUserPin(args.userId, args.pin);
@@ -372,7 +375,7 @@ export async function executeFinanceTool(name: string, args: Record<string, any>
                 await auditService.logVaultAction({
                     userId: args.userId,
                     toolName: 'withdraw_vault_funds',
-                    amount: withdrawAmount,
+                    amountKobo: withdrawAmountKobo,
                     currency: 'NGN',
                     direction: 'out',
                     status: 'failed',
@@ -388,7 +391,7 @@ export async function executeFinanceTool(name: string, args: Record<string, any>
         const auditLogIdW = await auditService.logVaultAction({
             userId: args.userId,
             toolName: 'withdraw_vault_funds',
-            amount: withdrawAmount,
+            amountKobo: withdrawAmountKobo,
             currency: 'NGN',
             direction: 'out',
             status: 'pending',
@@ -396,15 +399,15 @@ export async function executeFinanceTool(name: string, args: Record<string, any>
         }, jobId);
 
         try {
-            const totalToDeduct = withdrawAmount + 50; 
-            const newBalance = await lifeMemory.deductVaultBalance(args.userId, totalToDeduct);
-            if (newBalance === null) {
+            const totalToDeductKobo = withdrawAmountKobo + 5000; // ₦50 fee = 5000 Kobo
+            const newBalanceKobo = await lifeMemory.deductVaultBalance(args.userId, totalToDeductKobo);
+            if (newBalanceKobo === null) {
                 if (auditLogIdW) await auditService.updateLogStatus(auditLogIdW, 'failed', { error: 'Insufficient Vault Funds' });
-                return { error: 'Oga, you no get enough money for your Vault for this ₦' + withdrawAmount + ' withdrawal + ₦50 fee.' };
+                return { error: 'Oga, you no get enough money for your Vault for this ₦' + withdrawAmountNaira + ' withdrawal + ₦50 fee.' };
             }
 
             const payoutRes = await monnify.payout({
-                amount: withdrawAmount,
+                amount: withdrawAmountNaira,
                 bankCode: args.bankCode,
                 accountNumber: args.accountNumber,
                 reference: 'withdraw_' + args.userId + '_' + Date.now(),
@@ -412,17 +415,17 @@ export async function executeFinanceTool(name: string, args: Record<string, any>
             });
 
             if (payoutRes.success) {
-                if (auditLogIdW) await auditService.updateLogStatus(auditLogIdW, 'success', { payoutReference: payoutRes.reference, newBalance });
+                if (auditLogIdW) await auditService.updateLogStatus(auditLogIdW, 'success', { payoutReference: payoutRes.reference, newBalanceKobo });
                 return {
                     status: 'success',
-                    message: 'Withdrawal of ₦' + withdrawAmount + ' successful! The money is on its way to your account.',
-                    remainingBalance: newBalance,
-                    instructions: 'Enthusiastically inform the user that the transfer of ₦' + withdrawAmount + ' was successful. Their remaining balance is ₦' + newBalance + '.'
+                    message: 'Withdrawal of ₦' + withdrawAmountNaira + ' successful! The money is on its way to your account.',
+                    remainingBalanceNaira: newBalanceKobo / 100,
+                    instructions: 'Enthusiastically inform the user that the transfer of ₦' + withdrawAmountNaira + ' was successful. Their remaining balance is ₦' + (newBalanceKobo / 100) + '.'
                 };
             } else {
-                await lifeMemory.addVaultBalance(args.userId, totalToDeduct, 'rollback_' + Date.now(), 'refund');
+                await lifeMemory.addVaultBalance(args.userId, totalToDeductKobo, 'rollback_' + Date.now(), 'refund');
                 if (auditLogIdW) await auditService.updateLogStatus(auditLogIdW, 'failed', { error: payoutRes.message });
-                return { error: 'Bank reject the transfer o: ' + payoutRes.message + '. I don refund your ₦' + totalToDeduct + ' back to your Vault.' };
+                return { error: 'Bank reject the transfer o: ' + payoutRes.message + '. I don refund your ₦' + (totalToDeductKobo / 100) + ' back to your Vault.' };
             }
         } catch (e: any) {
             logger.error({ error: e.message, userId: args.userId }, 'Failed withdraw_vault_funds');

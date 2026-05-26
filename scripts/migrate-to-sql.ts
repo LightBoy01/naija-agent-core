@@ -36,8 +36,9 @@ async function migrate() {
         systemPrompt: data.systemPrompt || null,
         createdAt: data.createdAt?.toDate() || new Date(),
         updatedAt: data.updatedAt?.toDate() || new Date(),
-      }).onDuplicateKeyUpdate({
-        set: { name: data.name }
+      }).onConflictDoUpdate({
+        target: organizations.id,
+        set: { name: data.name || 'Unknown Org' }
       });
       console.log(`✅ Org: ${data.name}`);
     } catch (err: any) {
@@ -57,14 +58,15 @@ async function migrate() {
         name: data.name || null,
         energyCredits: data.energyCredits || 0,
         vaultBalanceNaira: (data.vaultBalanceNaira || 0).toString(),
-        pinHash: data.pin || null, // Note: We should ideally rename this to pin_hash in DB later
+        pinHash: data.pin || null, 
         pinAttempts: data.pinAttempts || 0,
         pinLockUntil: data.pinLockUntil?.toDate() || null,
         context: data, // Save full context as JSON for safety
         createdAt: data.createdAt?.toDate() || new Date(),
         updatedAt: data.updatedAt?.toDate() || new Date(),
-      }).onDuplicateKeyUpdate({
-        set: { energyCredits: data.energyCredits }
+      }).onConflictDoUpdate({
+        target: users.phone,
+        set: { energyCredits: data.energyCredits || 0 }
       });
       
       // Migrate Episodic Events as Memories

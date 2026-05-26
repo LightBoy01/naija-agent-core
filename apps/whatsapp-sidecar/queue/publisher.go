@@ -20,24 +20,24 @@ type JobContent struct {
 }
 
 type JobData struct {
-	From      string     `json:"from"`
-	Content   JobContent `json:"content"`
-	Type      string     `json:"type"`
-	OrgID     string     `json:"orgId"`
-	MessageID string     `json:"messageId"`
-	PhoneID   string     `json:"phoneId"`
-	Timestamp int64      `json:"timestamp"`
-	Name      string     `json:"name,omitempty"`
-}
+	From         string     `json:"from"`
+	Content      JobContent `json:"content"`
+	Type         string     `json:"type"`
+	OrgID        string     `json:"orgId"`
+	MessageID    string     `json:"messageId"`
+	PhoneID      string     `json:"phoneId"`
+	Timestamp    int64      `json:"timestamp"`
+	Name         string     `json:"name,omitempty"`
+	IsPinAttempt bool       `json:"isPinAttempt,omitempty"`
+	}
 
-type Publisher struct {
+	type Publisher struct {
 	client     *redis.Client
 	bizQueue   string
 	lifeQueue  string
-}
+	}
 
-func NewPublisher(redisURL, bizQueue, lifeQueue string) (*Publisher, error) {
-	opts, err := redis.ParseURL(redisURL)
+	func NewPublisher(redisURL, bizQueue, lifeQueue string) (*Publisher, error) {	opts, err := redis.ParseURL(redisURL)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +63,10 @@ func (p *Publisher) PublishMessage(job JobData) error {
 	// LPUSH bull:<queueName>:wait <jobId>
 	// HMSET bull:<queueName>:<jobId> data <payload> name <jobName> ...
 	
-	jobID := fmt.Sprintf("%d", time.Now().UnixNano())
+	jobID := job.MessageID
+	if jobID == "" {
+		jobID = fmt.Sprintf("%d", time.Now().UnixNano())
+	}
 	
 	// Transaction to ensure atomicity
 	pipe := p.client.Pipeline()

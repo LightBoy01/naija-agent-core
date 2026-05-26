@@ -115,7 +115,16 @@ class MCPClientService {
 
     try {
       logger.info({ tool: name }, 'Executing MCP Tool');
-      const response = await this.client.callTool({ name, arguments: args });
+      
+      // 2-Minute Timeout Guard
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error(`MCP tool execution timed out after 120s`)), 120000)
+      );
+
+      const response = await Promise.race([
+          this.client.callTool({ name, arguments: args }),
+          timeoutPromise
+      ]);
       
       return response;
     } catch (error: any) {
@@ -147,7 +156,10 @@ class MCPClientService {
         'DEEPSEEK_API_KEY', 'DASHSCOPE_API_KEY', 'DATABASE_URL',
         'REDIS_URL', 'AI_PROVIDER_PRIMARY', 'AI_PROVIDER_FALLBACK',
         'LANG', 'HOME', 'USER',
-        'BROWSERBASE_API_KEY', 'FAL_KEY', 'OPENROUTER_API_KEY' // Unlock Body Tools
+        'BROWSERBASE_API_KEY', 'FAL_KEY', 'OPENROUTER_API_KEY',
+        'MONNIFY_API_KEY', 'MONNIFY_SECRET_KEY', 'MONNIFY_CONTRACT_CODE',
+        'PAYSTACK_SECRET_KEY', 'CLOUDINARY_URL', 'ALIBABA_OSS_ACCESS_KEY',
+        'ALIBABA_OSS_SECRET_KEY', 'ALIBABA_OSS_BUCKET', 'FIREBASE_PROJECT_ID'
     ];
 
     for (const key of allowedKeys) {
@@ -177,7 +189,15 @@ class MCPClientService {
         await tempClient.connect(tempTransport);
         logger.info({ tool: toolName }, '🔐 Ephemeral MCP connection established (Secure Env)');
         
-        const response = await tempClient.callTool({ name: toolName, arguments: toolArgs });
+        // 2-Minute Timeout Guard
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(`Ephemeral MCP tool execution timed out after 120s`)), 120000)
+        );
+
+        const response = await Promise.race([
+            tempClient.callTool({ name: toolName, arguments: toolArgs }),
+            timeoutPromise
+        ]);
 
         return response;
     } catch (error: any) {

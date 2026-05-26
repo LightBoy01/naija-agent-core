@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,7 +19,7 @@ import (
 func main() {
 	// 1. Setup Logging
 	log := waLog.Stdout("Main", "INFO", true)
-	log.Info("🚀 [VERSION 1.0.0] WhatsApp Sovereign Sidecar Starting...")
+	log.Infof("🚀 [VERSION 1.0.0] WhatsApp Sovereign Sidecar Starting...")
 
 	// 2. Setup Persistence (PostgreSQL)
 	dbURL := os.Getenv("DATABASE_URL")
@@ -29,7 +28,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	container, err := sqlstore.New("postgres", dbURL, waLog.Stdout("Database", "ERROR", true))
+	container, err := sqlstore.New(context.Background(), "postgres", dbURL, waLog.Stdout("Database", "ERROR", true))
 	if err != nil {
 		log.Errorf("Failed to connect to database: %v", err)
 		os.Exit(1)
@@ -65,7 +64,7 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	<-c
 
-	log.Info("Shutting down...")
+	log.Infof("Shutting down...")
 	mgr.Shutdown()
 	os.Exit(0)
 }

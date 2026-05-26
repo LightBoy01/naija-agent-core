@@ -8,6 +8,7 @@ export * from './modules/activities.js';
 export * from './modules/ledger.js';
 export * from './modules/onboarding.js';
 export * from './modules/orgs.js';
+export { suspendOrganization, unsuspendOrganization } from './modules/orgs.js';
 export * from './modules/stats.js';
 export * from './modules/billing.js';
 export * from './modules/topup.js';

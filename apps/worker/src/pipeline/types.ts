@@ -24,6 +24,7 @@ export interface PipelineContext {
   tenantPaymentProvider?: PaymentProvider | null;
   tenantTools?: any[];
   sectorPack?: SectorPack;
+  isLegacy?: boolean;
   
   // System Dependencies
   ai: AIProvider;

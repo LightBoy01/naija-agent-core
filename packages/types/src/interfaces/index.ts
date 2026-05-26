@@ -21,6 +21,8 @@ export interface JobData {
     phoneId: string;
     timestamp: number;
     name?: string; // Sender name
+    isPinAttempt?: boolean; // Gateway-level PIN detection
+    hops?: number; // Infinite loop prevention (Empire Hardening)
 }
 
 // Organization Onboarding State
@@ -102,7 +104,7 @@ export interface VaultAuditLog {
     id: string;
     userId: string; // Phone number
     toolName: string;
-    amount?: number;
+    amountKobo?: number;
     currency?: string;
     direction: 'in' | 'out';
     status: 'success' | 'failed' | 'pending';
@@ -135,10 +137,13 @@ export interface LifeContext {
     lastInteraction?: FirestoreTimestamp | Date;
     lastFeedbackAt?: FirestoreTimestamp | Date; // Rate limiting for feedback tool
     energyCredits?: number; // Added for the Battery/Energy System
-    vaultBalanceNaira?: number; // Real Money Ledger for Savings/Bills
-    pin?: string; // Hashed 4-digit PIN for security
+    vaultBalanceKobo?: number; // Real Money Ledger for Savings/Bills (in Kobo)
+    pin?: string; // Hashed 4-digit PIN for security (legacy name)
+    pinHash?: string; // Salted Bcrypt PIN hash
     pinAttempts?: number; // Added for lockout logic
     pinLockUntil?: FirestoreTimestamp | Date; // Added for lockout logic
+    sessionStatus?: string; // e.g. 'IDLE', 'AWAITING_PIN'
+    sessionExpiry?: FirestoreTimestamp | Date;
 }
 
 export interface FeedbackEvent {

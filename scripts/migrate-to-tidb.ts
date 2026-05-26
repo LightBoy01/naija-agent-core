@@ -34,7 +34,8 @@ async function migrateOrganizations() {
         // Firestore Timestamp to JS Date
         createdAt: data.createdAt?.toDate() || new Date(),
         updatedAt: data.updatedAt?.toDate() || new Date(),
-      }).onDuplicateKeyUpdate({
+      }).onConflictDoUpdate({
+        target: organizations.id,
         set: {
           balanceKobo: data.balance || 0,
           isActive: data.isActive !== false,
@@ -80,7 +81,8 @@ async function migrateLifeUsers() {
         context: { goals: data.goals, preferences: data.preferences },
         createdAt: data.createdAt?.toDate() || new Date(),
         updatedAt: data.updatedAt?.toDate() || new Date(),
-      }).onDuplicateKeyUpdate({
+      }).onConflictDoUpdate({
+        target: users.phone,
         set: {
           energyCredits: data.energyCredits ?? 100,
           vaultBalanceNaira: (data.vaultBalanceNaira || 0).toString(),
@@ -97,10 +99,10 @@ async function migrateLifeUsers() {
 }
 
 async function main() {
-  logger.info('🚀 Initiating Hybrid Database Migration (Firebase -> TiDB)');
+  logger.info('🚀 Initiating Hybrid Database Migration (Firebase -> Postgres)');
   
   if (!process.env.DATABASE_URL) {
-    logger.error('CRITICAL: Missing DATABASE_URL (TiDB endpoint)');
+    logger.error('CRITICAL: Missing DATABASE_URL (Postgres endpoint)');
     process.exit(1);
   }
 

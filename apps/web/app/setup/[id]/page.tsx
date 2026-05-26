@@ -106,8 +106,7 @@ export default function SetupPage() {
                     maxLength={4}
                     value={formData.adminPin}
                     onChange={handleChange}
-                    placeholder="1234"
-                    className="w-full px-4 py-3 rounded-lg border border-zinc-200 focus:ring-2 focus:ring-zinc-900 outline-none"
+                    placeholder="****"                    className="w-full px-4 py-3 rounded-lg border border-zinc-200 focus:ring-2 focus:ring-zinc-900 outline-none"
                   />
                </div>
             </div>
