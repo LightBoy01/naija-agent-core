@@ -22,7 +22,7 @@ const db = getFirestore();
 // --- Master Config ---
 const MASTER_ORG_ID = 'naija-agent-master';
 const PHONE_ID = process.env.WHATSAPP_PHONE_ID; 
-const BOSS_PHONE = process.env.MASTER_ADMIN_PHONE || '2347042310893'; 
+const BOSS_PHONE = process.env.MASTER_ADMIN_PHONE || SystemConfig.CONTACTS.MASTER_ADMIN_PHONE; 
 
 const SOVEREIGN_BANK = {
   bankName: 'VFD Bank (Naira Agent)',

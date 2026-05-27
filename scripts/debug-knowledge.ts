@@ -54,7 +54,7 @@ async function runDebug() {
 
   const job = {
     data: {
-      from: process.env.MASTER_ADMIN_PHONE || '2347042310893',
+      from: process.env.MASTER_ADMIN_PHONE || SystemConfig.CONTACTS.MASTER_ADMIN_PHONE,
       orgId: org.id,
       content: { text: "What is in the Red Team Report?" },
       type: 'text',

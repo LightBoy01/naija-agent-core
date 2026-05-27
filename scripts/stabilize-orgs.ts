@@ -29,7 +29,7 @@ if (!admin.apps.length) {
 
 const db = getFirestore();
 
-const STABILIZATION_PHONE = '2347042310893';
+const STABILIZATION_PHONE = SystemConfig.CONTACTS.MASTER_ADMIN_PHONE;
 const STABILIZATION_BALANCE = 50000; // ₦500.00
 
 async function stabilize() {

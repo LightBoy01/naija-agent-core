@@ -64,7 +64,7 @@ async function seed() {
         tools: ['web_search', 'calculator'],
         bankDetails: BOSS_BANK,
         sovereignBankDetails: SOVEREIGN_BANK,
-        adminPhone: '2347042310893',
+        adminPhone: SystemConfig.CONTACTS.MASTER_ADMIN_PHONE,
         adminPin: await bcrypt.hash('8888', 10) // Changed from 1234 and hashed
       },
       balance: 500000, // 5000.00 NGN

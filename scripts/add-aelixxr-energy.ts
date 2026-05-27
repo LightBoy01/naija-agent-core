@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { getDb } from '../packages/firebase/dist/index.js';
 
-const MASTER_PHONE = '2347042310893';
+const MASTER_PHONE = SystemConfig.CONTACTS.MASTER_ADMIN_PHONE;
 const AMOUNT_TO_ADD = 1000;
 
 async function addEnergy() {

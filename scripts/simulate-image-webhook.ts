@@ -18,13 +18,13 @@ const payload = {
           value: {
             messaging_product: 'whatsapp',
             metadata: {
-              display_phone_number: '2347042310893',
+              display_phone_number: process.env.WHATSAPP_PHONE_ID || '1234567890',
               phone_number_id: '1189172570934595',
             },
-            contacts: [{ profile: { name: 'Simulated User' }, wa_id: '2347042310893' }],
+            contacts: [{ profile: { name: 'Simulated User' }, wa_id: process.env.MASTER_ADMIN_PHONE || '1234567890' }],
             messages: [
               {
-                from: '2347042310893',
+                from: process.env.MASTER_ADMIN_PHONE || '1234567890',
                 id: 'wamid.HBgMkBZQc1i3bK9jXd',
                 timestamp: Date.now().toString(),
                 type: 'image',

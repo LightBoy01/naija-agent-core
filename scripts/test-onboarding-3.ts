@@ -69,7 +69,7 @@ async function testOnboardingFlow() {
   console.log('\nTEST 2: AI OCR Training Safety Valve');
   const testOrgId = 'naija-agent-master';
   const bossOrg = await getOrgById(testOrgId);
-  const bossPhone = process.env.MASTER_ADMIN_PHONE || '2347042310893';
+  const bossPhone = process.env.MASTER_ADMIN_PHONE || SystemConfig.CONTACTS.MASTER_ADMIN_PHONE;
 
   if (bossOrg) {
     console.log('Clearing staging area and activating session...');
@@ -129,7 +129,7 @@ async function testOnboardingFlow() {
   if (bossOrg) {
     const { saveStagingProduct, getProducts } = await import('@naija-agent/firebase');
     const testOrgId = 'naija-agent-master';
-    const bossPhone = process.env.MASTER_ADMIN_PHONE || '2347042310893';
+    const bossPhone = process.env.MASTER_ADMIN_PHONE || SystemConfig.CONTACTS.MASTER_ADMIN_PHONE;
 
     console.log('Manually staging an item for confirmation test...');
     await saveStagingProduct(testOrgId, 'test_item_99', { name: 'Test Gadget', price: 5000 });

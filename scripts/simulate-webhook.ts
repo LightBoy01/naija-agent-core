@@ -9,7 +9,7 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 const WEBHOOK_URL = 'https://naija-agentapi-production.up.railway.app/webhook';
 const APP_SECRET = process.env.WHATSAPP_APP_SECRET;
 const PHONE_ID = process.env.WHATSAPP_PHONE_ID;
-const RECIPIENT_PHONE = '2347042310893'; // Your number
+const RECIPIENT_PHONE = SystemConfig.CONTACTS.MASTER_ADMIN_PHONE; // Your number
 
 if (!APP_SECRET || !PHONE_ID) {
   console.error('❌ Missing WHATSAPP_APP_SECRET or WHATSAPP_PHONE_ID');

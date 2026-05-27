@@ -26,7 +26,7 @@ const db = getFirestore();
 
 const ORG_ID = 'aelixxr-life-companion';
 const PHONE_ID = '1189172570934595'; // New LOS Phone ID
-const BOSS_PHONE = process.env.MASTER_ADMIN_PHONE || '+2347042310893';
+const BOSS_PHONE = process.env.MASTER_ADMIN_PHONE || SystemConfig.CONTACTS.MASTER_ADMIN_PHONE;
 
 async function seedAelixxr() {
   console.log(`🌿 [SEEDING AELIXXR] ID: ${ORG_ID} | Phone ID: ${PHONE_ID}...`);

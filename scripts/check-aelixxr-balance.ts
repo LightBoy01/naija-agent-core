@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { getDb } from '../packages/firebase/dist/index.js';
 
-const MASTER_PHONE = '2347042310893';
+const MASTER_PHONE = SystemConfig.CONTACTS.MASTER_ADMIN_PHONE;
 
 async function checkBalance() {
   console.log(`\n🔍 Checking Aelixxr (Life OS) Profile for: ${MASTER_PHONE}`);

@@ -68,5 +68,5 @@ updatedAt: ${data.updatedAt?.toDate()?.toISOString()}
   }
 }
 
-const userPhone = '2347042310893';
+const userPhone = SystemConfig.CONTACTS.MASTER_ADMIN_PHONE;
 debugUser(userPhone).catch(console.error);

@@ -10,7 +10,7 @@ import { getLifeTools, executeLifeTool } from '../apps/worker-life/src/tools.js'
 // generates when calling Aelixxr's native tools. 
 // ============================================================================
 
-const TEST_USER_ID = '2347042310893'; // Replace with a safe test phone number
+const TEST_USER_ID = SystemConfig.CONTACTS.MASTER_ADMIN_PHONE; // Replace with a safe test phone number
 
 const toolTestTemplates = [
   {

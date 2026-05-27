@@ -6,7 +6,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const TOKEN = process.env.WHATSAPP_API_TOKEN;
 const PHONE_ID = '1189172570934595'; // New Aelixxr Phone ID
-const RECIPIENT = '2347042310893'; // Boss Number
+const RECIPIENT = SystemConfig.CONTACTS.MASTER_ADMIN_PHONE; // Boss Number
 
 async function testSend() {
   console.log(`🚀 [TEST SEND] Sending message from ${PHONE_ID} to ${RECIPIENT}...`);

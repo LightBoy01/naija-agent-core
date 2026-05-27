@@ -8,7 +8,7 @@ dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 const TOKEN = process.env.WHATSAPP_API_TOKEN;
 const PHONE_ID = process.env.WHATSAPP_PHONE_ID;
-const RECIPIENT = '2347042310893'; // 07042310893 in international format
+const RECIPIENT = SystemConfig.CONTACTS.MASTER_ADMIN_PHONE; // in international format
 
 async function main() {
   // Dynamic import to bypass some ESM/TS-Node resolution quirks
