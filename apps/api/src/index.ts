@@ -329,14 +329,20 @@ fastify.post('/webhook/monnify', async (request, reply) => {
       logger.info({ phone: userPhone, amountPaid, reference }, '🏦 [MONNIFY] Automated Vault Deposit Detected');
       
       try {
-          const { lifeMemory } = await import('../../worker-life/src/services/lifeMemory.js');
-          const newBalance = await lifeMemory.addVaultBalance(userPhone, amountPaid, reference || payload.eventData?.transactionReference);
+          // Post a job to the worker to handle the vault update securely
+          await lifeQueue.add('life-vault-deposit', {
+              userPhone,
+              amountPaid,
+              reference: reference || payload.eventData?.transactionReference
+          }, { removeOnComplete: true });
+          
+          const newBalance = "Pending"; // Actual balance will be sent via worker
           
           if (newBalance !== null) {
               const notificationJob: JobData = {
                   type: 'text',
                   orgId: 'system',
-                  phoneId: process.env.AELIXXR_PHONE_ID,
+                  phoneId: process.env.AELIXXR_PHONE_ID || '',
                   from: userPhone,
                   messageId: `BR-${Date.now()}`,
                   timestamp: Date.now(),

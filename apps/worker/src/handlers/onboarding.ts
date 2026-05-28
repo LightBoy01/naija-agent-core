@@ -75,6 +75,7 @@ export async function handleOnboarding(
                       name: nextData.name,
                       whatsappPhoneId: 'PENDING',
                       adminPhone: from,
+                      adminPin: '0000', // Default hash placeholder for setup
                       systemPrompt: `You are the AI Assistant for ${nextData.name}.`,
                       timezone: 'Africa/Lagos'
                    });

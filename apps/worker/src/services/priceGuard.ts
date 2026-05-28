@@ -61,8 +61,8 @@ export class PriceGuard {
     "${text}"`;
 
     try {
-      const result = await this.ai.generateContent(prompt, {
-        model: SystemConfig.MODELS.ZYNUX_WORKER || 'gemini-flash-lite-latest',
+      const result = await this.ai.generateText(prompt, {
+        model: SystemConfig.MODELS.ZYNUX_FALLBACK || 'gemini-flash-lite-latest',
         responseMimeType: 'application/json',
         responseSchema: extractionSchema as any
       });

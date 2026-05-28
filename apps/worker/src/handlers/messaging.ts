@@ -208,7 +208,18 @@ ${globalProtocol}
               toolResponseParts.push({ functionResponse: { name: call.name, response: { status: 'error', code: 'AUTH_REQUIRED' } } });
               continue;
           }
-          const response = await handleToolCall(call.name, call.args, { ...deps, orgId, from, isAuth, isVisionContext: type === 'image' });
+          const response = await handleToolCall(call.name, call.args, { 
+            orgId, from, isStaff, isAdmin, isAuth,
+            whatsappService: tenantWhatsAppService,
+            paymentProvider: tenantPaymentProvider,
+            redisClient,
+            orgConfig: org.config as any,
+            currency: currency as any,
+            whatsappPhoneId: job.data.phoneId,
+            customerName: job.data.name,
+            isVisionContext: type === 'image',
+            sectorPack: deps.sectorPack
+          });
           toolResponseParts.push({ functionResponse: { name: call.name, response } });
       }
 

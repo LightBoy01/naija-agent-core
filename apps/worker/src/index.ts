@@ -217,8 +217,7 @@ const worker = new Worker<JobData>(
     concurrency: 50, // Global maximum for the worker instance
     limiter: {
       max: 10,       // Max 10 jobs...
-      duration: 1000, // ...per 1 second...
-      groupKey: 'orgId' // ...per Organization
+      duration: 1000 // ...per 1 second...
     }
   }
 );

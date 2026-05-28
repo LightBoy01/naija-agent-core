@@ -1,4 +1,48 @@
+import { Type } from '@google/genai';
 import { HandlerContext } from './definitions.js';
+
+export const COMMERCE_TOOLS = [
+  {
+    name: "get_payment_instructions",
+    description: "Returns bank account details for payments (Sales or AI Credit Refills).",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        purpose: { type: Type.STRING, format: "enum", enum: ['sale', 'refill'], description: "Purpose: 'sale' (paying the Boss) or 'refill' (buying AI credits from the Sovereign)." }
+      },
+      required: ["purpose"]
+    }
+  },
+  {
+    name: "generate_refill_link",
+    description: "Generates a secure Paystack payment link for the Boss to buy AI credits.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        amount: { type: Type.NUMBER, description: `Amount in Naira (min 2000)` }
+      },
+      required: ["amount"]
+    }
+  },
+  {
+    name: "verify_transaction",
+    description: "Verifies a bank transaction with the payment provider.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        reference: { type: Type.STRING, description: "Transaction Reference or Session ID" },
+        amount: { type: Type.NUMBER, description: `Amount in Naira` },
+        bankName: { type: Type.STRING, description: "Name of the sending bank" },
+        date: { type: Type.STRING, description: "Transaction date/time" },
+        purpose: { type: Type.STRING, format: "enum", enum: ['sale', 'refill'], description: "Context of the payment: 'sale' for customers, 'refill' for Boss topping up AI credits." },
+        isSuspicious: { type: Type.BOOLEAN, description: "Set to true if you detect ANY Photoshop or editing artifacts in the image." },
+        suspicionReason: { type: Type.STRING, description: "If suspicious, describe exactly what looks fake (e.g., font mismatch, blurred digits)." }
+      },
+      required: ["reference", "amount", "purpose"]
+    }
+  }
+];
+
 import { 
   getCart, 
   reserveStock, 
@@ -16,8 +60,7 @@ import {
   removeFromCart, 
   bookSlot 
 } from '@naija-agent/firebase';
-import { syncCartState, getDb, fraudRegistry } from '@naija-agent/database';
-import { eq, sql } from 'drizzle-orm';
+import { syncCartState, getDb, fraudRegistry, eq, sql, and } from '@naija-agent/database';
 import crypto from 'crypto';
 import { formatCurrency } from '../utils/currency.js';
 

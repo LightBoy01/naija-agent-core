@@ -1,18 +1,27 @@
 import { v2 as cloudinary } from 'cloudinary';
 import { getStorage } from 'firebase-admin/storage';
 import { AlibabaOSSProvider } from './providers/alibaba.js';
+import { TencentCOSProvider } from './providers/tencent.js';
 import { StorageProvider } from './interfaces.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 /**
- * Strategy Selector: Prioritize Alibaba OSS for Sovereign Stack, 
- * fallback to Cloudinary for free tier, and finally Firebase.
+ * Strategy Selector: Prioritize Tencent COS (Sovereign Pivot),
+ * then Alibaba OSS, fallback to Cloudinary, and finally Firebase.
  */
 let activeProvider: StorageProvider | null = null;
 
-if (process.env.ALIBABA_OSS_ACCESS_KEY_ID) {
+if (process.env.TENCENT_COS_SECRET_ID) {
+  activeProvider = new TencentCOSProvider({
+    secretId: process.env.TENCENT_COS_SECRET_ID,
+    secretKey: process.env.TENCENT_COS_SECRET_KEY || '',
+    bucket: process.env.TENCENT_COS_BUCKET || '',
+    region: process.env.TENCENT_COS_REGION || 'ap-singapore',
+    accelerate: process.env.TENCENT_COS_ACCELERATE === 'true'
+  });
+} else if (process.env.ALIBABA_OSS_ACCESS_KEY_ID) {
   activeProvider = new AlibabaOSSProvider({
     region: process.env.ALIBABA_OSS_REGION || 'oss-ap-southeast-1',
     accessKeyId: process.env.ALIBABA_OSS_ACCESS_KEY_ID,
@@ -29,12 +38,12 @@ export async function uploadMedia(
   mimeType: string,
   metadata: Record<string, string> = {}
 ): Promise<string> {
-  // 1. Sovereign Priority (Alibaba OSS)
+  // 1. Sovereign Priority (Tencent COS / Alibaba OSS)
   if (activeProvider) {
     try {
        return await activeProvider.upload(orgId, fileName, buffer, mimeType, metadata);
     } catch (e: any) {
-       console.error('⚠️ [ALIBABA OSS] Upload failed, falling back:', e.message);
+       console.error(`⚠️ [${activeProvider.name.toUpperCase()}] Upload failed, falling back:`, e.message);
     }
   }
 

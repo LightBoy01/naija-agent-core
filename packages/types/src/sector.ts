@@ -9,10 +9,12 @@ export const EntityDefinitionSchema = z.object({
   fields: z.array(z.object({
     key: z.string(),
     label: z.string(),
-    type: z.enum(['string', 'number', 'boolean', 'date', 'image', 'enum']),
+    type: z.enum(['string', 'number', 'boolean', 'date', 'image', 'enum', 'reference', 'array']),
     options: z.array(z.string()).optional(),
     required: z.boolean(),
-    description: z.string().optional()
+    description: z.string().optional(),
+    refEntity: z.string().optional(), // If type === 'reference', which entity does it point to?
+    arrayType: z.enum(['string', 'number', 'reference']).optional(), // If type === 'array', what does it hold?
   }))
 });
 

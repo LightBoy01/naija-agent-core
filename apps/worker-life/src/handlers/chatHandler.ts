@@ -40,9 +40,16 @@ const lifePipeline = new LifePipeline()
 
 export async function handleLifeChat(job: Job, deps: ChatDependencies) {
     const { ai, getDynamicModels, lifeQueue, apiKey } = deps;
-    const { userPhone, message: rawMessage, orgId, imageId, documentId, audioId, type } = job.data;
+    const { userPhone, message: rawMessage, orgId, imageId, documentId, audioId, type, hops = 0 } = job.data;
     
-    logger.info({ userPhone, orgId, hasImage: !!imageId, hasDoc: !!documentId, hasAudio: !!audioId }, '🧠 Thinking about Life...');
+    // 🛡️ ASP G1: The Loop Guard
+    if (hops >= 3) {
+        logger.warn({ userPhone, hops }, '🚫 [LOOP GUARD] Maximum delegation hops reached. Aborting to prevent infinite loop.');
+        await whatsappService.sendText(userPhone, "Oga, I don try reach out to all my experts but we don dey loop too much! Make we try another way or simplify wetin you need. 🛑");
+        return { success: false, error: 'LOOP_GUARD_TRIGGERED' };
+    }
+
+    logger.info({ userPhone, orgId, hasImage: !!imageId, hasDoc: !!documentId, hasAudio: !!audioId, hops }, '🧠 Thinking about Life...');
 
     const initialContext = {
         job,
@@ -239,7 +246,18 @@ export async function handleLifeChatResume(job: Job, deps: ChatDependencies) {
         parts: [{ text: m.content }]
     }));
 
-    const resumeInstruction = `[REPORT from ${sector}]: ${slmReport}\n\nSynthesize this for the user in your Aelixxr persona.`;
+    const resumeInstruction = `
+[SOVEREIGN WITNESS HOOK]:
+A technical agent (${sector}) has completed a delegated task. 
+RAW REPORT:
+${slmReport}
+
+INSTRUCTION:
+1. Inspect the report above for technical success or failure.
+2. Verify if it aligns with the user's original goal.
+3. If it contains errors or sensitive data leaks, flag them.
+4. Synthesize the final outcome for the user in your cultural Aelixxr persona. 
+DO NOT just repeat the report; provide the 'So What?' for the user's life.`;
 
     const result = await ai.chat(normalizedHistory, resumeInstruction, {
         model: primaryModel,

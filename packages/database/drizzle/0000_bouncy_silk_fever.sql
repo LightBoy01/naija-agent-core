@@ -1,3 +1,4 @@
+CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TABLE IF NOT EXISTS "cart_items" (
 	"id" varchar(128) PRIMARY KEY NOT NULL,
 	"chat_id" varchar(128) NOT NULL,

@@ -1,4 +1,54 @@
+import { Type } from '@google/genai';
 import { HandlerContext } from './definitions.js';
+
+export const CONTENT_TOOLS = [
+  {
+    name: "web_search",
+    description: "Searches the live internet for real-time information (Exchange rates, market prices, news).",
+    parameters: {
+      type: Type.OBJECT,
+      properties: { query: { type: Type.STRING, description: "The search query." } },
+      required: ["query"]
+    }
+  },
+  {
+    name: "generate_image",
+    description: "Generate a creative image based on a text description. Use this when the user asks to see something, create an image, or design a logo.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        prompt: {
+          type: Type.STRING,
+          description: "The detailed description of the image to generate (e.g., 'A futuristic Lagos at night with flying danfo buses')."
+        }
+      },
+      required: ["prompt"]
+    }
+  },
+  {
+    name: "save_knowledge",
+    description: "Updates business facts or prices. (Requires Boss Auth)",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        key: { type: Type.STRING, description: "Key name" },
+        content: { type: Type.STRING, description: "Details/Price" },
+        imageUrl: { type: Type.STRING, description: "Product Image URL" }
+      },
+      required: ["key", "content"]
+    }
+  },
+  {
+    name: "delete_knowledge",
+    description: "Deletes obsolete business knowledge. (Requires Boss Auth)",
+    parameters: {
+      type: Type.OBJECT,
+      properties: { key: { type: Type.STRING, description: "Key to delete" } },
+      required: ["key"]
+    }
+  }
+];
+
 import { 
   saveKnowledge, 
   deleteKnowledge, 

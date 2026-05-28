@@ -8,6 +8,7 @@ dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 const TOKEN = process.env.WHATSAPP_API_TOKEN;
 const PHONE_ID = process.env.WHATSAPP_PHONE_ID;
+import { SystemConfig } from '@naija-agent/types';
 const RECIPIENT = SystemConfig.CONTACTS.MASTER_ADMIN_PHONE; // in international format
 
 async function main() {

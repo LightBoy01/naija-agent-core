@@ -52,16 +52,31 @@ export async function getOrchestratorTools(): Promise<Tool[]> {
   return [{ functionDeclarations: filtered }];
 }
 
+const TOOL_HANDLERS: Record<string, (name: string, args: any, jobId?: string) => Promise<any>> = {};
+
+// Register static handlers
+[
+  { tools: FINANCE_TOOLS, handler: executeFinanceTool },
+  { tools: VAULT_TOOLS, handler: executeVaultTool },
+  { tools: UTILITY_TOOLS, handler: executeUtilityTool },
+  { tools: SYSTEM_TOOLS, handler: executeSystemTool },
+  { tools: EDUCATION_TOOLS, handler: executeEducationTool }
+].forEach(({ tools, handler }) => {
+  tools.forEach(t => {
+    TOOL_HANDLERS[t.name] = handler;
+  });
+});
+
 export async function executeLifeTool(name: string, args: Record<string, any>, jobId?: string): Promise<any> {
   logger.info({ tool: name, args, jobId }, '🛠️ Executing Life Tool');
 
   try {
-    if (FINANCE_TOOLS.some(t => t.name === name)) return await executeFinanceTool(name, args, jobId);
-    if (VAULT_TOOLS.some(t => t.name === name)) return await executeVaultTool(name, args, jobId);
-    if (UTILITY_TOOLS.some(t => t.name === name)) return await executeUtilityTool(name, args, jobId);
-    if (SYSTEM_TOOLS.some(t => t.name === name)) return await executeSystemTool(name, args, jobId);
-    if (EDUCATION_TOOLS.some(t => t.name === name)) return await executeEducationTool(name, args, jobId);
+    const handler = TOOL_HANDLERS[name];
+    if (handler) {
+      return await handler(name, args, jobId);
+    }
 
+    // Fallback to MCP tools
     return await mcpClient.executeTool(name, args);
 
   } catch (error: any) {

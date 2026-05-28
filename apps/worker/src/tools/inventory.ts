@@ -1,4 +1,54 @@
+import { Type } from '@google/genai';
 import { HandlerContext } from './definitions.js';
+
+export const INVENTORY_TOOLS = [
+  {
+    name: "save_product",
+    description: "Updates business facts or prices. (Requires Boss Auth)",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        key: { type: Type.STRING, description: "Key name" },
+        content: { type: Type.STRING, description: "Details/Price" },
+        imageUrl: { type: Type.STRING, description: "Product Image URL" }
+      },
+      required: ["key", "content"]
+    }
+  },
+  {
+    name: "delete_product",
+    description: "Deletes obsolete business knowledge. (Requires Boss Auth)",
+    parameters: {
+      type: Type.OBJECT,
+      properties: { key: { type: Type.STRING, description: "Key to delete" } },
+      required: ["key"]
+    }
+  },
+  {
+    name: "manage_stock",
+    description: "Updates the stock level for a product. (Manager Only)",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        productId: { type: Type.STRING, description: "Unique ID (sku)" },
+        action: { type: Type.STRING, format: "enum", enum: ['add', 'set', 'reduce'], description: "Action to take" },
+        amount: { type: Type.NUMBER, description: "Quantity" },
+        threshold: { type: Type.NUMBER, description: "Optional: Set new low-stock alert threshold" }
+      },
+      required: ["productId", "action", "amount"]
+    }
+  },
+  {
+    name: "search_products",
+    description: "Searches for products in the catalog by name.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: { query: { type: Type.STRING, description: "Search term" } },
+      required: ["query"]
+    }
+  }
+];
+
 import { 
   saveProduct, 
   saveStagingProduct,
@@ -13,50 +63,47 @@ export async function handleInventoryTools(name: string, args: any, ctx: Handler
   switch (name) {
     case 'save_product':
       if (isVisionContext) {
-        await saveStagingProduct(orgId, args.id, {
-          name: args.name,
-          price: args.price,
-          stock: args.stock,
-          category: args.category,
-          imageUrl: args.imageUrl
-        });
-        return { status: 'success', code: 'STAGED', product: args.name };
+          // If in vision context, we are likely confirming a "detected" product
+          await saveProduct(orgId, args.key, {
+              content: args.content,
+              imageUrl: args.imageUrl,
+              updatedAt: FieldValue.serverTimestamp()
+          });
+      } else {
+          await saveProduct(orgId, args.key, {
+              content: args.content,
+              imageUrl: args.imageUrl,
+              updatedAt: FieldValue.serverTimestamp()
+          });
       }
-
-      await saveProduct(orgId, args.id, {
-        name: args.name,
-        price: args.price,
-        stock: args.stock,
-        category: args.category,
-        imageUrl: args.imageUrl
-      });
-      return { status: 'success', code: 'SAVED', product: args.name };
+      return { status: 'success', message: `Product ${args.key} saved.` };
 
     case 'manage_stock': {
-      const { decrementStock } = await import('@naija-agent/firebase');
-      let finalStock = 0;
-      if (args.action === 'set') {
-          await saveProduct(orgId, args.productId, { stock: args.amount, lowStockThreshold: args.threshold } as any);
-          finalStock = args.amount;
-      } else if (args.action === 'add') {
-          await saveProduct(orgId, args.productId, { stock: FieldValue.increment(args.amount), lowStockThreshold: args.threshold } as any);
-          return { status: 'success', message: `Added ${args.amount} to stock for ${args.productId}.` };
-      } else if (args.action === 'reduce') {
-          finalStock = await decrementStock(orgId, args.productId, args.amount);
-      }
-      return { status: 'success', message: `Stock for ${args.productId} is now ${finalStock}.`, stock: finalStock };
+        const { getDb } = await import('@naija-agent/firebase');
+        const db = getDb();
+        const productRef = db.collection('organizations').doc(orgId).collection('products').doc(args.productId);
+        
+        let updateData: any = {};
+        if (args.action === 'add') updateData.stock = FieldValue.increment(args.amount);
+        else if (args.action === 'reduce') updateData.stock = FieldValue.increment(-args.amount);
+        else if (args.action === 'set') updateData.stock = args.amount;
+        
+        if (args.threshold !== undefined) updateData.lowStockThreshold = args.threshold;
+        
+        await productRef.update(updateData);
+        return { status: 'success', message: `Stock for ${args.productId} updated.` };
     }
 
     case 'delete_product':
-      await deleteProduct(orgId, args.id);
-      return { status: 'success', code: 'DELETED' };
+      await deleteProduct(orgId, args.key);
+      return { status: 'success', message: `Product ${args.key} deleted.` };
 
     case 'search_products': {
-      const products = await searchProducts(orgId, args.query);
-      return { status: 'success', data: products };
+        const results = await searchProducts(orgId, args.query);
+        return { status: 'success', products: results };
     }
 
     default:
-      return null;
+      throw new Error(`Unknown inventory tool: ${name}`);
   }
 }
