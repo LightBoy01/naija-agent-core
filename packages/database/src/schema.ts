@@ -89,6 +89,12 @@ export const memories = pgTable('memories', {
   embedding: vector('embedding'), // Optimized vector storage
   importance: integer('importance').default(1).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => {
+  return {
+    userIdIdx: index('memories_user_id_idx').on(table.userId),
+    // HNSW index for high-scale vector search (Cosine Distance)
+    embeddingIdx: index('memories_embedding_idx').using('hnsw', sql`${table.embedding} vector_cosine_ops`),
+  };
 });
 
 // --- Referrals (Growth Loop) ---

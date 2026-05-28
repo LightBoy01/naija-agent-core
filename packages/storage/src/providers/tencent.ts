@@ -34,37 +34,46 @@ export class TencentCOSProvider implements StorageProvider {
     metadata: Record<string, string> = {}
   ): Promise<string> {
     const key = `orgs/${orgId}/media/${fileName}`;
+    const maxRetries = 3;
     
-    // Determine the host based on acceleration preference
-    // Standard: <BucketName-APPID>.cos.<Region>.myqcloud.com
-    // Accelerate: <BucketName-APPID>.cos.accelerate.myqcloud.com
-    
-    return new Promise((resolve, reject) => {
-      this.cos.putObject({
-        Bucket: this.bucket,
-        Region: this.region,
-        Key: key,
-        Body: buffer,
-        ContentType: mimeType,
-        Headers: {
-          'x-cos-meta-orgid': orgId,
-          ...Object.fromEntries(
-            Object.entries(metadata).map(([k, v]) => [`x-cos-meta-${k.toLowerCase()}`, v])
-          )
-        }
-      }, (err, data) => {
-        if (err) {
-          return reject(new Error(`Tencent COS Upload Failed: ${err.message}`));
-        }
-        
-        // Construct the URL. Use acceleration domain if enabled
-        const domain = this.accelerate 
-          ? `${this.bucket}.cos.accelerate.myqcloud.com`
-          : `${this.bucket}.cos.${this.region}.myqcloud.com`;
-          
-        resolve(`https://${domain}/${key}`);
+    const attemptUpload = (retryCount: number): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        this.cos.putObject({
+          Bucket: this.bucket,
+          Region: this.region,
+          Key: key,
+          Body: buffer,
+          ContentType: mimeType,
+          Headers: {
+            'x-cos-meta-orgid': orgId,
+            ...Object.fromEntries(
+              Object.entries(metadata).map(([k, v]) => [`x-cos-meta-${k.toLowerCase()}`, v])
+            )
+          }
+        }, async (err, data) => {
+          if (err) {
+            if (retryCount < maxRetries) {
+              const delay = Math.pow(2, retryCount) * 1000;
+              console.warn(`⚠️ Tencent COS Upload failed (Attempt ${retryCount + 1}), retrying in ${delay}ms: ${err.message}`);
+              setTimeout(() => {
+                resolve(attemptUpload(retryCount + 1));
+              }, delay);
+            } else {
+              return reject(new Error(`Tencent COS Upload Failed after ${maxRetries} retries: ${err.message}`));
+            }
+          } else {
+            // Construct the URL. Use acceleration domain if enabled
+            const domain = this.accelerate 
+              ? `${this.bucket}.cos.accelerate.myqcloud.com`
+              : `${this.bucket}.cos.${this.region}.myqcloud.com`;
+              
+            resolve(`https://${domain}/${key}`);
+          }
+        });
       });
-    });
+    };
+
+    return attemptUpload(0);
   }
 
   async getSignedUrl(path: string): Promise<string> {

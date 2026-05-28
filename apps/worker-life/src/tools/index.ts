@@ -2,7 +2,7 @@ import { Tool } from '@google/genai';
 import { logger } from '../utils/logger.js';
 import { mcpClient } from '../services/mcpClient.js';
 
-import { FINANCE_TOOLS, executeFinanceTool } from './financeTools.js';
+import { FINANCE_TOOL_DEFINITIONS, executeFinanceTool } from './finance/index.js';
 import { VAULT_TOOLS, executeVaultTool } from './vaultTools.js';
 import { UTILITY_TOOLS, executeUtilityTool } from './utilityTools.js';
 import { SYSTEM_TOOLS, executeSystemTool } from './systemTools.js';
@@ -10,7 +10,7 @@ import { EDUCATION_TOOLS, executeEducationTool } from './educationTools.js';
 
 export const STATIC_LIFE_TOOLS: Tool = {
   functionDeclarations: [
-    ...FINANCE_TOOLS,
+    ...FINANCE_TOOL_DEFINITIONS,
     ...VAULT_TOOLS,
     ...UTILITY_TOOLS,
     ...SYSTEM_TOOLS,
@@ -56,7 +56,7 @@ const TOOL_HANDLERS: Record<string, (name: string, args: any, jobId?: string) =>
 
 // Register static handlers
 [
-  { tools: FINANCE_TOOLS, handler: executeFinanceTool },
+  { tools: FINANCE_TOOL_DEFINITIONS, handler: executeFinanceTool },
   { tools: VAULT_TOOLS, handler: executeVaultTool },
   { tools: UTILITY_TOOLS, handler: executeUtilityTool },
   { tools: SYSTEM_TOOLS, handler: executeSystemTool },
