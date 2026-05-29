@@ -39,7 +39,9 @@ export async function handleSovereignCronTick(job: Job, deps: SovereignCronDepen
                 instruction: cronJob.instruction,
                 energyCredits: billResult.newBalance, // Pass remaining balance
                 isCron: true,
-                cronJobId: cronJob.id
+                cronJobId: cronJob.id,
+                trajectory: cronJob.trajectory,
+                stepCount: cronJob.stepCount || 0
             };
 
             await lifeQueue.add('execute-slm-task', slmJobData, {

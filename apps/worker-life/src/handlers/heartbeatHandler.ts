@@ -134,7 +134,7 @@ export async function handleEvaluateHeartbeat(job: Job, deps: HeartbeatDependenc
 
 export async function handleProactiveNudge(job: Job, deps: HeartbeatDependencies) {
     const { lifeQueue, worker } = deps;
-    logger.info('🤝 Processing Proactive Nudge...');
+    logger.info('🤝 Processing Proactive Nudge & Sleep Cycle...');
     const staleUsers = await proactiveService.getUsersNeedingNudge(48);
     
     for (const userId of staleUsers) {
@@ -143,11 +143,23 @@ export async function handleProactiveNudge(job: Job, deps: HeartbeatDependencies
             await worker.rateLimit(10);
         }
 
+        // 1. Trigger Sleep Cycle (Memory Consolidation) first
+        await lifeQueue.add('consolidate-memory', {
+            userId,
+            orgId: 'naija-agent-master'
+        }, {
+            jobId: `sleep-cycle-${userId}-${Date.now()}`,
+            removeOnComplete: true,
+            removeOnFail: false
+        });
+
+        // 2. Queue the Nudge Evaluation (will run after memory is updated)
         const evalJobData = { userId, timestamp: Date.now() };
         await lifeQueue.add('evaluate-nudge', evalJobData, {
             jobId: `nudge-${userId}-${Date.now()}`,
             removeOnComplete: true,
-            removeOnFail: false
+            removeOnFail: false,
+            delay: 5000 // Give Sleep Cycle a 5s head start
         });
     }
     return { success: true, queuedUsers: staleUsers.length };

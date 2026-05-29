@@ -55,7 +55,7 @@ export async function getDueCronJobs(): Promise<any[]> {
     return rows;
 }
 
-export async function advanceCronJob(jobId: string, result?: string, success: boolean = true): Promise<void> {
+export async function advanceCronJob(jobId: string, result?: string, success: boolean = true, trajectory?: any, stepCount?: number): Promise<void> {
     const sqlDb = getDb();
     
     // First fetch the job to parse its schedule again
@@ -74,17 +74,37 @@ export async function advanceCronJob(jobId: string, result?: string, success: bo
         return;
     }
 
-    await sqlDb.update(cronJobs).set({
+    const updates: any = {
         lastRunAt: new Date(),
         nextRunAt,
         lastResult: result || null,
-        status: success ? 'active' : 'failed' // Or 'paused' depending on retry logic
-    }).where(eq(cronJobs.id, jobId));
+        status: success ? 'active' : 'failed', // Or 'paused' depending on retry logic
+        updatedAt: new Date()
+    };
+
+    if (trajectory !== undefined) updates.trajectory = trajectory;
+    if (stepCount !== undefined) updates.stepCount = stepCount;
+
+    await sqlDb.update(cronJobs).set(updates).where(eq(cronJobs.id, jobId));
 }
 
-export async function updateCronJobStatus(jobId: string, status: 'active' | 'paused' | 'completed'): Promise<void> {
+/**
+ * Incremental state update for in-progress agentic runs.
+ */
+export async function updateCronJobState(jobId: string, trajectory: any, stepCount: number): Promise<void> {
     const sqlDb = getDb();
     await sqlDb.update(cronJobs)
-        .set({ status })
+        .set({ 
+            trajectory, 
+            stepCount,
+            updatedAt: new Date() 
+        })
+        .where(eq(cronJobs.id, jobId));
+}
+
+export async function updateCronJobStatus(jobId: string, status: 'active' | 'paused' | 'completed' | 'failed'): Promise<void> {
+    const sqlDb = getDb();
+    await sqlDb.update(cronJobs)
+        .set({ status, updatedAt: new Date() })
         .where(eq(cronJobs.id, jobId));
 }

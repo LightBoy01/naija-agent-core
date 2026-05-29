@@ -31,16 +31,26 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
         budgetNaira,
         isHermesDelegation,
         hops,
-        rawParameters
+        rawParameters,
+        trajectory: initialTrajectory,
+        stepCount: initialStepCount,
+        cronJobId
     } = job.data;
 
     const currentHops = hops || 0;
-    if (currentHops > 3) {
+    const currentStepCount = initialStepCount || 0;
+
+    if (currentHops >= 5) {
         logger.error({ userPhone: slmPhone, hops: currentHops }, '🚫 [SLM GUARD] Maximum delegation hops reached. Preventing infinite loop.');
         const errorReport = JSON.stringify({ 
             status: "error", 
             report: "Oga, this task is becoming too complex for my sub-agents. Let's simplify what we are trying to do." 
         });
+
+        if (cronJobId) {
+            const { advanceCronJob } = await import('@naija-agent/database');
+            await advanceCronJob(cronJobId, errorReport, false, initialTrajectory, currentStepCount);
+        }
 
         await lifeQueue.add('life-chat-resume', {
             orgId: slmOrgId,
@@ -57,9 +67,10 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
 
     let slmReport = "";
     let cleanedReport = "";
+    let updatedTrajectory = initialTrajectory || [];
 
     if (isHermesDelegation) {
-        logger.info({ sector, userPhone: slmPhone, budget: budgetNaira }, '🚀 [HERMES BRIDGE] Executing high-autonomy delegation...');
+        logger.info({ sector, userPhone: slmPhone, budget: budgetNaira, hops: currentHops }, '🚀 [HERMES BRIDGE] Executing high-autonomy delegation...');
         
         try {
             // Retrieve Organization/Tenant info from PostgreSQL for proxy/config injection
@@ -74,6 +85,14 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
             const hermesArgs = hermesBin === "hermes" ? ["mcp", "serve"] : [path.join(process.cwd(), "hermes-agent/cli.py"), "mcp", "serve"];
             const hermesCmd = hermesBin === "hermes" ? "hermes" : "python3";
 
+            // --- STATEFUL RESUME FOR HERMES ---
+            const hermesArgsWithContext = { 
+                instruction: slmInst, 
+                budget: budgetNaira || 500,
+                resume_trajectory: initialTrajectory,
+                current_step: currentStepCount
+            };
+
             const hermesResponse = await mcpClient.executeStatefulTool(
                 hermesCmd, 
                 hermesArgs, 
@@ -84,21 +103,31 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
                     sectorPack: sector
                 },
                 "hermes_research", 
-                { instruction: slmInst, budget: budgetNaira || 500 }
+                hermesArgsWithContext
             );
+
+            updatedTrajectory = hermesResponse.data?.trajectory || initialTrajectory;
+            const finalStepCount = currentStepCount + (hermesResponse.data?.steps_taken || 1);
 
             cleanedReport = JSON.stringify({
                 status: hermesResponse.error ? "error" : "success",
                 report: hermesResponse.error || hermesResponse.data?.summary || "Hermes operation completed.",
-                data: hermesResponse.data?.details || []
+                data: hermesResponse.data?.details || [],
+                trajectory: updatedTrajectory,
+                step_count: finalStepCount
             });
+
+            if (cronJobId) {
+                const { advanceCronJob } = await import('@naija-agent/database');
+                await advanceCronJob(cronJobId, cleanedReport, !hermesResponse.error, updatedTrajectory, finalStepCount);
+            }
 
         } catch (e: any) {
             logger.error({ error: e.message }, '❌ [HERMES BRIDGE] Bridge execution failed');
             cleanedReport = JSON.stringify({ status: "error", report: "I tried to delegate this to my autonomous engine but the connection was lost." });
         }
 
-        // Return early for Hermes delegation
+        // Pass back to Life Chat
         await lifeQueue.add('life-chat-resume', {
             orgId: slmOrgId,
             userPhone: slmPhone,
@@ -112,7 +141,7 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
         return { success: true, slmReport: cleanedReport };
     }
 
-    logger.info('🤖 Starting SLM Worker...');
+    logger.info({ sector, hops: currentHops }, '🤖 Starting SLM Worker...');
     
     let currentEnergy = initialEnergy ?? 0;
 
@@ -129,17 +158,22 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
         agentPrompt = `You are an SLM worker for the ${sector}. Execute the instruction. Output valid JSON.`;
     }
 
+    // --- STATEFUL CONTEXT INJECTION ---
+    const trajectoryStr = initialTrajectory ? `\n\n[PREVIOUS STEPS TAKEN]:\n${JSON.stringify(initialTrajectory)}` : '';
+
     agentPrompt += `\n\nCRITICAL INSTRUCTION: Output a FINAL REPORT in strictly valid JSON format matching this schema:
 {
-  "status": "success" | "error",
+  "status": "success" | "error" | "in_progress",
   "tool_used": "The name of the tool you used",
   "report": "A comprehensive summary of your research findings or actions.",
+  "trajectory_update": "A single sentence describing what you just did to be added to the history.",
   "data": [ { "title": "Section Title", "content": "Raw Details", "metadata": {} } ] 
 }
-[FULL DETAILS MANDATE]: Provide the absolute most detailed raw data possible. Do not summarize aggressively.`;
+[FULL DETAILS MANDATE]: Provide the absolute most detailed raw data possible. Do not summarize aggressively.
+${trajectoryStr}`;
 
     const rawParamsStr = rawParameters ? `\n[RAW_PARAMETERS_FROM_SUPERVISOR]: ${JSON.stringify(rawParameters)}` : '';
-    const fullInstruction = `[USER_ID]: ${slmPhone}${rawParamsStr}\n<untrusted_user_instruction>\n${slmInst}\n</untrusted_user_instruction>`;
+    const fullInstruction = `[USER_ID]: ${slmPhone}${rawParamsStr}\n[CURRENT_STEP]: ${currentStepCount}\n<untrusted_user_instruction>\n${slmInst}\n</untrusted_user_instruction>`;
 
     // --- TOOL SCOPING (Sector Packs) ---
     const rawTools = globalLifeTools || await getLifeTools();
@@ -159,6 +193,7 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
             status: { type: Type.STRING },
             tool_used: { type: Type.STRING },
             report: { type: Type.STRING },
+            trajectory_update: { type: Type.STRING },
             data: {
                 type: Type.ARRAY,
                 items: {
@@ -247,8 +282,11 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
     const jsonMatch = slmReport.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
         try {
-            JSON.parse(jsonMatch[0]);
+            const parsed = JSON.parse(jsonMatch[0]);
             cleanedReport = jsonMatch[0];
+            if (parsed.trajectory_update) {
+                updatedTrajectory = [...updatedTrajectory, parsed.trajectory_update];
+            }
         } catch(e) {
             cleanedReport = JSON.stringify({ status: "success", report: slmReport });
         }
@@ -256,10 +294,12 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
         cleanedReport = JSON.stringify({ status: "success", report: slmReport || "Completed." });
     }
 
-    if (job.data.isCron) {
-        logger.info({ cronJobId: job.data.cronJobId }, 'Background Cron SLM completed. Logging to DB instead of chat.');
+    const finalStepCount = currentStepCount + 1;
+
+    if (job.data.isCron && cronJobId) {
+        logger.info({ cronJobId }, 'Background Cron SLM completed. Logging state to DB.');
         const { advanceCronJob } = await import('@naija-agent/database');
-        await advanceCronJob(job.data.cronJobId, cleanedReport, true);
+        await advanceCronJob(cronJobId, cleanedReport, true, updatedTrajectory, finalStepCount);
     } else {
         // Pass the baton back to Aelixxr (The Soul)
         await lifeQueue.add('life-chat-resume', {
@@ -269,7 +309,9 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
             originalMessage: slmOrig,
             slmReport: cleanedReport,
             sector,
-            hops: currentHops + 1
+            hops: currentHops + 1,
+            trajectory: updatedTrajectory,
+            stepCount: finalStepCount
         }, { 
             removeOnComplete: true, 
             removeOnFail: false 

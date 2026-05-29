@@ -9,7 +9,8 @@ import {
   decimal,
   integer,
   customType,
-  primaryKey
+  primaryKey,
+  index
 } from 'drizzle-orm/pg-core';
 
 // --- Custom Types ---
@@ -156,12 +157,14 @@ export const cronJobs = pgTable('cron_jobs', {
   name: varchar('name', { length: 255 }).notNull(), // User-friendly name (e.g., 'Visa Monitor')
   instruction: text('instruction').notNull(), // The raw prompt/goal for the Hermes worker
   schedule: varchar('schedule', { length: 100 }).notNull(), // Cron expression (e.g., '0 8 * * *')
-  sectorPack: varchar('sector_pack', { length: 50 }).default('ResearchPack').notNull(),
+  sector_pack: varchar('sector_pack', { length: 50 }).default('ResearchPack').notNull(),
   status: varchar('status', { length: 20 }).default('active').notNull(), // 'active', 'paused', 'completed', 'failed'
   energyBudget: integer('energy_budget').default(5).notNull(), // Max credits per run
   lastRunAt: timestamp('last_run_at'),
   nextRunAt: timestamp('next_run_at'),
   lastResult: text('last_result'),
+  trajectory: jsonb('trajectory'), // Stores the Agent's "Chain of Thought" or progress steps
+  stepCount: integer('step_count').default(0).notNull(), // To track progress across multiple hops
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
