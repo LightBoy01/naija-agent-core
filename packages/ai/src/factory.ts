@@ -1,4 +1,5 @@
 import { AIProvider, GeminiProvider, OpenAIProvider, DashScopeProvider, AIOrchestrator } from './index.js';
+import { ModelCapability, GlobalModelRegistry } from './registry.js';
 
 export type AIProviderType = 'gemini' | 'openai' | 'commandcode' | 'dashscope';
 
@@ -29,22 +30,39 @@ export class AIFactory {
     }
   }
 
+  // Deprecated: Kept for backwards compatibility until all apps migrate
   static createOrchestrator(primary: ProviderConfig, fallback?: ProviderConfig): AIOrchestrator {
-    const primaryProvider = this.createProvider(primary);
-    
-    let fallbackProvider;
-    try {
-      fallbackProvider = fallback && fallback.apiKey && fallback.apiKey !== 'mock-key' 
-        ? this.createProvider(fallback) 
-        : undefined;
-    } catch (e) {
-      console.warn(`⚠️ Fallback provider failed to initialize: ${(e as Error).message}`);
-    }
+    // Wrap the old inputs into a temporary registry so it still works under the new architecture
+    const tempRegistry: ModelCapability[] = [
+        {
+            id: primary.model || 'primary-model',
+            provider: primary.type,
+            baseURL: primary.baseURL,
+            apiKeyEnv: 'TEMP_PRIMARY_KEY',
+            skills: ['reasoning', 'tool-calling', 'audio-in', 'vision-in', 'summarization', 'data-processing'],
+            costProfile: 'high',
+            maxContext: 1000000
+        }
+    ];
 
-    return new AIOrchestrator({
-      primary: primaryProvider,
-      fallback: fallbackProvider,
-      fallbackModelOverride: fallback?.model
-    });
+    if (fallback) {
+        tempRegistry.push({
+            id: fallback.model || 'fallback-model',
+            provider: fallback.type,
+            baseURL: fallback.baseURL,
+            apiKeyEnv: 'TEMP_FALLBACK_KEY',
+            skills: ['reasoning', 'tool-calling', 'summarization'],
+            costProfile: 'low',
+            maxContext: 32000
+        });
+        process.env['TEMP_FALLBACK_KEY'] = fallback.apiKey;
+    }
+    process.env['TEMP_PRIMARY_KEY'] = primary.apiKey;
+
+    return new AIOrchestrator({ registry: tempRegistry, fallbackModelOverride: fallback?.model });
+  }
+
+  static createRouter(registry: ModelCapability[] = GlobalModelRegistry): AIOrchestrator {
+      return new AIOrchestrator({ registry });
   }
 }

@@ -3,11 +3,11 @@ import { JobData, Message, StaffData } from '@naija-agent/types';
 import { WhatsAppService } from '../services/whatsapp.js';
 import { 
   deductBalance,
-  verifyAdminSession, getAllKnowledge, getProducts, logSystemEvent,
+  getAllKnowledge, getProducts, logSystemEvent,
   Organization
 } from '@naija-agent/firebase';
 import {
-  findOrCreateChat, getChatHistory, saveMessage
+  findOrCreateChat, getChatHistory, saveMessage, verifyAdminSession
 } from '@naija-agent/database';
 import { Type } from '@google/genai';
 import { PaymentProvider } from '@naija-agent/payments';
@@ -42,51 +42,6 @@ export async function handleMessage(job: Job<JobData>, deps: MessagingDependenci
   const isManager = isAdmin || isStaff;
   const textTrimmed = content.text?.trim() || '';
 
-  // --- STATE-AWARE PIN INTERCEPTOR (PHASE 9.3) ---
-  let isAwaitingPin = false;
-  const sessionStatus = org.config?.sessionStatus;
-  const sessionExpiry = org.config?.sessionExpiry;
-  if (sessionStatus === 'AWAITING_PIN' && sessionExpiry) {
-      if (new Date(sessionExpiry).getTime() > Date.now()) {
-          isAwaitingPin = true;
-      }
-  }
-
-  let isPinAttempt = !!job.data.isPinAttempt;
-  let pinAttempt = textTrimmed;
-
-  if (isManager && type === 'text' && textTrimmed) {
-      // Standalone 4-digits: ONLY if state says we are waiting for it
-      if (!isPinAttempt && isAwaitingPin && /^\d{4}$/.test(textTrimmed)) { 
-          isPinAttempt = true; 
-      }
-      // Explicit overrides: Always allowed for managers
-      else if (/^#\d{4}$/.test(textTrimmed)) { isPinAttempt = true; pinAttempt = textTrimmed.substring(1); }
-      else if (/^PIN\s+\d{4}$/i.test(textTrimmed)) { isPinAttempt = true; pinAttempt = textTrimmed.split(/\s+/)[1]; }
-  }
-
-  if (isPinAttempt) {
-      // Clear state on any attempt
-      if (isAwaitingPin) {
-          const { getDb } = await import('@naija-agent/firebase');
-          await getDb().collection('organizations').doc(orgId).update({
-              'config.sessionStatus': 'IDLE',
-              'config.sessionExpiry': null
-          });
-      }
-
-      const { setAdminAuth } = await import('@naija-agent/firebase');
-      const bcrypt = await import('bcrypt');
-      let isAuthenticated = false;
-      if (isAdmin) {
-          const storedHash = org.config?.adminPin;
-          if (storedHash) { if (await bcrypt.compare(pinAttempt, storedHash)) { await setAdminAuth(orgId, from); isAuthenticated = true; } }
-      } 
-      if (isAuthenticated) await tenantWhatsAppService.sendText(from, `✅ *PIN Accepted!* Admin Mode unlocked.`);
-      else await tenantWhatsAppService.sendText(from, `❌ *Incorrect PIN.*`);
-      return { success: true };
-  }
-
   const currency = { code: org.currency?.code || 'NGN', symbol: org.currency?.symbol || '₦', locale: org.currency?.locale || 'en-NG' };
   const orgTimeZone = org.timezone || 'Africa/Lagos';
   const currentLocalTime = formatInTimeZone(new Date(), orgTimeZone, 'yyyy-MM-dd HH:mm:ss');
@@ -101,19 +56,19 @@ export async function handleMessage(job: Job<JobData>, deps: MessagingDependenci
   }
 
   // --- PHASE 10: TRIAD PROMPT RESOLUTION ---
-  const globalProtocol = promptService.getPrompt('Zynux.Global.md') || '';
+  const globalProtocol = promptService.getPrompt('Zynux.Soul.md') || '';
   let personaPrompt = '';
 
   if (org.config?.isMaster) {
       personaPrompt = isAdmin 
-        ? promptService.getPrompt('Zynux.Master.md') 
-        : `You are the Official Onboarding Specialist for Naija Agent. Guide this person to register a FREE trial. Use 'register_trial_interest'.`;
+        ? promptService.getPrompt('Master.Agent.md') 
+        : promptService.getPrompt('Onboarding.Agent.md');
   } else if (isCommandCenter) {
-      personaPrompt = promptService.getPrompt('Zynux.Dispatcher.md');
+      personaPrompt = promptService.getPrompt('Dispatcher.Agent.md');
   } else if (isManager) {
-      personaPrompt = promptService.getPrompt('Zynux.Staff.md');
+      personaPrompt = promptService.getPrompt('Staff.Agent.md');
   } else {
-      personaPrompt = promptService.getPrompt('Zynux.Customer.md');
+      personaPrompt = promptService.getPrompt('Customer.Agent.md');
       const customDNA = org.systemPrompt || deps.sectorPack?.systemPrompt || '';
       if (customDNA) personaPrompt += `\n\n[BUSINESS DNA]: ${customDNA}`;
   }
@@ -200,11 +155,7 @@ ${globalProtocol}
       for (const call of functionCalls) {
           const isProtected = PIN_PROTECTED_TOOLS.includes(call.name);
           if (isProtected && (!isAdmin || !isAuth)) {
-              const { getDb } = await import('@naija-agent/firebase');
-              await getDb().collection('organizations').doc(orgId).update({
-                  'config.sessionStatus': 'AWAITING_PIN',
-                  'config.sessionExpiry': new Date(Date.now() + 300000).toISOString() // 5 mins
-              });
+              await redisClient.setex(`expecting_pin:${orgId}:${from}`, 300, 'true');
               toolResponseParts.push({ functionResponse: { name: call.name, response: { status: 'error', code: 'AUTH_REQUIRED' } } });
               continue;
           }
@@ -239,7 +190,9 @@ ${globalProtocol}
                   const parsed = JSON.parse(responseText);
                   parsed.internal_thoughts = `[AI REASONING]: ${followUp.thinking}\n\n${parsed.internal_thoughts}`;
                   responseText = JSON.stringify(parsed);
-              } catch (e) {}
+              } catch (e: any) {
+                  logger.warn({ error: e.message, responseText }, "Failed to parse JSON for internal_thoughts injection.");
+              }
           }
       }
   }

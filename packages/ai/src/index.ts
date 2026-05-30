@@ -54,3 +54,4 @@ export * from './providers/openai.js';
 export * from './providers/dashscope.js';
 export * from './orchestrator.js';
 export * from './factory.js';
+export * from './registry.js';

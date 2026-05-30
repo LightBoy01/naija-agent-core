@@ -81,8 +81,8 @@ func (m *Manager) LoadSessions() {
 
 	var wg sync.WaitGroup
 	for _, device := range devices {
-		// Temporary: Using JID as orgID for auto-hydration until mapping table is ready
-		orgID := device.ID.String()
+		// Hydrate orgID from Redis Edge cache (fallback to JID if missing)
+		orgID := m.publisher.GetHydratedOrgId(device.ID.User)
 
 		wg.Add(1)
 		go func(o string, d *store.Device) {

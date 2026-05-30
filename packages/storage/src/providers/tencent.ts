@@ -50,7 +50,7 @@ export class TencentCOSProvider implements StorageProvider {
               Object.entries(metadata).map(([k, v]) => [`x-cos-meta-${k.toLowerCase()}`, v])
             )
           }
-        }, async (err, data) => {
+        }, async (err: any, data: any) => {
           if (err) {
             if (retryCount < maxRetries) {
               const delay = Math.pow(2, retryCount) * 1000;
@@ -88,7 +88,7 @@ export class TencentCOSProvider implements StorageProvider {
         Key: key,
         Sign: true,
         Expires: 3600 // 1 hour
-      }, (err, data) => {
+      }, (err: any, data: any) => {
         if (err) return reject(err);
         
         let signedUrl = data.Url;

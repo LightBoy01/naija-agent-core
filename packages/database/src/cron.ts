@@ -29,7 +29,7 @@ export async function createCronJob(job: CronJobCreation): Promise<string> {
     await sqlDb.insert(cronJobs).values({
         id: jobId,
         ...job,
-        sectorPack: job.sectorPack || 'ResearchPack',
+        sector_pack: job.sectorPack || 'ResearchPack',
         energyBudget: job.energyBudget || 5,
         status: 'active',
         nextRunAt

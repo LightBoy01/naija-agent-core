@@ -32,7 +32,7 @@ export const SecurityInterceptor: Interceptor = {
       // Clear the expectation lock
       await ctx.redisClient.del(expectingPinKey);
       
-      const { setAdminAuth } = await import('@naija-agent/firebase');
+      const { setAdminAuth } = await import('@naija-agent/database');
       const bcrypt = await import('bcrypt');
       
       let isAuthenticated = false;

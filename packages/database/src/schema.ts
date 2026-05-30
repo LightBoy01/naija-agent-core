@@ -12,6 +12,7 @@ import {
   primaryKey,
   index
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 // --- Custom Types ---
 export const vector = customType<{
@@ -94,7 +95,7 @@ export const memories = pgTable('memories', {
   return {
     userIdIdx: index('memories_user_id_idx').on(table.userId),
     // HNSW index for high-scale vector search (Cosine Distance)
-    embeddingIdx: index('memories_embedding_idx').using('hnsw', sql`${table.embedding} vector_cosine_ops`),
+    embeddingIdx: index('memories_embedding_idx').on(table.embedding),
   };
 });
 
@@ -118,6 +119,7 @@ export const chats = pgTable('chats', {
   isOptedOut: boolean('is_opted_out').default(false).notNull(),
   isCartActive: boolean('is_cart_active').default(false).notNull(),
   lastCartUpdateAt: timestamp('last_cart_update_at'),
+  lastAdminAuthAt: timestamp('last_admin_auth_at'),
   lastNudgeAt: timestamp('last_nudge_at'),
   lastMessageAt: timestamp('last_message_at'),
   summary: varchar('summary', { length: 255 }),
@@ -180,4 +182,30 @@ export const fraudRegistry = pgTable('fraud_registry', {
   return {
     pk: primaryKey({ columns: [table.phoneHash, table.orgId] }),
   };
+});
+
+// --- IronClaw Vault (Secrets Management) ---
+export const vaultSecrets = pgTable('vault_secrets', {
+  id: varchar('id', { length: 128 }).primaryKey(),
+  userId: varchar('user_id', { length: 20 }).references(() => users.phone).notNull(),
+  serviceName: varchar('service_name', { length: 100 }).notNull(),
+  credentials: jsonb('credentials').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// --- Heartbeats (Lightweight Deterministic Reminders) ---
+export const heartbeats = pgTable('heartbeats', {
+  id: varchar('id', { length: 128 }).primaryKey(),
+  userId: varchar('user_id', { length: 20 }).references(() => users.phone).notNull(),
+  type: varchar('type', { length: 50 }).notNull(), // 'reminder', 'market', etc.
+  query: varchar('query', { length: 255 }), // For polling configurations
+  intervalDescription: varchar('interval_description', { length: 255 }),
+  messagePayload: text('message_payload'),
+  vaultTopic: varchar('vault_topic', { length: 100 }),
+  triggerTime: bigint('trigger_time', { mode: 'number' }), // Unix timestamp for one-off reminders
+  active: boolean('active').default(true).notNull(),
+  status: varchar('status', { length: 20 }).default('pending').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

@@ -153,12 +153,12 @@ import {
   getPendingSetups, 
   getNetworkStats, 
   setMfaCode 
-} from '@naija-agent/firebase';
+} from '@naija-agent/database';
 import { WhatsAppService } from '../services/whatsapp.js';
 import crypto from 'crypto';
 
 export async function handleSystemTools(name: string, args: any, ctx: HandlerContext): Promise<any> {
-  const { orgId, from, isAdmin, whatsappService } = ctx;
+  const { orgId, from, isAdmin, whatsappService, redisClient } = ctx;
 
   switch (name) {
     case 'create_tenant':
@@ -186,6 +186,13 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
         if (!args.mfa_code) {
              const code = Math.floor(100000 + Math.random() * 900000).toString();
              await setMfaCode(orgId, code);
+             // Save the pending tool call so the interceptor can resume it
+             if (redisClient) {
+                 await redisClient.setex(`pending_mfa:${orgId}:${from}`, 300, JSON.stringify({
+                     tool: 'broadcast_to_bosses',
+                     args
+                 }));
+             }
              logger.info({ orgId }, '🔐 [SECURITY] Sovereign MFA Challenge generated for Broadcast');
              return { 
                 status: 'error', 
@@ -214,7 +221,7 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
     case 'report_fraud': {
         if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
         // reportFraud signature: (phone, reason)
-        await reportFraud(args.phone, args.reason);
+        await reportFraud(orgId, args.phone, args.reason);
         return { status: 'success', message: 'User added to Global Fraud Guard.' };
     }
 
@@ -229,23 +236,29 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
         });
         return { 
             status: 'success', 
-            message: `Great! We've registered your interest for ${args.name}. Your new Bot Phone will be ${args.botPhone}. Please transfer NGN 5,000 to the Sovereign Bank to activate your trial.` 
+            message: `Great! We've registered your interest for ${args.name}. Your new Bot Phone will be ${args.botPhone}. We've also credited your account with a FREE ₦1,000 Trial Bonus! Proceed to the dashboard to scan the QR code and wake up your AI.` 
         };
     }
 
     case 'request_otp_relay': {
         if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
-        const { getDb } = await import('@naija-agent/firebase');
+        const { getDb, organizations, eq } = await import('@naija-agent/database');
         const db = getDb();
         
         // 1. Update Org Config with Meta Credentials
-        await db.collection('organizations').doc(args.tenantId).update({
-            whatsappPhoneId: args.phoneId,
-            'config.metaAccessToken': args.accessToken,
-            'config.wabaId': args.wabaId,
-            'config.sessionStatus': 'AWAITING_OTP',
-            'config.sessionExpiry': new Date(Date.now() + 300000).toISOString() // 5 mins
-        });
+        const org = await db.select().from(organizations).where(eq(organizations.id, args.tenantId));
+        if (org.length > 0) {
+            const config = (org[0].config as any) || {};
+            config.metaAccessToken = args.accessToken;
+            config.wabaId = args.wabaId;
+            config.sessionStatus = 'AWAITING_OTP';
+            config.sessionExpiry = new Date(Date.now() + 300000).toISOString(); // 5 mins
+
+            await db.update(organizations).set({
+                whatsappPhoneId: args.phoneId,
+                config
+            }).where(eq(organizations.id, args.tenantId));
+        }
 
         // 2. Instruct Sidecar to trigger OTP via Master Bot context
         return { 
@@ -257,6 +270,17 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
     case 'activate_tenant': {
         if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
         await activateTenant(args.tenantId, args.phoneId, args.accessToken);
+        
+        // Push mapping to Redis so sidecar immediately knows about it
+        const org = await getOrgById(args.tenantId);
+        if (org && org.config?.botPhone) {
+            const jid = `${org.config.botPhone}@s.whatsapp.net`;
+            if (ctx.redisClient) {
+                 await ctx.redisClient.set(`sidecar_map:${jid}`, args.tenantId);
+                 await ctx.redisClient.set(`sidecar_map:${org.config.botPhone}`, args.tenantId);
+            }
+        }
+        
         return { status: 'success', message: `Tenant ${args.tenantId} is now LIVE on Meta WhatsApp Cloud API.` };
     }
 

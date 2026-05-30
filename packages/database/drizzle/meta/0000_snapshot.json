@@ -1,5 +1,5 @@
 {
-  "id": "5ca7c1d6-eb53-4cd2-963a-ebec8a1eecdf",
+  "id": "1e2acb66-8878-4a56-8d85-3709873c8382",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "5",
   "dialect": "pg",
@@ -251,6 +251,19 @@
           "primaryKey": false,
           "notNull": false
         },
+        "trajectory": {
+          "name": "trajectory",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "step_count": {
+          "name": "step_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -298,6 +311,69 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {}
     },
+    "fraud_registry": {
+      "name": "fraud_registry",
+      "schema": "",
+      "columns": {
+        "phone_hash": {
+          "name": "phone_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "org_id": {
+          "name": "org_id",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "evidence_url": {
+          "name": "evidence_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "fraud_registry_org_id_organizations_id_fk": {
+          "name": "fraud_registry_org_id_organizations_id_fk",
+          "tableFrom": "fraud_registry",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "org_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "fraud_registry_phone_hash_org_id_pk": {
+          "name": "fraud_registry_phone_hash_org_id_pk",
+          "columns": [
+            "phone_hash",
+            "org_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {}
+    },
     "memories": {
       "name": "memories",
       "schema": "",
@@ -334,7 +410,7 @@
         },
         "embedding": {
           "name": "embedding",
-          "type": "text",
+          "type": "vector(768)",
           "primaryKey": false,
           "notNull": false
         },
@@ -353,7 +429,22 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "memories_user_id_idx": {
+          "name": "memories_user_id_idx",
+          "columns": [
+            "user_id"
+          ],
+          "isUnique": false
+        },
+        "memories_embedding_idx": {
+          "name": "memories_embedding_idx",
+          "columns": [
+            "embedding"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "memories_user_id_users_phone_fk": {
           "name": "memories_user_id_users_phone_fk",
@@ -419,6 +510,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'text'"
+        },
+        "embedding": {
+          "name": "embedding",
+          "type": "vector(768)",
+          "primaryKey": false,
+          "notNull": false
         },
         "reasoning": {
           "name": "reasoning",
@@ -783,6 +880,18 @@
         "context": {
           "name": "context",
           "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "session_status": {
+          "name": "session_status",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "session_expiry": {
+          "name": "session_expiry",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },

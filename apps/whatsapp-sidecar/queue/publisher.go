@@ -48,6 +48,15 @@ type JobData struct {
 	return &Publisher{client: client, bizQueue: bizQueue, lifeQueue: lifeQueue}, nil
 }
 
+func (p *Publisher) GetHydratedOrgId(jid string) string {
+	ctx := context.Background()
+	orgId, err := p.client.Get(ctx, "sidecar_map:"+jid).Result()
+	if err != nil {
+		return jid // Fallback to raw JID if mapping not found
+	}
+	return orgId
+}
+
 func (p *Publisher) PublishMessage(job JobData) error {
 	queueName := p.bizQueue
 	if job.Type == "life-chat" {

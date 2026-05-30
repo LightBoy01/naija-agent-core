@@ -143,10 +143,19 @@ export async function handleProactiveNudge(job: Job, deps: HeartbeatDependencies
             await worker.rateLimit(10);
         }
 
+        // Fetch user context or assume master org
+        let userOrgId = 'naija-agent-master';
+        try {
+            const configs = await heartbeatService.getUserConfigs(userId);
+            if (configs.length > 0 && configs[0].orgId) {
+                userOrgId = configs[0].orgId;
+            }
+        } catch (e) {}
+
         // 1. Trigger Sleep Cycle (Memory Consolidation) first
         await lifeQueue.add('consolidate-memory', {
             userId,
-            orgId: 'naija-agent-master'
+            orgId: userOrgId
         }, {
             jobId: `sleep-cycle-${userId}-${Date.now()}`,
             removeOnComplete: true,

@@ -9,6 +9,14 @@
 - **Credit Awareness:** Gemini is now balance-aware (Context Injection) and responds to balance queries.
 
 ## Recent Changes
+- **Phase 9.4 AI Ecosystem Evolution (Approved Roadmap):**
+    - **Capability-Based Dynamic Router:** Designed the transition from a static Primary/Fallback architecture to a Capability Registry. The AI Orchestrator will dynamically route tasks based on intent to the cheapest/fastest model with the required skills.
+    - **Multi-Client Strategy (Titan-to-Titan):** Approved integration of **DeepSeek-V4-Pro/Flash** (via Tencent TokenHub) for massive 1M-context background tasks, and **Alibaba DashScope (Qwen3-Omni)** for native audio processing.
+    - **Gemini Preservation:** Gemini 3 remains the core for strict MCP tool-calling.
+- **Phase 9.3 Architectural Overhaul (Current):**
+    - **PostgreSQL Migration:** Transitioned core state from Firebase Firestore to PostgreSQL (`@naija-agent/database`) using Drizzle ORM. This includes native `pgvector` support for semantic memory embeddings.
+    - **Go WhatsApp Sidecar:** Deployed a high-performance Go binary (`apps/whatsapp-sidecar`) utilizing `whatsmeow` to handle multi-tenant WhatsApp Web sessions autonomously, bypassing legacy cloud API limits and pushing events to Redis/BullMQ.
+    - **Package Decomposition:** Introduced specialized internal packages (`@naija-agent/ai`, `@naija-agent/logistics`, `@naija-agent/database`) to further decouple the monolithic architecture.
 - **Phase 9.2 Alajo Sovereign Financial System (May 2026):**
     - **Unified Vault Architecture:** Transitioned Aelixxr into a Sovereign Financial Manager. Every user now has a personalized Monnify Virtual Account that funds a unified `vaultBalanceNaira`.
     - **Automated Recharges:** Users can now convert Vault Naira into Aelixxr Energy Credits instantly via the `convert_vault_to_energy` tool.

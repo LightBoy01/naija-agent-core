@@ -2,7 +2,7 @@ import { Storage } from '@google-cloud/storage';
 import { v2 as cloudinary } from 'cloudinary';
 import { getDb } from '@naija-agent/firebase';
 import { GoogleGenAI } from '@google/genai';
-import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 import { z } from 'zod';
 import pino from 'pino';
 import { safeParseJSON } from '../utils/json.js';
@@ -61,7 +61,7 @@ export const VaultDocumentSchema = z.object({
   }),
   storageUrl: z.string().optional(), // Public/Signed URL (OSS, Cloudinary or GCS)
   gcsUri: z.string().optional(), // gs:// path if on GCS
-  provider: z.enum(['cloudinary', 'gcs', 'alibaba-oss']).optional(),
+  provider: z.enum(['cloudinary', 'gcs', 'alibaba-oss', 'tencent-cos']).optional(),
   originalMediaId: z.string().optional(),
   mimeType: z.string(),
   caption: z.string().optional(),
@@ -76,7 +76,7 @@ export type VaultDocument = z.infer<typeof VaultDocumentSchema>;
 
 async function uploadToGCS(userId: string, buffer: Buffer, mimeType: string): Promise<{ url: string; gcsUri: string; provider: 'gcs' }> {
     const bucket = storage.bucket(BUCKET_NAME);
-    const fileId = uuidv4();
+    const fileId = crypto.randomUUID();
     const extension = mimeType.split('/')[1] || 'bin';
     const filePath = `vault/${userId}/${fileId}.${extension}`;
     const file = bucket.file(filePath);
@@ -94,16 +94,17 @@ async function uploadToGCS(userId: string, buffer: Buffer, mimeType: string): Pr
     };
 }
 
-async function uploadToVault(userId: string, buffer: Buffer, mimeType: string, orgId?: string): Promise<{ url: string; gcsUri?: string; provider: 'cloudinary' | 'gcs' | 'alibaba-oss' }> {
-  const fileId = uuidv4();
+async function uploadToVault(userId: string, buffer: Buffer, mimeType: string, orgId?: string): Promise<{ url: string; gcsUri?: string; provider: 'cloudinary' | 'gcs' | 'alibaba-oss' | 'tencent-cos' }> {
+  const fileId = crypto.randomUUID();
   const extension = mimeType.split('/')[1] || 'bin';
   const fileName = `${fileId}.${extension}`;
 
   const url = await uploadMedia(orgId || 'vault', fileName, buffer, mimeType, { userId });
   
-  let provider: 'cloudinary' | 'gcs' | 'alibaba-oss' = 'gcs';
+  let provider: 'cloudinary' | 'gcs' | 'alibaba-oss' | 'tencent-cos' = 'gcs';
   if (url.includes('cloudinary')) provider = 'cloudinary';
   else if (url.includes('aliyuncs.com')) provider = 'alibaba-oss';
+  else if (url.includes('myqcloud.com')) provider = 'tencent-cos';
 
   return { 
     url, 
@@ -280,7 +281,7 @@ export async function ingestDocument(
   const embedding = await getMultimodalEmbedding(buffer, mimeType, gcsUri, analysis.summary, apiKey);
 
   // 4. Save to Database (The "Index")
-  const docId = uuidv4();
+  const docId = crypto.randomUUID();
   const doc: VaultDocument = {
     id: docId,
     userId,
@@ -352,7 +353,7 @@ export async function ingestNote(
   } catch (e) {}
 
   // 2. Save to Database
-  const docId = uuidv4();
+  const docId = crypto.randomUUID();
   const doc: VaultDocument = {
     id: docId,
     userId,

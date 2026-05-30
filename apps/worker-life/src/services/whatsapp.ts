@@ -12,7 +12,27 @@ export class WhatsAppService {
     this.apiUrl = `https://graph.facebook.com/v21.0`;
   }
 
-  async sendText(to: string, text: string) {
+  async sendText(to: string, text: string, optionalPhoneId?: string) {
+    const targetPhoneId = optionalPhoneId || this.phoneNumberId;
+
+    if (targetPhoneId.startsWith('baileys-')) {
+        const sidecarUrl = process.env.SIDECAR_URL || 'http://localhost:8080';
+        const orgId = targetPhoneId.replace('baileys-', '');
+        try {
+            await axios.post(`${sidecarUrl}/send`, {
+                orgId,
+                to,
+                text
+            }, {
+                headers: { 'X-API-Key': process.env.ADMIN_API_KEY }
+            });
+            return;
+        } catch (error: any) {
+            logger.error({ error: error.response?.data || error.message }, 'Sidecar WhatsApp Send Failed');
+            return;
+        }
+    }
+
     // 1. Logic: Group paragraphs into coarser "Coarse Bubbles" (Approx 800 chars)
     // This prevents notification fatigue while still chunking long answers.
     const paragraphs = text.split(/\n\n+/);
@@ -40,7 +60,7 @@ export class WhatsAppService {
 
         for (const chunk of subChunks) {
             await axios.post(
-              `${this.apiUrl}/${this.phoneNumberId}/messages`,
+              `${this.apiUrl}/${targetPhoneId}/messages`,
               {
                 messaging_product: 'whatsapp',
                 recipient_type: 'individual',

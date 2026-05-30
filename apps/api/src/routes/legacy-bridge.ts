@@ -3,7 +3,7 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
-import { getOrgByBridgeSecret } from '@naija-agent/firebase';
+import { getOrgByBridgeSecret } from '@naija-agent/database';
 import { JobData } from '@naija-agent/types';
 
 export interface LegacyBridgeOptions {

@@ -25,6 +25,8 @@ import { MediaInterceptor } from '../pipeline/interceptors/media.js';
 
 import { redactPII } from '../utils/security.js';
 
+import { redisClient } from '../index.js';
+
 export interface ChatDependencies {
     ai: AIProvider;
     getDynamicModels: (systemInstruction?: string) => Promise<any>;
@@ -40,12 +42,20 @@ const lifePipeline = new LifePipeline()
 
 export async function handleLifeChat(job: Job, deps: ChatDependencies) {
     const { ai, getDynamicModels, lifeQueue, apiKey } = deps;
-    const { userPhone, message: rawMessage, orgId, imageId, documentId, audioId, type, hops = 0 } = job.data;
+    const userPhone = job.data.userPhone || job.data.from || job.data.From;
+    const rawMessage = job.data.message !== undefined ? job.data.message : job.data.content?.text;
+    const orgId = job.data.orgId;
+    const imageId = job.data.imageId || job.data.content?.imageId;
+    const documentId = job.data.documentId || job.data.content?.documentId;
+    const audioId = job.data.audioId || job.data.content?.audioId;
+    const type = job.data.type;
+    const hops = job.data.hops || 0;
+    const phoneId = job.data.phoneId;
     
     // 🛡️ ASP G1: The Loop Guard
     if (hops >= 3) {
         logger.warn({ userPhone, hops }, '🚫 [LOOP GUARD] Maximum delegation hops reached. Aborting to prevent infinite loop.');
-        await whatsappService.sendText(userPhone, "Oga, I don try reach out to all my experts but we don dey loop too much! Make we try another way or simplify wetin you need. 🛑");
+        await whatsappService.sendText(userPhone, "Oga, I don try reach out to all my experts but we don dey loop too much! Make we try another way or simplify wetin you need. 🛑", phoneId);
         return { success: false, error: 'LOOP_GUARD_TRIGGERED' };
     }
 
@@ -71,9 +81,11 @@ export async function handleLifeChat(job: Job, deps: ChatDependencies) {
         mediaBuffer: null,
         mediaMime: null,
         ai,
+        phoneId,
         getDynamicModels,
         lifeQueue,
         apiKey,
+        redisClient, // <--- Add Redis Client here
         shortCircuit: false
     };
 
@@ -93,13 +105,8 @@ export async function handleLifeChat(job: Job, deps: ChatDependencies) {
 
         if (ctx.message) {
             // Retrieve long-term memories relevant to current input
-            const embeddingResult = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key=${process.env.GEMINI_API_KEY_EMBEDDING || apiKey}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content: { parts: [{ text: ctx.message }] } })
-            });
-            const embedData = await embeddingResult.json() as any;
-            const vector = (embedData.embedding?.values || []).slice(0, 768);
+            const fullVector = await ai.embedText(ctx.message);
+            const vector = fullVector.slice(0, 768);
             
             if (vector.length === 768) {
                 const { lifeMemory } = await import('../services/lifeMemory.js');
@@ -172,7 +179,7 @@ ${ctx.ingestionSummary}
                         hops: (job.data.hops || 0) + 1
                     });
                     const replyMsg = `I'm consulting my ${call.args.sector} expert... ⏳`;
-                    await whatsappService.sendText(ctx.userPhone, replyMsg);
+                    await whatsappService.sendText(ctx.userPhone, replyMsg, ctx.phoneId);
                     const safeUserMessage = ctx.message ? redactPII(ctx.message) : (ctx.type === 'text' ? '[Empty Message]' : `[${ctx.type.toUpperCase()}]`);
                     await saveMessage(chatId, { role: 'user', content: safeUserMessage, type: ctx.type as any });
                     await saveMessage(chatId, { role: 'assistant', content: replyMsg, type: 'text' });
@@ -194,9 +201,9 @@ ${ctx.ingestionSummary}
                 }
                 
                 toolResponses.push({ functionResponse: { name: call.name, response: toolResult } });
-                }
+            }
 
-                if (toolResponses.length > 0) {
+            if (toolResponses.length > 0) {
                 const toolHistory = [...normalizedHistory, result, { role: 'function', parts: toolResponses }] as AIMessage[];
                 const followUp = await ai.chat(toolHistory, "Continue based on tool results.", {
                     model: primaryModel,
@@ -207,12 +214,12 @@ ${ctx.ingestionSummary}
                 if (followUp.thinking) {
                     logger.info({ userPhone: ctx.userPhone, thinking: followUp.thinking }, '🧠 [Agentic Thought - FollowUp]');
                 }
-                }
-                }
+            }
+        }
 
-                if (text) {
+        if (text) {
                 await billingService.billForMessage(ctx.userPhone);
-                await whatsappService.sendText(ctx.userPhone, Formatter.format(text));
+                await whatsappService.sendText(ctx.userPhone, Formatter.format(text), ctx.phoneId);
                 const safeUserMessage = ctx.message ? redactPII(ctx.message) : (ctx.type === 'text' ? '[Empty Message]' : `[${ctx.type.toUpperCase()}]`);
                 await saveMessage(chatId, { role: 'user', content: safeUserMessage, type: ctx.type as any });
 
@@ -233,7 +240,7 @@ ${ctx.ingestionSummary}
 
 export async function handleLifeChatResume(job: Job, deps: ChatDependencies) {
     const { ai, getDynamicModels } = deps;
-    const { userPhone, slmReport, chatId, sector, orgId } = job.data;
+    const { userPhone, slmReport, chatId, sector, orgId, phoneId } = job.data;
     
     const org = await getOrgById(orgId || 'naija-agent-master');
     const soulPrompt = promptService.getPrompt('Aelixxr.Soul.md');
@@ -265,7 +272,7 @@ DO NOT just repeat the report; provide the 'So What?' for the user's life.`;
     });
 
     if (result.text) {
-        await whatsappService.sendText(userPhone, Formatter.format(result.text));
+        await whatsappService.sendText(userPhone, Formatter.format(result.text), phoneId);
         await saveMessage(chatId, { role: 'assistant', content: result.text, type: 'text' });
     }
 

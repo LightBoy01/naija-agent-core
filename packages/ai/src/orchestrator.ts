@@ -1,69 +1,141 @@
 import { AIProvider, AIMessage, AIOptions, AIResponse } from './index.js';
+import { ModelCapability, ModelSkill } from './registry.js';
+import { AIFactory } from './factory.js';
 
-export interface OrchestratorOptions {
-  primary: AIProvider;
-  fallback?: AIProvider;
+export interface DynamicOrchestratorOptions {
+  registry: ModelCapability[];
   fallbackModelOverride?: string;
 }
 
 export class AIOrchestrator implements AIProvider {
-  name = 'orchestrator';
-  private primary: AIProvider;
-  private fallback?: AIProvider;
+  name = 'dynamic-orchestrator';
+  private registry: ModelCapability[];
   private fallbackModelOverride?: string;
+  private providers: Map<string, AIProvider> = new Map();
 
-  constructor(options: OrchestratorOptions) {
-    this.primary = options.primary;
-    this.fallback = options.fallback;
+  constructor(options: DynamicOrchestratorOptions) {
+    this.registry = options.registry;
     this.fallbackModelOverride = options.fallbackModelOverride;
   }
 
-  private async tryWithFallback<T>(fn: (provider: AIProvider, options?: AIOptions) => Promise<T>, options?: AIOptions): Promise<T> {
-    try {
-      return await fn(this.primary, options);
-    } catch (err: any) {
-      if (this.fallback && (
-          err.message?.includes('429') || 
-          err.message?.includes('Quota') || 
-          err.message?.includes('503') ||
-          err.message?.includes('overloaded') ||
-          err.message?.includes('RESOURCE_EXHAUSTED') ||
-          err.status === 429
-      )) {
-        console.warn(`⚠️ Primary provider [${this.primary.name}] failed: ${err.message}. Falling back to [${this.fallback.name}]...`);
-        // Override model if fallback model string is provided, otherwise it will try to use the primary model string (e.g. 'gemini-3-flash') which might fail on DeepSeek
-        const fallbackOptions = options ? { ...options } : undefined;
-        if (fallbackOptions && this.fallbackModelOverride) {
-            fallbackOptions.model = this.fallbackModelOverride;
-        } else if (fallbackOptions && this.fallback.name === 'openai') {
-            fallbackOptions.model = 'deepseek-chat'; // default to deepseek chat if no override
-        } else if (fallbackOptions && this.fallback.name === 'gemini') {
-             // If falling back to Gemini itself (e.g., using a different tier or just retrying), 
-             // ensure we try a lighter model if the primary was heavy.
-             if (fallbackOptions.model?.includes('gemini-3-flash')) {
-                 fallbackOptions.model = 'gemini-2.5-flash';
-             }
-        }
-
-        return await fn(this.fallback, fallbackOptions);
+  private getProviderForSkill(skill: ModelSkill, preferredCost: 'high' | 'medium' | 'low' | 'ultra-low' = 'low'): { provider: AIProvider, model: ModelCapability } {
+      // 1. Filter models by skill
+      const capableModels = this.registry.filter(m => m.skills.includes(skill));
+      if (capableModels.length === 0) {
+          throw new Error(`[CapabilityRouter] No models found with required skill: ${skill}`);
       }
-      throw err;
-    }
+
+      // 2. Sort by cost (roughly matching preferredCost)
+      const costScores = { 'ultra-low': 1, 'low': 2, 'medium': 3, 'high': 4 };
+      capableModels.sort((a, b) => costScores[a.costProfile] - costScores[b.costProfile]);
+      
+      // Use the cheapest capable model unless specifically requesting a high-cost one
+      let selectedModel = capableModels[0];
+      if (preferredCost === 'high') {
+          selectedModel = capableModels[capableModels.length - 1]; // Use the most powerful
+      }
+
+      // 3. Lazy Load Provider Instance
+      if (!this.providers.has(selectedModel.id)) {
+          const apiKey = process.env[selectedModel.apiKeyEnv] || '';
+          this.providers.set(selectedModel.id, AIFactory.createProvider({
+              type: selectedModel.provider,
+              apiKey: apiKey,
+              baseURL: selectedModel.baseURL,
+              model: selectedModel.id
+          }));
+      }
+
+      return { provider: this.providers.get(selectedModel.id)!, model: selectedModel };
+  }
+
+  private async executeWithFailover<T>(
+      skill: ModelSkill, 
+      cost: 'high' | 'low', 
+      fn: (provider: AIProvider, modelId: string) => Promise<T>
+  ): Promise<T> {
+      const capableModels = this.registry.filter(m => m.skills.includes(skill));
+      if (capableModels.length === 0) throw new Error(`No models support ${skill}`);
+
+      // Sort by cost
+      const costScores = { 'ultra-low': 1, 'low': 2, 'medium': 3, 'high': 4 };
+      capableModels.sort((a, b) => costScores[a.costProfile] - costScores[b.costProfile]);
+      
+      // Attempt models starting from the preferred target
+      const targets = cost === 'high' ? [...capableModels].reverse() : capableModels;
+
+      let lastError: any = null;
+      for (const target of targets) {
+          try {
+              if (!this.providers.has(target.id)) {
+                  const apiKey = process.env[target.apiKeyEnv] || '';
+                  if (!apiKey) {
+                      console.warn(`[CapabilityRouter] Skipping ${target.id} due to missing API key (${target.apiKeyEnv})`);
+                      continue;
+                  }
+                  this.providers.set(target.id, AIFactory.createProvider({
+                      type: target.provider,
+                      apiKey: apiKey,
+                      baseURL: target.baseURL,
+                      model: target.id
+                  }));
+              }
+              
+              const provider = this.providers.get(target.id)!;
+              return await fn(provider, target.id);
+          } catch (err: any) {
+              lastError = err;
+              if (
+                  err.message?.includes('429') || 
+                  err.message?.includes('Quota') || 
+                  err.message?.includes('503') ||
+                  err.message?.includes('overloaded') ||
+                  err.message?.includes('RESOURCE_EXHAUSTED') ||
+                  err.status === 429
+              ) {
+                  console.warn(`⚠️ Provider [${target.id}] failed: ${err.message}. Routing to next capability...`);
+                  continue; // Try next model
+              }
+              throw err; // If it's a hard error (e.g., bad request), throw it
+          }
+      }
+      throw lastError || new Error(`[CapabilityRouter] All capable models failed for skill: ${skill}`);
   }
 
   async generateText(prompt: string, options?: AIOptions): Promise<AIResponse> {
-    return this.tryWithFallback((p, opts) => p.generateText(prompt, opts), options);
+    return this.executeWithFailover('reasoning', 'low', (p, modelId) => p.generateText(prompt, { ...options, model: modelId }));
   }
 
   async chat(history: AIMessage[], message: string | import('./index.js').AIMessagePart[], options?: AIOptions): Promise<AIResponse> {
-    return this.tryWithFallback((p, opts) => p.chat(history, message, opts), options);
+    // Dynamic Routing Detection
+    let skill: ModelSkill = 'reasoning';
+    let cost: 'high' | 'low' = 'low';
+
+    if (options?.tools && options.tools.length > 0) {
+        skill = 'tool-calling';
+        cost = 'high'; // Tools demand high-tier models
+    }
+    
+    // Check if message has audio parts
+    if (typeof message !== 'string') {
+        const hasAudio = message.some(part => part.inlineData?.mimeType.startsWith('audio/'));
+        if (hasAudio) {
+            skill = 'audio-in';
+        }
+        const hasVision = message.some(part => part.inlineData?.mimeType.startsWith('image/'));
+        if (hasVision) {
+            skill = 'vision-in';
+        }
+    }
+
+    return this.executeWithFailover(skill, cost, (p, modelId) => p.chat(history, message, { ...options, model: modelId }));
   }
 
   async analyzeImage(buffer: Buffer, mimeType: string, prompt: string, options?: AIOptions): Promise<AIResponse> {
-    return this.tryWithFallback((p, opts) => p.analyzeImage(buffer, mimeType, prompt, opts), options);
+    return this.executeWithFailover('vision-in', 'low', (p, modelId) => p.analyzeImage(buffer, mimeType, prompt, { ...options, model: modelId }));
   }
 
   async embedText(text: string): Promise<number[]> {
-    return this.tryWithFallback((p) => p.embedText(text));
+    return this.executeWithFailover('reasoning', 'low', (p) => p.embedText(text));
   }
 }

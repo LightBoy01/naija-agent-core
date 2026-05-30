@@ -61,7 +61,7 @@ async function main() {
   // Compile all packages together to save memory (Termux OOM fix)
   console.log(`🔨 Compiling all packages via TypeScript Project References...`);
   try {
-    execSync('npx tsc -b packages/types packages/firebase packages/payments packages/storage packages/logistics packages/ai packages/database', { stdio: 'inherit' });
+    execSync('node ./node_modules/typescript/bin/tsc -b packages/types packages/database packages/firebase packages/payments packages/storage packages/logistics packages/ai', { stdio: 'inherit' });
   } catch (e) {
     console.error(`❌ Package compilation failed`);
     process.exit(1);
@@ -87,7 +87,7 @@ async function main() {
     console.log('✅ Copied mcp-fetch.mjs to apps/worker-life/dist/utils');
   }
 
-  // Ensure prompts are copied
+  // Ensure prompts are copied (Worker Life)
   const promptsSrcDir = path.join(process.cwd(), 'apps/worker-life/src/prompts');
   const promptsDestDir = path.join(process.cwd(), 'apps/worker-life/dist/prompts');
   if (fs.existsSync(promptsSrcDir)) {
@@ -98,6 +98,19 @@ async function main() {
       fs.copyFileSync(path.join(promptsSrcDir, file), path.join(promptsDestDir, file));
     });
     console.log('✅ Copied prompts to apps/worker-life/dist/prompts');
+  }
+
+  // Ensure prompts are copied (Worker / Zynux)
+  const workerPromptsSrcDir = path.join(process.cwd(), 'apps/worker/src/prompts');
+  const workerPromptsDestDir = path.join(process.cwd(), 'apps/worker/dist/prompts');
+  if (fs.existsSync(workerPromptsSrcDir)) {
+    if (!fs.existsSync(workerPromptsDestDir)) {
+      fs.mkdirSync(workerPromptsDestDir, { recursive: true });
+    }
+    fs.readdirSync(workerPromptsSrcDir).forEach(file => {
+      fs.copyFileSync(path.join(workerPromptsSrcDir, file), path.join(workerPromptsDestDir, file));
+    });
+    console.log('✅ Copied prompts to apps/worker/dist/prompts');
   }
   
   console.log("\n🎉 All apps bundled successfully!");

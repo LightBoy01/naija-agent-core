@@ -215,3 +215,36 @@ export async function syncCartState(chatId: string, isActive: boolean) {
     .where(eq(chats.id, chatId));
 }
 
+
+export async function getExpiredCarts(expirationMinutes: number = 15) {
+  const db = getDb();
+  const expirationTime = new Date(Date.now() - expirationMinutes * 60 * 1000);
+  const activeCarts = await db.select().from(chats).where(eq(chats.isCartActive, true));
+  return activeCarts.filter(c => c.lastCartUpdateAt && c.lastCartUpdateAt < expirationTime);
+}
+
+export async function clearCart(chatId: string) {
+  const db = getDb();
+  await db.update(chats)
+    .set({ isCartActive: false, lastCartUpdateAt: null })
+    .where(eq(chats.id, chatId));
+}
+
+export async function setAdminAuth(orgId: string, adminPhone: string): Promise<void> {
+  const db = getDb();
+  const chatId = `${orgId}_${adminPhone}`;
+  await db.update(chats)
+    .set({ lastAdminAuthAt: new Date() })
+    .where(eq(chats.id, chatId));
+}
+
+export async function verifyAdminSession(orgId: string, adminPhone: string): Promise<boolean> {
+  const db = getDb();
+  const chatId = `${orgId}_${adminPhone}`;
+  const record = await db.select().from(chats).where(eq(chats.id, chatId));
+  if (record.length === 0 || !record[0].lastAdminAuthAt) return false;
+  
+  const lastAuth = record[0].lastAdminAuthAt.getTime();
+  const isExpired = (Date.now() - lastAuth) > 7200000; // 2 hours
+  return !isExpired;
+}

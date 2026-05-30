@@ -108,6 +108,7 @@ import { OrgLoadInterceptor } from './pipeline/interceptors/org-load.js';
 import { RateLimitInterceptor } from './pipeline/interceptors/rate-limit.js';
 import { FraudInterceptor } from './pipeline/interceptors/fraud.js';
 import { SecurityInterceptor } from './pipeline/interceptors/security.js';
+import { MfaInterceptor } from './pipeline/interceptors/mfa.js';
 import { BillingInterceptor } from './pipeline/interceptors/billing.js';
 import { MediaInterceptor } from './pipeline/interceptors/media.js';
 
@@ -118,7 +119,24 @@ const messagePipeline = new MessagePipeline()
   .use(RateLimitInterceptor)
   .use(FraudInterceptor)
   .use(SecurityInterceptor)
+  .use(MfaInterceptor)
   .use(BillingInterceptor);
+
+// --- Hydrate Sidecar Map in Redis ---
+import { getAllOrgs } from '@naija-agent/database';
+async function hydrateSidecar() {
+    const orgs = await getAllOrgs();
+    for (const org of orgs) {
+        const config = org.config as any;
+        if (config?.botPhone) {
+            const jid = `${config.botPhone}@s.whatsapp.net`;
+            await redisClient.set(`sidecar_map:${jid}`, org.id);
+            await redisClient.set(`sidecar_map:${config.botPhone}`, org.id); // fallback
+        }
+    }
+    logger.info(`✅ Hydrated sidecar mapping for ${orgs.length} organizations in Redis`);
+}
+hydrateSidecar().catch(e => logger.error({error: e.message}, "Failed to hydrate sidecar mapping"));
 
 // --- Main Worker ---
 const worker = new Worker<JobData>(

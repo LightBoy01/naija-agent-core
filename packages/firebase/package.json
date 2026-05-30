@@ -18,6 +18,7 @@
     "seed": "npx ts-node-dev scripts/seed.ts"
   },
   "dependencies": {
+    "@naija-agent/database": "*",
     "@naija-agent/types": "^1.0.0",
     "bcrypt": "^6.0.0",
     "dotenv": "^16.4.1",

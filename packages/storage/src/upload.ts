@@ -60,7 +60,7 @@ export async function uploadMedia(
             context: metadata,
             tags: [orgId, 'naija-agent']
           },
-          (error, result) => {
+          (error: any, result: any) => {
             if (error) return reject(error);
             resolve(result?.secure_url || '');
           }

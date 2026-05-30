@@ -1,6 +1,5 @@
-import { getDb as getFirestore } from '@naija-agent/firebase';
-import { getDb, users, transactions, referrals } from '@naija-agent/database';
-import { eq, sql, and } from 'drizzle-orm';
+import { getDb, users, transactions, referrals, memories } from '@naija-agent/database';
+import { eq, sql, and, desc } from 'drizzle-orm';
 import { LifeContext, parseAndFormatPhone } from '@naija-agent/types';
 import { logger } from '../utils/logger.js';
 import { randomUUID } from 'crypto';
@@ -323,14 +322,7 @@ export class LifeMemoryService {
 
   async updateContext(phone: string, updates: Partial<LifeContext>): Promise<void> {
     try {
-      // Semantic updates still go to Firebase NoSQL for now
-      const db = getFirestore();
-      await db.collection(this.collection).doc(phone).set({
-        ...updates,
-        lastInteraction: new Date()
-      }, { merge: true });
-      
-      // Also update the JSON context in SQL for hybrid sync
+      // Update the JSON context in SQL directly
       const sqlDb = getDb();
       const userResult = await sqlDb.select({ context: users.context }).from(users).where(sql`${users.phone} = ${phone}` as any).limit(1);
       if (userResult[0]) {
@@ -340,13 +332,13 @@ export class LifeMemoryService {
            updatedAt: new Date()
          };
 
-         if (updates.sessionStatus !== undefined) sqlUpdates.sessionStatus = updates.sessionStatus;
-         if (updates.sessionExpiry !== undefined) sqlUpdates.sessionExpiry = updates.sessionExpiry;
+         if (updates.pinAttempts !== undefined) sqlUpdates.pinAttempts = updates.pinAttempts;
+         if (updates.pinLockUntil !== undefined) sqlUpdates.pinLockUntil = updates.pinLockUntil;
 
          await sqlDb.update(users).set(sqlUpdates).where(sql`${users.phone} = ${phone}` as any);
       }
 
-      logger.info({ phone, updates }, '💾 Updated Life Memory (Hybrid Sync)');
+      logger.info({ phone, updates }, '💾 Updated Life Memory (PostgreSQL)');
     } catch (error: any) {
       logger.error({ phone, error: error.message }, 'Failed to update Life Context');
     }
@@ -354,22 +346,37 @@ export class LifeMemoryService {
 
   async saveEpisodicEvent(phone: string, title: string, details: string, emotionalValence: string = 'neutral'): Promise<void> {
     try {
-      // Episodic events remain purely NoSQL
-      const db = getFirestore();
-      const event = { title, details, emotionalValence, timestamp: new Date() };
-      await db.collection(this.collection).doc(phone).collection('episodic_events').add(event);
-      logger.info({ phone, title, emotionalValence }, '📖 Saved Episodic Event to Firebase Vault History');
+      const sqlDb = getDb();
+      await sqlDb.insert(memories).values({
+        id: randomUUID(),
+        userId: phone,
+        orgId: 'LightBoy01', // TODO: Make orgId dynamic if episodic events are org-scoped
+        category: 'episodic',
+        content: JSON.stringify({ title, details, emotionalValence }),
+        embedding: null, // Nullable vector
+        importance: 1
+      });
+      logger.info({ phone, title, emotionalValence }, '📖 Saved Episodic Event to PostgreSQL (memories)');
     } catch (error: any) {
       logger.error({ phone, error: error.message }, 'Failed to save Episodic Event');
     }
   }
 
-  async getRecentEpisodicEvents(phone: string, limit: number = 5): Promise<any[]> {
+  async getRecentEpisodicEvents(phone: string, limitNum: number = 5): Promise<any[]> {
     try {
-      const db = getFirestore();
-      const snapshot = await db.collection(this.collection).doc(phone).collection('episodic_events')
-        .orderBy('timestamp', 'desc').limit(limit).get();
-      return snapshot.docs.map(doc => doc.data()).reverse();
+      const sqlDb = getDb();
+      const results = await sqlDb.select()
+        .from(memories)
+        .where(
+          and(
+            eq(memories.userId, phone),
+            eq(memories.category, 'episodic')
+          )
+        )
+        .orderBy(desc(memories.createdAt))
+        .limit(limitNum);
+        
+      return results.map(row => JSON.parse(row.content)).reverse();
     } catch (error: any) {
       logger.error({ phone, error: error.message }, 'Failed to fetch Episodic Events');
       return [];

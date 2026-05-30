@@ -47,20 +47,20 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
             report: "Oga, this task is becoming too complex for my sub-agents. Let's simplify what we are trying to do." 
         });
 
-        if (cronJobId) {
+        if (job.data.isCron && cronJobId) {
             const { advanceCronJob } = await import('@naija-agent/database');
             await advanceCronJob(cronJobId, errorReport, false, initialTrajectory, currentStepCount);
+        } else {
+            await lifeQueue.add('life-chat-resume', {
+                orgId: slmOrgId,
+                userPhone: slmPhone,
+                chatId: slmChatId,
+                originalMessage: slmOrig,
+                slmReport: errorReport,
+                sector,
+                hops: currentHops
+            }, { removeOnComplete: true });
         }
-
-        await lifeQueue.add('life-chat-resume', {
-            orgId: slmOrgId,
-            userPhone: slmPhone,
-            chatId: slmChatId,
-            originalMessage: slmOrig,
-            slmReport: errorReport,
-            sector,
-            hops: currentHops
-        }, { removeOnComplete: true });
 
         return { success: false, error: 'max_hops_reached' };
     }
@@ -117,7 +117,7 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
                 step_count: finalStepCount
             });
 
-            if (cronJobId) {
+            if (job.data.isCron && cronJobId) {
                 const { advanceCronJob } = await import('@naija-agent/database');
                 await advanceCronJob(cronJobId, cleanedReport, !hermesResponse.error, updatedTrajectory, finalStepCount);
             }
@@ -127,16 +127,18 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
             cleanedReport = JSON.stringify({ status: "error", report: "I tried to delegate this to my autonomous engine but the connection was lost." });
         }
 
-        // Pass back to Life Chat
-        await lifeQueue.add('life-chat-resume', {
-            orgId: slmOrgId,
-            userPhone: slmPhone,
-            chatId: slmChatId,
-            originalMessage: slmOrig,
-            slmReport: cleanedReport,
-            sector,
-            hops: currentHops + 1
-        }, { removeOnComplete: true });
+        if (!job.data.isCron) {
+            // Pass back to Life Chat
+            await lifeQueue.add('life-chat-resume', {
+                orgId: slmOrgId,
+                userPhone: slmPhone,
+                chatId: slmChatId,
+                originalMessage: slmOrig,
+                slmReport: cleanedReport,
+                sector,
+                hops: currentHops + 1
+            }, { removeOnComplete: true });
+        }
 
         return { success: true, slmReport: cleanedReport };
     }

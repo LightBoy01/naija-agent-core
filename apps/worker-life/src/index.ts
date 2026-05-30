@@ -26,7 +26,7 @@ import { handleSovereignCronTick, SovereignCronDependencies } from './handlers/c
 
 // --- Redis & AI Configuration ---
 const redisUrl = process.env.REDIS_URL_LOS || process.env.REDIS_URL; 
-const redisClient = new Redis(redisUrl || 'redis://localhost:6379', {
+export const redisClient = new Redis(redisUrl || 'redis://localhost:6379', {
     maxRetriesPerRequest: null,
     tls: redisUrl?.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
 });
@@ -102,6 +102,7 @@ const worker: Worker = new Worker(
                 logger.info('👮 Admin Command: Refreshing Prompts');
                 return { success: promptService.refresh() };
 
+            case 'process-message':
             case 'life-chat':
                 return await handleLifeChat(job, deps);
             

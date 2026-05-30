@@ -145,7 +145,7 @@ export class OpenAIProvider implements AIProvider {
     return {
       text,
       thinking,
-      functionCalls: response.choices[0].message.tool_calls?.map(tc => ({
+      functionCalls: response.choices[0].message.tool_calls?.map((tc: any) => ({
         name: tc.function.name,
         args: JSON.parse(tc.function.arguments)
       })),
@@ -192,5 +192,13 @@ export class OpenAIProvider implements AIProvider {
         totalTokens: response.usage?.total_tokens || 0
       }
     };
+  }
+  async embedText(text: string): Promise<number[]> {
+    const response = await this.client.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: text,
+      encoding_format: 'float'
+    });
+    return response.data[0].embedding;
   }
 }

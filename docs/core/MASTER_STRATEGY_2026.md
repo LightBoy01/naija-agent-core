@@ -86,6 +86,19 @@ Enable LOS agents to seamlessly purchase from BOS agents.
 *   Launch `pack_health` and `pack_property`.
 *   **Success Metric:** Non-retail tenant acquisition.
 
-### Phase 4: The Empire Bridge
-*   Connect LOS search to BOS inventory.
-*   **Success Metric:** Cross-agent transaction volume.
+### Phase 10: Agentic Network Fusion (Triad Architecture)
+*   Decompose monolithic prompts into Soul.md (Core Protocol), Agent.md (Persona), and Skill.md (Tools).
+*   Integrate Aelixxr Sovereign Vault (Monnify Virtual Accounts) natively into onboarding.
+*   **Success Metric:** Frictionless multi-tenant AI onboarding and deployment.
+
+### Phase 11: The China-Africa Hybrid Cloud (Tencent Migration)
+*   **Architecture:** Shift from Vercel/Firebase to Tencent Cloud Run (API) + Lighthouse (Workers) + Managed TencentDB (Postgres/Redis) + Tencent COS (Storage).
+*   **The Sidecar Edge:** Deploy lightweight Go binaries (`whatsapp-sidecar`) to maintain 100k+ `whatsmeow` websockets with Meta, queuing payloads directly into Redis.
+*   **Security:** Map `JID -> Org Slug` in Postgres for perfect tenant routing.
+*   **Success Metric:** O(1) node scaling capable of handling 50,000 concurrent messages securely.
+
+---
+**CRITICAL NEXT STEPS (Post-Phase 10 Review):**
+1. **The Great Firebase Purge:** Eradicate all remaining `@naija-agent/firebase` imports in `apps/api` and `apps/worker` to finalize the Drizzle/Postgres single source of truth.
+2. **MFA Interceptor:** Build a deterministic chat interceptor to halt AI execution and resume only when a Boss provides a valid 6-digit MFA code for Sovereign Tools (e.g., broadcasts).
+3. **Phase 11 Topography:** Document VPC security rules mapping Sidecar, Worker, and Redis on Tencent Cloud.
