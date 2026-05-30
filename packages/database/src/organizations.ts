@@ -185,3 +185,16 @@ export async function confirmTransaction(orgId: string, reference: string, amoun
   // Also topup the org balance based on the payment
   await topupTenant(orgId, amountPaidKobo, reference);
 }
+
+export async function getOrganizationsBySector(sector: string, capability?: string) {
+  const db = getDb();
+  const results = await db.select().from(organizations).where(sql`${organizations.sector} = ${sector} AND ${organizations.isActive} = true`).limit(20);
+  
+  if (capability) {
+    return results.filter(org => {
+      const caps = (org.config as any)?.capabilities;
+      return Array.isArray(caps) && caps.includes(capability);
+    });
+  }
+  return results;
+}

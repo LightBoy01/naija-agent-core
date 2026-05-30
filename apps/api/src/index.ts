@@ -31,7 +31,8 @@ import {
   getActiveOrganizations,
   getOrgDailyStats,
   getOrgByBridgeSecret,
-  getNetworkStats
+  getNetworkStats,
+  getOrganizationsBySector
 } from '@naija-agent/database';
 import { 
   topupOrg as topupOrgSql, 
@@ -191,27 +192,16 @@ fastify.get('/network/search', async (request, reply) => {
     return reply.status(400).send({ error: 'Sector is required' });
   }
 
-  const db = getDb();
-  let firestoreQuery = db.collection('organizations')
-    .where('sector', '==', sector)
-    .where('isActive', '==', true)
-    .limit(20);
-
-  if (capability) {
-    firestoreQuery = firestoreQuery.where('capabilities', 'array-contains', capability);
-  }
-
-  const snapshot = await firestoreQuery.get();
+  const orgs = await getOrganizationsBySector(sector, capability);
   
-  const agents = snapshot.docs.map(doc => {
-    const data = doc.data();
+  const agents = orgs.map(org => {
     return {
-      id: doc.id,
-      name: data.name,
-      phoneId: data.whatsappPhoneId, // Return Phone ID so other agents can message them
-      sector: data.sector,
-      description: data.description || 'No description available.',
-      capabilities: data.capabilities || []
+      id: org.id,
+      name: org.name,
+      phoneId: org.whatsappPhoneId,
+      sector: org.sector,
+      description: (org.config as any)?.description || 'No description available.',
+      capabilities: (org.config as any)?.capabilities || []
     };
   });
 
