@@ -24,13 +24,13 @@ export default async function cronRoutes(fastify: FastifyInstance, opts: CronRou
     logger.info({ count: orgs.length }, `📡 [CRON] Triggering daily reports.`);
 
     for (const org of orgs) {
-      if (!org.config?.adminPhone) continue;
+      if (!(org.config as any)?.adminPhone) continue;
       if (org.id === 'naija-agent-master') continue;
 
       await whatsappQueue.add('daily-report', 
         { 
           orgId: org.id,
-          from: org.config.adminPhone,
+          from: (org.config as any).adminPhone,
           type: 'text',
           timestamp: Date.now(),
           messageId: `cron_api_${Date.now()}`,
