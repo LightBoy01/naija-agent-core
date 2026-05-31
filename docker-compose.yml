@@ -18,9 +18,7 @@ services:
       - WHATSAPP_PHONE_ID=${WHATSAPP_PHONE_ID}
       - AI_PROVIDER_PRIMARY=${AI_PROVIDER_PRIMARY:-gemini}
       - AI_PROVIDER_FALLBACK=${AI_PROVIDER_FALLBACK:-gemini}
-    ports:
-      - "3000:3000" # API Gateway
-      - "8080:8080" # WhatsApp Sidecar
+    # Ports managed by Coolify Reverse Proxy
     depends_on:
       - postgres
       - redis
@@ -33,8 +31,7 @@ services:
       - POSTGRES_USER=naija_admin
       - POSTGRES_PASSWORD=sovereign_pass
       - POSTGRES_DB=naija_ledger
-    ports:
-      - "5432:5432"
+    # Internal Network Only
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: always
@@ -42,8 +39,7 @@ services:
   # --- Memory: Task Broker (Redis) ---
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    # Internal Network Only
     restart: always
 
 volumes:
