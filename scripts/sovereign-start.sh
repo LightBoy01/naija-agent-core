@@ -11,7 +11,7 @@ echo "----------------------------------------------------------------"
 
 # 1. Start Go WhatsApp Sidecar (Background)
 echo "📡 Launching WhatsApp Sovereign Sidecar (Go)..."
-/app/apps/whatsapp-sidecar/sidecar-binary &
+PORT=8080 /app/apps/whatsapp-sidecar/sidecar-binary &
 SIDECAR_PID=$!
 
 # Ensure background processes die when script exits
