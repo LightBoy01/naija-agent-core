@@ -21,6 +21,10 @@ trap "kill $SIDECAR_PID $API_PID 2>/dev/null || true" EXIT
 echo "⏳ Waiting for Sidecar to initialize..."
 sleep 5
 
+# 1.5. Run Database Migrations
+echo "🗄️ Running Database Migrations..."
+npm --workspace packages/database run push
+
 # 2. Start API Gateway (Background)
 echo "🌐 Launching API Gateway (Fastify)..."
 npm run start:api &
