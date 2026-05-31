@@ -14,7 +14,7 @@ dotenv.config({ path: path.resolve(currentDir, '../../../.env') });
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
-export const client = DATABASE_URL ? postgres(DATABASE_URL, { prepare: false, ssl: 'require' }) : null;
+export const client = DATABASE_URL ? postgres(DATABASE_URL, { prepare: false }) : null;
 export const db = client ? drizzle(client, { schema }) : null;
 
 /**
