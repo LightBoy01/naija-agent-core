@@ -15,7 +15,7 @@
   "scripts": {
     "build": "tsc",
     "generate": "drizzle-kit generate",
-    "push": "drizzle-kit push"
+    "push": "drizzle-kit push:pg"
   },
   "dependencies": {
     "@naija-agent/types": "*",
