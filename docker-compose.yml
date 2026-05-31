@@ -26,7 +26,7 @@ services:
 
   # --- Data: Financial Ledger (Postgres) ---
   postgres:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg15
     environment:
       - POSTGRES_USER=naija_admin
       - POSTGRES_PASSWORD=sovereign_pass
