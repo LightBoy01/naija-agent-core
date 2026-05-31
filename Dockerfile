@@ -6,12 +6,14 @@ WORKDIR /app
 # 1. Install Build Tools (Python for Hermes, Go for Sidecar)
 RUN apt-get update && apt-get install -y \
     python3 python3-pip python3-venv \
-    golang-go \
-    curl build-essential \
+    curl build-essential wget \
+    && wget -q https://go.dev/dl/go1.26.3.linux-amd64.tar.gz \
+    && tar -C /usr/local -xzf go1.26.3.linux-amd64.tar.gz \
+    && rm go1.26.3.linux-amd64.tar.gz \
     && curl -LsSf https://astral.sh/uv/install.sh | sh \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-ENV PATH="/root/.local/bin:$PATH"
+ENV PATH="/usr/local/go/bin:/root/.local/bin:$PATH"
 ENV NODE_ENV=development
 
 # 2. Monorepo Dependency Optimization
