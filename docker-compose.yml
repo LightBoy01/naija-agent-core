@@ -7,6 +7,8 @@ services:
   app:
     build: .
     command: /app/scripts/sovereign-start.sh
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgres://naija_admin:sovereign_pass@postgres:5432/naija_ledger}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
