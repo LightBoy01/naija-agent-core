@@ -20,7 +20,7 @@ export const vector = customType<{
   driverData: string;
 }>({
   dataType() {
-    return 'vector(768)'; // Optimized for Matryoshka (Gemini Embedding 2)
+    return 'vector'; // Dimension is omitted to bypass Drizzle quoting bugs. Postgres will accept any dimension.
   },
   toDriver(value: number[]): string {
     if (!Array.isArray(value)) return '[]';
