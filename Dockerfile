@@ -52,8 +52,11 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /app /app
 ENV PATH="/app/hermes-agent/.venv/bin:/root/.local/bin:$PATH"
 
+# Ensure the entrypoint script is executable
+RUN chmod +x /app/scripts/sovereign-start.sh
+
 # Expose API and Sidecar ports
 EXPOSE 3000 8080
 
-# Default command starts the API, but Compose will override this for individual roles
-CMD ["npm", "run", "start:api"]
+# Default command starts the Sovereign Empire bundle
+CMD ["/app/scripts/sovereign-start.sh"]

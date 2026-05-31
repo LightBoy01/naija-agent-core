@@ -1,58 +1,30 @@
 version: '3.8'
 
 services:
-  # --- 1. Gateway: Sovereign WhatsApp (Go) ---
-  sidecar:
+  # --- THE SOVEREIGN EMPIRE (Unified App Bundle) ---
+  # Consolidates Sidecar, API, and Workers into one container for 
+  # maximum resource efficiency (Zero Latency + Shared Memory).
+  app:
     build: .
-    command: /app/apps/whatsapp-sidecar/sidecar-binary
+    command: /app/scripts/sovereign-start.sh
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=redis://redis:6379
-      - PORT=8080
-    ports:
-      - "8080:8080"
-    depends_on:
-      - postgres
-      - redis
-
-  # --- 2. API: Webhook & Dashboard Gateway (Node) ---
-  api:
-    build: .
-    command: npm run start:api
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=${DATABASE_URL:-postgres://naija_admin:sovereign_pass@postgres:5432/naija_ledger}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - PORT=3000
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - WHATSAPP_API_TOKEN=${WHATSAPP_API_TOKEN}
+      - WHATSAPP_PHONE_ID=${WHATSAPP_PHONE_ID}
+      - AI_PROVIDER_PRIMARY=${AI_PROVIDER_PRIMARY:-gemini}
+      - AI_PROVIDER_FALLBACK=${AI_PROVIDER_FALLBACK:-gemini}
     ports:
-      - "3000:3000"
+      - "3000:3000" # API Gateway
+      - "8080:8080" # WhatsApp Sidecar
     depends_on:
       - postgres
       - redis
+    restart: always
 
-  # --- 3. Logic: Zynux Business Worker (Node) ---
-  worker-biz:
-    build: .
-    command: node apps/worker/dist/index.js
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=redis://redis:6379
-      - AI_PROVIDER_PRIMARY=${AI_PROVIDER_PRIMARY}
-    depends_on:
-      - redis
-
-  # --- 4. Logic: Aelixxr Life + Hermes Body (Node/Python) ---
-  worker-life:
-    build: .
-    command: node apps/worker-life/dist/index.js
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=redis://redis:6379
-      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
-      - WHATSAPP_SIDECAR_URL=http://sidecar:8080
-    depends_on:
-      - redis
-
-  # --- 5. Data: Financial Ledger (Postgres) ---
+  # --- Data: Financial Ledger (Postgres) ---
   postgres:
     image: postgres:15-alpine
     environment:
@@ -63,12 +35,14 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    restart: always
 
-  # --- 6. Memory: Task Broker (Redis) ---
+  # --- Memory: Task Broker (Redis) ---
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    restart: always
 
 volumes:
   pgdata:

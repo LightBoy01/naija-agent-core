@@ -1,6 +1,5 @@
 import { PipelineContext, Interceptor } from '../types.js';
-import { incrementDailyExpenses } from '@naija-agent/firebase';
-import { deductOrgBalance, addOrgBalance } from '@naija-agent/database';
+import { deductOrgBalance, addOrgBalance, getDb } from '@naija-agent/database';
 import { SystemConfig } from '@naija-agent/types';
 
 export const BillingInterceptor: Interceptor = {
@@ -64,8 +63,8 @@ export const BillingInterceptor: Interceptor = {
          await ctx.redisClient.del(billingKey);
       };
 
-      // Non-blocking telemetry
-      incrementDailyExpenses(ctx.orgId, costPerReply).catch(() => {});
+      // Non-blocking telemetry (PostgreSQL implementation pending daily_stats schema)
+      // For now, the deduction itself is sufficient as we can aggregate transactions later.
     }
 
     return ctx;

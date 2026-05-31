@@ -18,6 +18,8 @@ export interface SLMDependencies {
     getLifeTools: () => Promise<any[]>;
 }
 
+import { dockerService } from '../services/dockerService.js';
+
 export async function handleSLMTask(job: Job, deps: SLMDependencies) {
     const { ai, lifeQueue, globalLifeTools, getLifeTools } = deps;
     const { 
@@ -70,61 +72,69 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
     let updatedTrajectory = initialTrajectory || [];
 
     if (isHermesDelegation) {
-        logger.info({ sector, userPhone: slmPhone, budget: budgetNaira, hops: currentHops }, '🚀 [HERMES BRIDGE] Executing high-autonomy delegation...');
+        logger.info({ sector, userPhone: slmPhone, budget: budgetNaira, hops: currentHops }, '🚀 [HERMES BRIDGE] Executing high-autonomy delegation via Docker-on-Demand...');
         
         try {
+            // 1. Manual Billing for non-cron delegations
+            if (!job.data.isCron) {
+                const manualEnergyCost = 50; // Flat fee for a manual Hermes delegation run
+                const billResult = await billingService.billForTool(slmPhone, 'hermes_manual_delegation', manualEnergyCost);
+                if (!billResult.success) {
+                    throw new Error('Insufficient energy for autonomous delegation.');
+                }
+            }
+
             // Retrieve Organization/Tenant info from PostgreSQL for proxy/config injection
-            const { getDb, organizations } = await import('@naija-agent/database');
+            const { getDb, organizations, cronJobs } = await import('@naija-agent/database');
             const { eq } = await import('drizzle-orm');
             const sqlDb = getDb();
             const orgsResult = await sqlDb.select().from(organizations).where(eq(organizations.id, slmOrgId)).limit(1);
             const org = orgsResult[0];
 
-            // Trigger the Hermes Sovereign "Body"
-            const hermesBin = process.env.HERMES_BIN || "hermes";
-            const hermesArgs = hermesBin === "hermes" ? ["mcp", "serve"] : [path.join(process.cwd(), "hermes-agent/cli.py"), "mcp", "serve"];
-            const hermesCmd = hermesBin === "hermes" ? "hermes" : "python3";
+            // --- DOCKER-ON-DEMAND EXECUTION ---
+            const dockerResponse = await dockerService.runHermesTask({
+                instruction: slmInst,
+                userPhone: slmPhone,
+                orgId: slmOrgId,
+                proxyUrl: org?.proxyUrl || '',
+                sectorPack: sector,
+                budgetNaira: budgetNaira || 500,
+                trajectory: initialTrajectory,
+                stepCount: currentStepCount
+            });
 
-            // --- STATEFUL RESUME FOR HERMES ---
-            const hermesArgsWithContext = { 
-                instruction: slmInst, 
-                budget: budgetNaira || 500,
-                resume_trajectory: initialTrajectory,
-                current_step: currentStepCount
-            };
+            if (!dockerResponse.success) {
+                throw new Error(dockerResponse.error || 'Docker execution failed');
+            }
 
-            const hermesResponse = await mcpClient.executeStatefulTool(
-                hermesCmd, 
-                hermesArgs, 
-                {
-                    userPhone: slmPhone,
-                    orgId: slmOrgId,
-                    proxyUrl: org?.proxyUrl || '',
-                    sectorPack: sector
-                },
-                "hermes_research", 
-                hermesArgsWithContext
-            );
+            // 2. Fetch the actual result from the DB (Hermes saves its final summary here)
+            let finalReport = "Oga, my autonomous sub-agent has finished the task. I'm checking the results now.";
+            let hermesTrajectory = initialTrajectory || [];
+            let hermesStepCount = currentStepCount + 1;
 
-            updatedTrajectory = hermesResponse.data?.trajectory || initialTrajectory;
-            const finalStepCount = currentStepCount + (hermesResponse.data?.steps_taken || 1);
+            if (cronJobId) {
+                const jobResult = await sqlDb.select().from(cronJobs).where(eq(cronJobs.id, cronJobId)).limit(1);
+                if (jobResult.length > 0 && jobResult[0].lastResult) {
+                    finalReport = jobResult[0].lastResult;
+                    hermesTrajectory = (jobResult[0].trajectory as any[]) || hermesTrajectory;
+                    hermesStepCount = jobResult[0].stepCount || hermesStepCount;
+                }
+            }
 
             cleanedReport = JSON.stringify({
-                status: hermesResponse.error ? "error" : "success",
-                report: hermesResponse.error || hermesResponse.data?.summary || "Hermes operation completed.",
-                data: hermesResponse.data?.details || [],
-                trajectory: updatedTrajectory,
-                step_count: finalStepCount
+                status: "success",
+                report: finalReport,
+                trajectory: hermesTrajectory,
+                step_count: hermesStepCount
             });
 
             if (job.data.isCron && cronJobId) {
                 const { advanceCronJob } = await import('@naija-agent/database');
-                await advanceCronJob(cronJobId, cleanedReport, !hermesResponse.error, updatedTrajectory, finalStepCount);
+                await advanceCronJob(cronJobId, "Docker task completed and verified.", true, hermesTrajectory, hermesStepCount);
             }
-
         } catch (e: any) {
-            logger.error({ error: e.message }, '❌ [HERMES BRIDGE] Bridge execution failed');
-            cleanedReport = JSON.stringify({ status: "error", report: "I tried to delegate this to my autonomous engine but the connection was lost." });
+            logger.error({ error: e.message }, '❌ [HERMES BRIDGE] Docker-on-Demand execution failed');
+            cleanedReport = JSON.stringify({ status: "error", report: "I tried to delegate this to my autonomous engine but the system was too busy." });
         }
 
         if (!job.data.isCron) {

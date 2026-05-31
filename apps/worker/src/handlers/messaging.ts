@@ -1,14 +1,12 @@
 import { Job } from 'bullmq';
 import { JobData, Message, StaffData } from '@naija-agent/types';
 import { WhatsAppService } from '../services/whatsapp.js';
-import { 
-  deductBalance,
-  getAllKnowledge, getProducts, logSystemEvent,
-  Organization
-} from '@naija-agent/firebase';
 import {
-  findOrCreateChat, getChatHistory, saveMessage, verifyAdminSession
+  findOrCreateChat, getChatHistory, saveMessage, verifyAdminSession,
+  getOrgById, logSystemEvent
 } from '@naija-agent/database';
+// TODO: Replace getAllKnowledge and getProducts with Postgres equivalents once Knowledge table is migrated
+import { getAllKnowledge, getProducts } from '@naija-agent/firebase'; 
 import { Type } from '@google/genai';
 import { PaymentProvider } from '@naija-agent/payments';
 import { Redis } from 'ioredis';
@@ -23,7 +21,7 @@ import { promptService } from '../services/promptService.js';
 import { PriceGuard } from '../services/priceGuard.js';
 
 export interface MessagingDependencies {
-  org: Organization;
+  org: any; // Using any until we export the Drizzle type globally
   isAdmin: boolean;
   isStaff: boolean;
   staffData: StaffData | null;
@@ -216,18 +214,29 @@ ${globalProtocol}
           
           // Re-try once with correction instruction
           const correctionPrompt = `The previous response contained a price hallucination: ${guardResult.mismatchReason}\n\n${guardResult.suggestedCorrection}\n\nRegenerate the response with the CORRECT prices. Output JSON.`;
-          const recovery = await ai.chat(normalizedHistory, correctionPrompt, {
-              model: tenantModelName,
-              systemInstruction: systemPrompt,
-              tools: tenantTools,
-              responseMimeType: "application/json",
-              responseSchema
-          });
-          
           try {
+              const recovery = await ai.chat(normalizedHistory, correctionPrompt, {
+                  model: tenantModelName,
+                  systemInstruction: systemPrompt,
+                  tools: tenantTools,
+                  responseMimeType: "application/json",
+                  responseSchema
+              });
+              
               const parsed = JSON.parse(recovery.text);
-              finalMessage = parsed.whatsapp_message || finalMessage;
-              logger.info("✅ [PRICE GUARD] Response corrected and recovered.");
+              const recoveryMessage = parsed.whatsapp_message || recovery.text;
+
+              // Double-check the recovery response (The "Hard-Fail" check)
+              const secondGuardCheck = await priceGuard.validateResponse(recoveryMessage, businessKnowledge, currency);
+              
+              if (secondGuardCheck.isSafe) {
+                  finalMessage = recoveryMessage;
+                  logger.info("✅ [PRICE GUARD] Response corrected and recovered safely.");
+              } else {
+                  logger.fatal({ reason: secondGuardCheck.mismatchReason }, "🔥 [PRICE GUARD] Recovery failed. Forcing Hard-Fail.");
+                  finalMessage = `I'm sorry, I'm having trouble calculating the exact price right now. Please let me connect you with a human representative to confirm your order.`;
+              }
+
           } catch (e) {
               finalMessage = "I'm sorry, I encountered an internal error verifying our prices. Please ask me again or check with the Boss.";
           }

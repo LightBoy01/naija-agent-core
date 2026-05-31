@@ -114,13 +114,13 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
 
       if (result) {
         const org = await getOrgById(orgId);
-        const currency = org?.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
+        const currency = (org?.config as any)?.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
         const formattedAmount = formatCurrency(amountVal, currency.locale, currency.code);
         const formattedBalance = formatCurrency(result.newBalance / 100, currency.locale, currency.code);
         
         logger.info({ orgId, amount: amountVal, reference }, `✅ [PAYSTACK] Processed top-up.`);
         
-        if (org?.config?.adminPhone) {
+        if ((org?.config as any)?.adminPhone) {
           let notificationMsg = "";
           const greeting = org.region === 'NG' ? 'Oga' : 'Hello';
           
@@ -134,7 +134,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
             type: 'text',
             orgId: 'system',
             phoneId: org.whatsappPhoneId,
-            from: org.config.adminPhone,
+            from: (org.config as any).adminPhone,
             messageId: `BR-${Date.now()}`,
             timestamp: Date.now(),
             content: { text: notificationMsg }
@@ -210,7 +210,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
     }
 
     const org = await getOrgById(orgId);
-    const monnifyKey = org?.config?.payment?.secretKey || process.env.MONNIFY_SECRET_KEY;
+    const monnifyKey = (org?.config as any)?.payment?.secretKey || process.env.MONNIFY_SECRET_KEY;
 
     if (!monnifyKey) {
       return reply.status(500).send('Monnify secret key not found');
@@ -233,8 +233,8 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
       if (result) {
         logger.info({ orgId, amount: amountPaid, reference }, `✅ [MONNIFY] Processed top-up.`);
         
-        if (org?.config?.adminPhone) {
-          const currency = org.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
+        if ((org?.config as any)?.adminPhone) {
+          const currency = (org.config as any)?.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
           const formattedAmount = formatCurrency(amountPaid, currency.locale, currency.code);
           const formattedBalance = formatCurrency(result.newBalance / 100, currency.locale, currency.code);
 
@@ -244,7 +244,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
             type: 'text',
             orgId: 'system',
             phoneId: org.whatsappPhoneId,
-            from: org.config.adminPhone,
+            from: (org.config as any).adminPhone,
             messageId: `BR-${Date.now()}`,
             timestamp: Date.now(),
             content: { text: notificationMsg }
@@ -278,9 +278,9 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
 
        if (phoneId) {
           const org = await getOrgByPhoneId(phoneId);
-          if (org?.config?.appSecret) {
+          if ((org?.config as any)?.appSecret) {
              logger.debug({ phoneId }, `🛡️ [DEBUG] Using Custom App Secret`);
-             appSecret = org.config.appSecret;
+             appSecret = (org.config as any).appSecret;
           }
        }
     } catch (e) {
@@ -323,7 +323,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
     }
 
     // --- UX: TRIGGER TYPING INDICATOR ---
-    const apiToken = org.config?.whatsappToken || process.env.WHATSAPP_API_TOKEN;
+    const apiToken = (org.config as any)?.whatsappToken || process.env.WHATSAPP_API_TOKEN;
     if (apiToken) {
       sendTypingIndicator(businessPhoneId, message.id, apiToken, logger);
     }

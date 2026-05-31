@@ -23,3 +23,4 @@ test-*.ts
 test-*.js
 test-*.mjs
 
+.gemini/
