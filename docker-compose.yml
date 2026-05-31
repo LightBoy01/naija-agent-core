@@ -10,8 +10,8 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgres://naija_admin:sovereign_pass@postgres:5432/naija_ledger?sslmode=disable}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - DATABASE_URL=postgres://naija_admin:sovereign_pass@postgres:5432/naija_ledger?sslmode=disable
+      - REDIS_URL=redis://redis:6379
       - PORT=3000
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - WHATSAPP_API_TOKEN=${WHATSAPP_API_TOKEN}
