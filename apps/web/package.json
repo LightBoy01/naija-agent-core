@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "NODE_ENV=production next build",
-    "start": "NODE_ENV=production next start",
+    "dev": "node ../../node_modules/next/dist/bin/next dev",
+    "build": "NODE_ENV=production node ../../node_modules/next/dist/bin/next build",
+    "start": "NODE_ENV=production node ../../node_modules/next/dist/bin/next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/react": "^3.0.195",
     "@google/genai": "^1.50.1",
     "@naija-agent/database": "^1.0.0",
     "@naija-agent/firebase": "^1.0.0",

@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
     const data = await res.json();
     return NextResponse.json(data);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Proxy Error:', error);
     return NextResponse.json({ error: 'Failed to connect to Sovereign Sidecar' }, { status: 500 });
   }

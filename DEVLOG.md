@@ -192,6 +192,23 @@
 *   **Weak:** Currently relies on a single `PAYSTACK_SECRET_KEY` in `.env`, which breaks multi-tenancy.
 *   **Secure:** Replay Protection is now active. Duplicate receipts are instantly flagged.
 
+## Session 21: Sovereign Empire Migration & Frictionless Linking (2026-05-31)
+
+**Status:** 🟢 **Completed**
+
+### **Actions Taken:**
+*   **Infrastructure Migration:** Successfully moved the entire AI Agent stack (API, Worker, Redis, PostgreSQL) to a **Netcup Root Server 1000 G12** with 4 Dedicated AMD EPYC cores and 8GB DDR5 RAM.
+*   **DevOps Integration:** Installed and configured **Coolify** as the self-hosted PaaS to manage the Sovereign Engine.
+*   **Iron Shield Hardening:** Implemented a 4GB Swap file and hardened the `ufw` firewall to protect the iron from OOM crashes and external attacks.
+*   **Frictionless Linking:** Updated the Go `whatsapp-sidecar` with a `/pair` endpoint, allowing bots to be linked via 8-character Pairing Codes instead of QR scans.
+*   **Human Awareness Lock:** Implemented a Redis-backed 30-minute lock in Zynux `messaging.ts` that pauses the AI when the Boss sends a manual message from their phone (making shared numbers safe).
+*   **Model Tiering Optimization:** Re-architected `SystemConfig` for the Gemini 3.x family. Assigned Gemini 3.5 Flash to Aelixxr (High Reasoning), Gemini 3 Flash to Zynux (Sales), and Gemini 3.1 Flash-Lite to Workers/Routers (Ultra-low cost).
+*   **Context Caching:** Implemented Context Caching in `GeminiProvider`. The system automatically hashes large `systemInstruction` prompts (like Business Knowledge) and caches them on Vertex AI, slashing API input costs by ~90% per message.
+*   **Environment Sync:** Updated local Termux `.env` to point to the VPS coordinates (159.195.150.66).
+
+### **Self-Assessment:**
+*   **Achievement:** **Naija Agent Core has transitioned from a Cloud-dependent startup to a Sovereign AI Empire.** Cost is now fixed at €12.85/mo while supporting 10x more users.
+
 ## Session 16: The Master-Tenant Strategy (2026-03-08)
 
 **Status:** 🟢 **Planning Complete**

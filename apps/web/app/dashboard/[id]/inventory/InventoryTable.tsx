@@ -2,7 +2,7 @@
 
 import { useTransition, useState } from 'react';
 import { updateProductAction, removeProductAction } from './actions';
-import { formatCurrency } from '../../../../lib/utils';
+import { formatCurrency, resolveMediaUrl } from '../../../../lib/utils';
 import { EntityDefinition } from '@naija-agent/types';
 
 interface InventoryTableProps {
@@ -82,7 +82,7 @@ export default function InventoryTable({ orgId, products, currency, entityDef }:
                           {field.type === 'image' && (
                             val ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img src={val as string} alt={String(p.name || p.title || 'Item')} className="w-10 h-10 rounded-xl object-cover border border-zinc-100" />
+                              <img src={resolveMediaUrl(val as string)} alt={String(p.name || p.title || 'Item')} className="w-10 h-10 rounded-xl object-cover border border-zinc-100" />
                             ) : (
                               <div className="w-10 h-10 rounded-xl bg-zinc-100 flex items-center justify-center text-xl">📦</div>
                             )

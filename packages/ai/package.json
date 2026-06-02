@@ -16,8 +16,8 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@google/genai": "^1.50.1",
-    "openai": "^4.28.0",
-    "@naija-agent/types": "*"
+    "@google/genai": "^2.7.0",
+    "@naija-agent/types": "*",
+    "openai": "^4.28.0"
   }
 }

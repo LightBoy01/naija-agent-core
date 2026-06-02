@@ -1,10 +1,12 @@
-import { formatTimestamp } from '../../lib/utils';
+import { formatTimestamp, resolveMediaUrl } from '../../lib/utils';
 import { getNetworkMedia } from '@naija-agent/firebase';
 import { Message } from '@naija-agent/types';
 import Link from 'next/link';
 import ArchiveButton from './ArchiveButton';
 
 type MediaItem = Message & { id: string; chatId?: string; orgId?: string };
+
+export const dynamic = 'force-dynamic';
 
 export default async function MediaVault() {
   // Fixed: Pass the Sovereign ID to authorize the global query
@@ -34,7 +36,7 @@ export default async function MediaVault() {
               const currentOrgId = item.orgId || item.chatId?.split('_')[0] || 'default';
               const mediaSrc = (item.metadata?.mediaId as string) 
                 ? `/api/media/${item.metadata?.mediaId as string}?orgId=${currentOrgId}` 
-                : (item.metadata?.storageUrl as string || item.content);
+                : resolveMediaUrl(item.metadata?.storageUrl as string || item.content);
 
               return (
                 <div key={item.id} className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden group hover:ring-2 hover:ring-blue-500/20 transition-all">

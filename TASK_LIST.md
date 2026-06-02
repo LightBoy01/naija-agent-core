@@ -42,7 +42,7 @@
     - [x] **Low Balance Alerts** (Implementation + Redis Cooldown)
     - [x] **Balance Context Injection** (Gemini is balance-aware)
 
-## Phase 4: The Sovereign Empire (In Progress) 🟡
+## Phase 4: The Sovereign Empire ✅
 
 - [x] **Multi-Tenancy (Phase 4d)**
     - [x] Multi-Tenant Key Isolation (Firestore Vaults)
@@ -62,6 +62,13 @@
     - [x] **Master Bot Identity:** COO bot for Sovereign management.
     - [x] **Automated Onboarding:** `create_tenant` tool for instant client setup.
     - [x] **Network Stats:** Real-time reporting for the Sovereign.
+- [x] **Sovereign Infrastructure (Phase 4k)**
+    - [x] **VPS Migration:** Deploy to Netcup Root Server (AMD EPYC Dedicated).
+    - [x] **DevOps Setup:** Integrate Coolify for Sovereign management.
+    - [x] **Database Sovereignty:** Migrate to local PostgreSQL with pgvector.
+- [x] **Frictionless Onboarding (Phase 4l)**
+    - [x] **Scan-Free Linking:** Implement 8-digit Pairing Code support in Sidecar.
+    - [x] **Master Bot Integration:** Tool-based pairing code generation.
 - [x] **Sovereign Auth Hardening (Phase 4m)**
     - [x] Implement WhatsApp-based MFA (Universal for all Bosses).
     - [x] **Multi-Tenant Login:** Phone-based lookup for organization owners.

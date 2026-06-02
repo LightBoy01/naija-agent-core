@@ -20,7 +20,7 @@ export const MfaInterceptor: Interceptor = {
     if (pendingDataStr && /^\d{6}$/.test(textTrimmed)) {
       const { setMfaCode } = await import('@naija-agent/database');
       
-      const storedMfa = ctx.org.config?.mfaCode;
+      const storedMfa = (ctx.org?.config as any)?.mfaCode;
       if (storedMfa && storedMfa === textTrimmed) {
         // Valid MFA!
         await ctx.redisClient.del(pendingMfaKey);
@@ -34,13 +34,13 @@ export const MfaInterceptor: Interceptor = {
             const response = await handleToolCall(pendingJob.tool, pendingJob.args, {
                 orgId: ctx.orgId,
                 from: ctx.from,
-                isAdmin: ctx.isAdmin,
-                isStaff: ctx.isStaff,
+                isAdmin: !!ctx.isAdmin,
+                isStaff: !!ctx.isStaff,
                 isAuth: true,
-                whatsappService: ctx.tenantWhatsAppService,
-                paymentProvider: ctx.tenantPaymentProvider,
+                whatsappService: ctx.tenantWhatsAppService!,
+                paymentProvider: ctx.tenantPaymentProvider || null,
                 redisClient: ctx.redisClient,
-                orgConfig: ctx.org.config as any,
+                orgConfig: (ctx.org?.config as any),
                 currency: { code: 'NGN', symbol: '₦', locale: 'en-NG' } as any, // Simplified
                 whatsappPhoneId: ctx.job.data.phoneId,
                 customerName: ctx.job.data.name,

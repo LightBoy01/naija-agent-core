@@ -2,18 +2,28 @@ import { v2 as cloudinary } from 'cloudinary';
 import { getStorage } from 'firebase-admin/storage';
 import { AlibabaOSSProvider } from './providers/alibaba.js';
 import { TencentCOSProvider } from './providers/tencent.js';
+import { CloudflareR2Provider } from './providers/cloudflare.js';
 import { StorageProvider } from './interfaces.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 /**
- * Strategy Selector: Prioritize Tencent COS (Sovereign Pivot),
- * then Alibaba OSS, fallback to Cloudinary, and finally Firebase.
+ * Strategy Selector: Prioritize Cloudflare R2 (Efficiency/Zero-Egress),
+ * then Tencent COS (Sovereign Pivot), then Alibaba OSS, fallback to Cloudinary, 
+ * and finally Firebase.
  */
 let activeProvider: StorageProvider | null = null;
 
-if (process.env.TENCENT_COS_SECRET_ID) {
+if (process.env.CLOUDFLARE_R2_ACCESS_KEY_ID) {
+  activeProvider = new CloudflareR2Provider({
+    accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || '',
+    endpoint: process.env.CLOUDFLARE_R2_ENDPOINT || '',
+    bucket: process.env.CLOUDFLARE_R2_BUCKET || '',
+    publicDomain: process.env.CLOUDFLARE_R2_PUBLIC_DOMAIN
+  });
+} else if (process.env.TENCENT_COS_SECRET_ID) {
   activeProvider = new TencentCOSProvider({
     secretId: process.env.TENCENT_COS_SECRET_ID,
     secretKey: process.env.TENCENT_COS_SECRET_KEY || '',

@@ -37,6 +37,16 @@ export async function handleMessage(job: Job<JobData>, deps: MessagingDependenci
   const { from, orgId, content, type, messageId } = job.data;
   const { org, isAdmin, isStaff, staffData, tenantWhatsAppService, tenantPaymentProvider, ai, redisClient, tenantTools } = deps;
 
+  // --- HUMAN AWARENESS OVERRIDE ---
+  // If the Boss has sent a message manually to this chat recently, the Sidecar sets a lock.
+  const humanLockKey = `human_active:${orgId}:${from}`;
+  const isHumanActive = await redisClient.get(humanLockKey);
+  
+  if (isHumanActive && !isAdmin && !isStaff) {
+      logger.info({ from, orgId }, "🤫 [HUMAN AWARE] AI paused for 30m because Boss is chatting manually.");
+      return { success: true, reason: 'HUMAN_ACTIVE_OVERRIDE' };
+  }
+
   const isManager = isAdmin || isStaff;
   const textTrimmed = content.text?.trim() || '';
 

@@ -1,6 +1,7 @@
 import { Type } from '@google/genai';
 import { logger } from "../utils/logger.js";
 import { HandlerContext } from './definitions.js';
+import axios from 'axios';
 
 export const SYSTEM_TOOLS = [
   {
@@ -120,6 +121,18 @@ export const SYSTEM_TOOLS = [
     }
   },
   {
+    name: "request_sidecar_pairing",
+    description: "Initiates the 8-character pairing code flow for a sidecar-based bot. (Sovereign Only)",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        tenantId: { type: Type.STRING, description: "Organization slug (e.g. aelixxr)" },
+        phone: { type: Type.STRING, description: "Phone number in international format without + (e.g. 2348030000000)" }
+      },
+      required: ["tenantId", "phone"]
+    }
+  },
+  {
     name: "activate_tenant",
     description: "Finalizes activation after Meta OTP is verified. (Sovereign Only)",
     parameters: {
@@ -204,8 +217,8 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
         const orgs = await getActiveOrganizations();
         let count = 0;
         for (const org of orgs) {
-          if (org.config?.adminPhone) {
-            await whatsappService.sendText(org.config.adminPhone, `👑 *MESSAGE FROM SOVEREIGN*\n\n${args.message}`);
+          if ((org.config as any)?.adminPhone) {
+            await whatsappService.sendText((org.config as any).adminPhone, `👑 *MESSAGE FROM SOVEREIGN*\n\n${args.message}`);
             count++;
           }
         }
@@ -267,17 +280,46 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
         };
     }
 
+    case 'request_sidecar_pairing': {
+        if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
+        
+        const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
+        const apiKey = process.env.ADMIN_API_KEY;
+
+        try {
+            const response = await axios.post(
+                `${sidecarUrl}/pair`,
+                { orgId: args.tenantId, phone: args.phone },
+                {
+                    headers: {
+                        'X-API-Key': apiKey || '',
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            return { 
+                status: 'success', 
+                code: response.data.code,
+                message: `Pairing Code Generated: ${response.data.code}. Please tell the user to enter this code in their WhatsApp (Linked Devices > Link with phone number instead).`
+            };
+        } catch (e: any) {
+            logger.error({ error: e.response?.data || e.message }, '❌ [SIDECAR PAIR] Failed');
+            return { status: 'error', message: `Failed to initiate sidecar pairing: ${e.message}` };
+        }
+    }
+
     case 'activate_tenant': {
         if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
         await activateTenant(args.tenantId, args.phoneId, args.accessToken);
         
         // Push mapping to Redis so sidecar immediately knows about it
         const org = await getOrgById(args.tenantId);
-        if (org && org.config?.botPhone) {
-            const jid = `${org.config.botPhone}@s.whatsapp.net`;
+        if (org && (org.config as any)?.botPhone) {
+            const jid = `${(org.config as any).botPhone}@s.whatsapp.net`;
             if (ctx.redisClient) {
                  await ctx.redisClient.set(`sidecar_map:${jid}`, args.tenantId);
-                 await ctx.redisClient.set(`sidecar_map:${org.config.botPhone}`, args.tenantId);
+                 await ctx.redisClient.set(`sidecar_map:${(org.config as any).botPhone}`, args.tenantId);
             }
         }
         

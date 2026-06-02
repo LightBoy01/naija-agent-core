@@ -28,17 +28,22 @@ export const SystemConfig = {
     },
     // Models
     MODELS: {
-        // --- ZYNUX (Business) ---
-        ZYNUX_PRIMARY: 'gemini-3-flash-preview',
+        // --- ZYNUX (Business OS) ---
+        // 3 Flash: Balanced for sales conversations & tool calling.
+        ZYNUX_PRIMARY: 'gemini-3-flash-preview', 
+        // 3.1 Flash-Lite: Cheap, ultra-fast for simple tasks (cron, routing, formatting).
+        ZYNUX_WORKER: 'gemini-3.1-flash-lite-preview', 
         ZYNUX_FALLBACK: 'gemini-2.5-flash',
 
-        // --- AELIXXR (Life) ---
-        AELIXXR_PRIMARY: 'gemini-3-flash-preview',
-        AELIXXR_WORKER: 'gemini-3.1-flash-lite-preview', 
+        // --- AELIXXR (Life OS) ---
+        // 3.5 Flash: High-reasoning, premium tier for complex personal assistance.
+        AELIXXR_PRIMARY: 'gemini-3.5-flash-preview',
+        // 3 Flash: Better at handling MCP tools/investigations than Flash-Lite.
+        AELIXXR_WORKER: 'gemini-3-flash-preview', 
         AELIXXR_FALLBACK: 'gemini-2.5-flash',
 
         // --- ROUTER (Gateway) ---
-        ROUTER_PRIMARY: 'gemini-3-flash-preview',
+        ROUTER_PRIMARY: 'gemini-3.1-flash-lite-preview',
         ROUTER_FALLBACK: 'gemini-2.5-flash',
 
         // --- DEEPSEEK (V4) ---

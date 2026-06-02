@@ -3,6 +3,8 @@ import { getNetworkChats } from '@naija-agent/database';
 import { Chat } from '@naija-agent/types';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
+
 export default async function ChatLogs() {
   const chats = await getNetworkChats('naija-agent-master', 50);
 

@@ -1,10 +1,14 @@
 import { GoogleGenAI } from '@google/genai';
 import { AIProvider, AIMessage, AIOptions, AIResponse, AIMessagePart } from '../index.js';
 import { SystemConfig } from '@naija-agent/types';
+import crypto from 'crypto';
 
 export class GeminiProvider implements AIProvider {
   name = 'gemini';
   private genAI: GoogleGenAI;
+  
+  // Static cache to hold active context cache names across instances
+  private static activeCaches: Record<string, { name: string, expiresAt: number }> = {};
 
   constructor(apiKey: string) {
     if (typeof process !== 'undefined' && process.platform === 'android' && process.env.NODE_TLS_REJECT_UNAUTHORIZED === undefined) {
@@ -18,6 +22,49 @@ export class GeminiProvider implements AIProvider {
         apiVersion: 'v1/publishers/google' 
       }
     });
+  }
+
+  // --- CACHING LOGIC ---
+  private getInstructionHash(instruction?: string): string | null {
+      if (!instruction || instruction.length < 5000) return null; // Only cache large prompts (~1000+ tokens)
+      return crypto.createHash('sha256').update(instruction).digest('hex');
+  }
+
+  private async getOrCreateCache(modelName: string, systemInstruction: string): Promise<string | null> {
+      const hash = this.getInstructionHash(systemInstruction);
+      if (!hash) return null;
+
+      // 1. Check if we have a valid, unexpired cache
+      const existing = GeminiProvider.activeCaches[hash];
+      const now = Date.now();
+      if (existing && existing.expiresAt > now + 60000) { // 1 min buffer
+          return existing.name;
+      }
+
+      // 2. We need a specific model version for caching (e.g. gemini-3.5-flash-001)
+      // If using a generic alias, we append -001 as a best-effort, or bypass caching if it fails.
+      const versionedModel = modelName.includes('-00') ? modelName : `${modelName}-001`;
+
+      try {
+          console.log(`[GEMINI] Creating new Context Cache for hash ${hash.substring(0,8)}...`);
+          const cache = await this.genAI.caches.create({
+              model: versionedModel,
+              config: {
+                  systemInstruction: systemInstruction,
+                  contents: [{ role: 'user', parts: [{ text: "Initialize Context" }] }], // Required dummy content
+                  ttl: '3600s' // 1 hour
+              }
+          });
+          
+          GeminiProvider.activeCaches[hash] = {
+              name: cache.name as string,
+              expiresAt: now + (3600 * 1000)
+          };
+          return cache.name as string;
+      } catch (error: any) {
+          console.warn(`⚠️ [GEMINI] Context Caching failed (Content might be < 2048 tokens or model unsupported): ${error.message}. Proceeding without cache.`);
+          return null; // Fallback to normal execution
+      }
   }
 
   private normalizeHistory(history: AIMessage[]) {
@@ -88,11 +135,19 @@ export class GeminiProvider implements AIProvider {
   async generateText(prompt: string, options?: AIOptions): Promise<AIResponse> {
     const modelName = options?.model || SystemConfig.MODELS.DEFAULT;
     
+    // Attempt to use Context Caching for large instructions
+    let cachedContent: string | null = null;
+    if (options?.systemInstruction) {
+        cachedContent = await this.getOrCreateCache(modelName, options.systemInstruction);
+    }
+
     const result = await this.genAI.models.generateContent({
         model: modelName,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
-            systemInstruction: options?.systemInstruction,
+            // If we have a cache, use it. SystemInstruction is already inside the cache.
+            cachedContent: cachedContent || undefined,
+            systemInstruction: cachedContent ? undefined : options?.systemInstruction,
             temperature: options?.temperature,
             maxOutputTokens: options?.maxTokens,
             responseMimeType: options?.responseMimeType,
@@ -110,10 +165,17 @@ export class GeminiProvider implements AIProvider {
     const chatHistory = this.normalizeHistory(history);
     const modelName = options?.model || SystemConfig.MODELS.DEFAULT;
 
+    // Attempt to use Context Caching for large instructions
+    let cachedContent: string | null = null;
+    if (options?.systemInstruction) {
+        cachedContent = await this.getOrCreateCache(modelName, options.systemInstruction);
+    }
+
     const chatSession = this.genAI.chats.create({
       model: modelName,
       config: {
-        systemInstruction: options?.systemInstruction,
+        cachedContent: cachedContent || undefined,
+        systemInstruction: cachedContent ? undefined : options?.systemInstruction,
         tools: options?.tools,
         responseMimeType: options?.responseMimeType,
         responseSchema: options?.responseSchema

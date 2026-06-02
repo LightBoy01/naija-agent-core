@@ -1,4 +1,4 @@
-import { formatTimestamp } from '../../../lib/utils';
+import { formatTimestamp, resolveMediaUrl } from '../../../lib/utils';
 import { getDb } from '@naija-agent/firebase';
 import { getChatHistory } from '@naija-agent/database';
 import { Message, Chat } from '@naija-agent/types';
@@ -69,7 +69,7 @@ export default async function ChatDetailPage({ params }: PageProps) {
                   <div className="mb-2 rounded-lg overflow-hidden border border-zinc-700/10">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img 
-                      src={(msg.metadata?.mediaId as string) ? `/api/media/${msg.metadata?.mediaId as string}?orgId=${chatInfo?.organizationId || 'default'}` : ((msg.metadata?.storageUrl as string) || msg.content)} 
+                      src={(msg.metadata?.mediaId as string) ? `/api/media/${msg.metadata?.mediaId as string}?orgId=${chatInfo?.organizationId || 'default'}` : resolveMediaUrl((msg.metadata?.storageUrl as string) || msg.content)} 
                       alt="WhatsApp Image" 
                       className="w-full h-auto max-h-[400px] object-contain"
                     />
@@ -79,7 +79,7 @@ export default async function ChatDetailPage({ params }: PageProps) {
                 {msg.type === 'audio' && (
                   <div className="mb-2 p-2 bg-zinc-100 rounded-lg">
                     <audio controls className="w-full h-8">
-                      <source src={(msg.metadata?.mediaId as string) ? `/api/media/${msg.metadata?.mediaId as string}?orgId=${chatInfo?.organizationId || 'default'}` : ((msg.metadata?.storageUrl as string) || msg.content)} type="audio/ogg" />
+                      <source src={(msg.metadata?.mediaId as string) ? `/api/media/${msg.metadata?.mediaId as string}?orgId=${chatInfo?.organizationId || 'default'}` : resolveMediaUrl((msg.metadata?.storageUrl as string) || msg.content)} type="audio/ogg" />
                     </audio>
                   </div>
                 )}

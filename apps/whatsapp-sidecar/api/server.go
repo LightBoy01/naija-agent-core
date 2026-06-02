@@ -40,9 +40,46 @@ func (s *Server) Start(port string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/send", s.handleSend)
 	mux.HandleFunc("/connect", s.handleConnect)
+	mux.HandleFunc("/pair", s.handlePair)
 	mux.HandleFunc("/download/", s.handleDownload)
 
 	http.ListenAndServe(":"+port, mux)
+}
+
+func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
+	if !s.checkAuth(w, r) {
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		OrgID string `json:"orgId"`
+		Phone string `json:"phone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.Phone == "" {
+		http.Error(w, "phone is required", http.StatusBadRequest)
+		return
+	}
+
+	code, err := s.mgr.PairPhone(req.OrgID, req.Phone)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "pairing_code_generated",
+		"code":   code,
+	})
 }
 
 func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {

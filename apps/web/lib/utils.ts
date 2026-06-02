@@ -53,3 +53,30 @@ export function sanitizeOrgForFrontend(org: any) {
     }
   };
 }
+
+/**
+ * Resolves a storage path or pseudo-URL (like r2://) into a usable browser URL.
+ */
+export function resolveMediaUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  
+  // 1. Handle Cloudflare R2 pseudo-URLs
+  if (url.startsWith('r2://')) {
+    const publicDomain = process.env.NEXT_PUBLIC_CLOUDFLARE_R2_PUBLIC_DOMAIN;
+    if (publicDomain) {
+      const path = url.split('/').slice(3).join('/'); // Remove r2://bucket/
+      const baseUrl = publicDomain.startsWith('http') ? publicDomain : `https://${publicDomain}`;
+      return `${baseUrl}/${path}`;
+    }
+    // Fallback if no public domain (though it might still be broken in browser)
+    return url;
+  }
+
+  // 2. Already a full URL
+  if (url.startsWith('http')) {
+    return url;
+  }
+
+  // 3. Fallback/Default
+  return url;
+}

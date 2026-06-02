@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 
@@ -51,9 +51,10 @@ export default function SovereignQRScanner({
       } else {
         setStatus(data.status);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message);
+      const errMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(errMessage);
       toast.error('Failed to connect to Sovereign Sidecar.');
     } finally {
       setLoading(false);

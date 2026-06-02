@@ -62,6 +62,10 @@
     - **Back-Office:** Next.js Web Dashboard (Operations & Management).
     - **Features:** Real-time Dispatch Board, Web-based Inventory Manager, and Visual Ledger (Ledger/Sales Chart).
 - **Iron Shield Hardening:** Implemented strict **Amount Lock** (Receipt vs Bank API comparison), Redis-based verification rate limiting, and zero-leak frontend data sanitization.
+- **Phase 9.5 Frictionless Sidecar Linking (May 2026):**
+    - **Pairing Code Support:** Implemented 8-character Pairing Code (OTP) support in the Go `whatsapp-sidecar`.
+    - **Scan-Free Onboarding:** Sidecar bots can now be linked via phone number without a QR code scan.
+    - **Master Bot Integration:** Added `request_sidecar_pairing` tool to the Master Bot for automated sidecar activation.
 
 ## Next Steps (Phase 8 - Global Expansion)
 - [x] **Internationalization:** Add support for US/UK phone numbers and multi-currency ledgers.

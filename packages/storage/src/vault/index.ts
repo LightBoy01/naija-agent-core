@@ -61,7 +61,7 @@ export const VaultDocumentSchema = z.object({
   }),
   storageUrl: z.string().optional(), // Public/Signed URL (OSS, Cloudinary or GCS)
   gcsUri: z.string().optional(), // gs:// path if on GCS
-  provider: z.enum(['cloudinary', 'gcs', 'alibaba-oss', 'tencent-cos']).optional(),
+  provider: z.enum(['cloudinary', 'gcs', 'alibaba-oss', 'tencent-cos', 'cloudflare-r2']).optional(),
   originalMediaId: z.string().optional(),
   mimeType: z.string(),
   caption: z.string().optional(),
@@ -94,17 +94,18 @@ async function uploadToGCS(userId: string, buffer: Buffer, mimeType: string): Pr
     };
 }
 
-async function uploadToVault(userId: string, buffer: Buffer, mimeType: string, orgId?: string): Promise<{ url: string; gcsUri?: string; provider: 'cloudinary' | 'gcs' | 'alibaba-oss' | 'tencent-cos' }> {
+async function uploadToVault(userId: string, buffer: Buffer, mimeType: string, orgId?: string): Promise<{ url: string; gcsUri?: string; provider: 'cloudinary' | 'gcs' | 'alibaba-oss' | 'tencent-cos' | 'cloudflare-r2' }> {
   const fileId = crypto.randomUUID();
   const extension = mimeType.split('/')[1] || 'bin';
   const fileName = `${fileId}.${extension}`;
 
   const url = await uploadMedia(orgId || 'vault', fileName, buffer, mimeType, { userId });
   
-  let provider: 'cloudinary' | 'gcs' | 'alibaba-oss' | 'tencent-cos' = 'gcs';
+  let provider: 'cloudinary' | 'gcs' | 'alibaba-oss' | 'tencent-cos' | 'cloudflare-r2' = 'gcs';
   if (url.includes('cloudinary')) provider = 'cloudinary';
   else if (url.includes('aliyuncs.com')) provider = 'alibaba-oss';
   else if (url.includes('myqcloud.com')) provider = 'tencent-cos';
+  else if (url.startsWith('r2://') || (process.env.CLOUDFLARE_R2_PUBLIC_DOMAIN && url.includes(process.env.CLOUDFLARE_R2_PUBLIC_DOMAIN))) provider = 'cloudflare-r2';
 
   return { 
     url, 

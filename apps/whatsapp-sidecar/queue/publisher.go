@@ -99,3 +99,10 @@ func (p *Publisher) PublishMessage(job JobData) error {
 	_, err = pipe.Exec(context.Background())
 	return err
 }
+
+func (p *Publisher) SetHumanLock(orgId, chatId string) error {
+	ctx := context.Background()
+	lockKey := fmt.Sprintf("human_active:%s:%s", orgId, chatId)
+	// Set lock for 30 minutes
+	return p.client.Set(ctx, lockKey, "true", 30*time.Minute).Err()
+}

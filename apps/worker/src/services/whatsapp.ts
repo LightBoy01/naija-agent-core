@@ -219,7 +219,7 @@ export class WhatsAppService {
       
       return {
         buffer: Buffer.from(response.data),
-        mimeType: response.headers['content-type'] || 'image/jpeg'
+        mimeType: (response.headers['content-type'] as string) || 'image/jpeg'
       };
     } catch (e: any) {
       console.error('❌ [SOVEREIGN DOWNLOAD] Failed:', e.message);

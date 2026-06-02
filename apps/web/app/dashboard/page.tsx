@@ -28,6 +28,8 @@ interface LifeUser {
   status: string;
 }
 
+export const dynamic = 'force-dynamic';
+
 export default async function Dashboard() {
   const [stats, chats] = await Promise.all([
     getNetworkStats('naija-agent-master'),

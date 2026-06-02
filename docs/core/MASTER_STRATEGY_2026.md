@@ -91,8 +91,13 @@ Enable LOS agents to seamlessly purchase from BOS agents.
 *   Integrate Aelixxr Sovereign Vault (Monnify Virtual Accounts) natively into onboarding.
 *   **Success Metric:** Frictionless multi-tenant AI onboarding and deployment.
 
+### Phase 10.5: Sovereign Storage & DB Hardening (Current)
+*   **Storage Pivot:** Successfully integrated Cloudflare R2 as the primary media provider (Zero-Egress), with Tencent COS/Alibaba OSS as Sovereign fallbacks.
+*   **Database Verification:** Verified PostgreSQL on the LOS VPS (`159.195.150.66`) with `pgvector` enabled and schema ready for DeepSeek reasoning traces.
+*   **AI Orchestration Pause:** Temporarily halting the `Capability-Based Dynamic Router` migration. Maintaining the robust `SystemConfig` (Static Primary/Fallback) pattern in the workers for stability while scaling.
+
 ### Phase 11: The China-Africa Hybrid Cloud (Tencent Migration)
-*   **Architecture:** Shift from Vercel/Firebase to Tencent Cloud Run (API) + Lighthouse (Workers) + Managed TencentDB (Postgres/Redis) + Tencent COS (Storage).
+*   **Architecture:** Shift from Vercel/Firebase to Tencent Cloud Run (API) + Lighthouse (Workers) + Managed TencentDB (Postgres/Redis) + Tencent COS / Cloudflare R2 (Storage).
 *   **The Sidecar Edge:** Deploy lightweight Go binaries (`whatsapp-sidecar`) to maintain 100k+ `whatsmeow` websockets with Meta, queuing payloads directly into Redis.
 *   **Security:** Map `JID -> Org Slug` in Postgres for perfect tenant routing.
 *   **Success Metric:** O(1) node scaling capable of handling 50,000 concurrent messages securely.

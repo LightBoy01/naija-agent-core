@@ -3,7 +3,7 @@ import { cronJobs, users } from '@naija-agent/database';
 import { eq, desc } from 'drizzle-orm';
 import Link from 'next/link';
 
-export const revalidate = 0; // Disable cache for real-time views
+export const dynamic = 'force-dynamic'; // Disable cache for real-time views
 
 export default async function AutonomyDashboard() {
   const sqlDb = getDb();
@@ -15,7 +15,7 @@ export default async function AutonomyDashboard() {
     instruction: cronJobs.instruction,
     schedule: cronJobs.schedule,
     status: cronJobs.status,
-    sectorPack: cronJobs.sectorPack,
+    sectorPack: cronJobs.sector_pack,
     energyBudget: cronJobs.energyBudget,
     lastRunAt: cronJobs.lastRunAt,
     nextRunAt: cronJobs.nextRunAt,
