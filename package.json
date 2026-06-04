@@ -9,7 +9,7 @@
   "scripts": {
     "clean": "rm -rf apps/*/dist packages/*/dist apps/*/.tsbuildinfo packages/*/.tsbuildinfo packages/*/tsconfig.tsbuildinfo",
     "build": "npm run clean && node scripts/build.js",
-    "vercel-build": "node ./node_modules/typescript/bin/tsc -b packages/types packages/database packages/firebase packages/payments packages/storage packages/logistics packages/ai && npm run build --workspace=web",
+    "vercel-build": "npm run clean && node ./node_modules/typescript/bin/tsc -b packages/types packages/database packages/firebase packages/payments packages/storage packages/logistics packages/ai && npm run build --workspace=web",
     "dev": "npm run dev --workspaces",
     "start": "npm run start --workspaces",
     "start:api": "node apps/api/dist/index.js",
