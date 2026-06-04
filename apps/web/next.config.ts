@@ -8,13 +8,15 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(process.cwd(), "../../"),
   outputFileTracingExcludes: {
     '*': [
+      '**/.next/cache/**',
+      '**/apps/whatsapp-sidecar/**',
+      '../../apps/whatsapp-sidecar/**',
+      '**/ngrok*',
       '**/*@swc/core*',
       '**/*esbuild*',
       '**/*typescript*',
       '**/node_modules/firebase-tools*',
-      '**/node_modules/@google-cloud/firestore/build/protos*',
-      '**/apps/whatsapp-sidecar/**',
-      '**/ngrok*'
+      '**/node_modules/@google-cloud/firestore/build/protos*'
     ],
   },
 };
