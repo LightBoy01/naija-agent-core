@@ -11,6 +11,9 @@ nf-env*.json
 logs.*.json
 
 # Temporary Files and Logs
+.next
+.turbo
+*.tsbuildinfo
 *.txt
 *.js.map
 *.ogg
