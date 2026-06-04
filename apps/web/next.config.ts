@@ -4,7 +4,7 @@ import path from "path";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  serverExternalPackages: ["firebase-admin", "postgres", "bcrypt", "bullmq", "ioredis", "@google/genai", "openai", "ali-oss"],
+  serverExternalPackages: ["bcrypt"],
   outputFileTracingRoot: path.join(process.cwd(), "../../"),
   outputFileTracingExcludes: {
     '*': [
@@ -12,7 +12,9 @@ const nextConfig: NextConfig = {
       '**/*esbuild*',
       '**/*typescript*',
       '**/node_modules/firebase-tools*',
-      '**/node_modules/@google-cloud*'
+      '**/node_modules/@google-cloud/firestore/build/protos*',
+      '**/apps/whatsapp-sidecar/**',
+      '**/ngrok*'
     ],
   },
 };

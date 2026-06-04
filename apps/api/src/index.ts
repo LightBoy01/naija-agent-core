@@ -208,6 +208,31 @@ fastify.get('/network/search', async (request, reply) => {
   return { status: 'success', count: agents.length, agents };
 });
 
+// 9. Sidecar Proxy (Internal Forwarding)
+fastify.post('/sidecar/connect', async (request, reply) => {
+  const apiKey = request.headers['x-api-key'];
+  if (!apiKey) return reply.status(401).send({ error: 'Missing X-API-Key' });
+
+  try {
+    // The sidecar is running locally inside the same container on port 8080
+    const res = await fetch(`http://localhost:8080/connect`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': apiKey as string,
+      },
+      body: typeof request.body === 'string' ? request.body : JSON.stringify(request.body)
+    });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch (e) { data = text; }
+    return reply.status(res.status).send(data);
+  } catch (err: any) {
+    logger.error({ err: err.message }, 'Proxy to Sidecar failed');
+    return reply.status(500).send({ error: 'Sidecar offline' });
+  }
+});
+
 // Start Server
 const start = async () => {
   try {
