@@ -223,6 +223,11 @@ func (m *Manager) createEventHandler(orgID string) whatsmeow.EventHandler {
 }
 
 func (m *Manager) handleMessage(orgID string, evt *events.Message) {
+	// Auto Mark as Read
+	if err := m.clients[orgID].MarkRead([]types.MessageID{evt.Info.ID}, evt.Info.Timestamp, evt.Info.Chat, evt.Info.Sender); err != nil {
+		m.log.Warnf("Failed to mark message as read: %v", err)
+	}
+
 	// Detect Human Intervention
 	if evt.Info.IsFromMe {
 		chatId := evt.Info.Chat.ToNonAD().String()
