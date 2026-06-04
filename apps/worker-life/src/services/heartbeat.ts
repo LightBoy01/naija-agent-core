@@ -1,5 +1,4 @@
-import { getDb, heartbeats } from '@naija-agent/database';
-import { eq, and, gt } from 'drizzle-orm';
+import { getDb, heartbeats, eq, and, gt } from '@naija-agent/database';
 import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger.js';
 import { executeLifeTool } from '../tools/index.js';

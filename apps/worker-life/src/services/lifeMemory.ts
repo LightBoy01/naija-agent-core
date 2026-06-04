@@ -1,5 +1,4 @@
-import { getDb, users, transactions, referrals, memories } from '@naija-agent/database';
-import { eq, sql, and, desc } from 'drizzle-orm';
+import { getDb, users, transactions, referrals, memories, eq, sql, and, desc } from '@naija-agent/database';
 import { LifeContext, parseAndFormatPhone } from '@naija-agent/types';
 import { logger } from '../utils/logger.js';
 import { randomUUID } from 'crypto';
@@ -33,14 +32,16 @@ export class LifeMemoryService {
         await this.completeReferral(phone);
 
         user = {
-          phone,
-          name: 'User',
-          energyCredits: 100,
+          phone: phone,
+          name: '',
+          energyCredits: 0,
           vaultBalanceKobo: 0,
           pinHash: null,
           pinLockUntil: null,
           pinAttempts: 0,
           context: {},
+          sessionStatus: null,
+          sessionExpiry: null,
           createdAt: new Date(),
           updatedAt: new Date()
         };

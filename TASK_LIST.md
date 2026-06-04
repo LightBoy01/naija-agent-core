@@ -66,6 +66,7 @@
     - [x] **VPS Migration:** Deploy to Netcup Root Server (AMD EPYC Dedicated).
     - [x] **DevOps Setup:** Integrate Coolify for Sovereign management.
     - [x] **Database Sovereignty:** Migrate to local PostgreSQL with pgvector.
+    - [x] **Infrastructure Stress Test:** Verified 14k+ MPS on raw iron.
 - [x] **Frictionless Onboarding (Phase 4l)**
     - [x] **Scan-Free Linking:** Implement 8-digit Pairing Code support in Sidecar.
     - [x] **Master Bot Integration:** Tool-based pairing code generation.

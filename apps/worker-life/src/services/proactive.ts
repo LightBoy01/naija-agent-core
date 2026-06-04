@@ -1,5 +1,4 @@
-import { getDb, users } from '@naija-agent/database';
-import { lt } from 'drizzle-orm';
+import { getDb, users, lt } from '@naija-agent/database';
 import { logger } from '../utils/logger.js';
 
 export class ProactiveService {

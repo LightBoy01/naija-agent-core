@@ -10,16 +10,19 @@ export class GeminiProvider implements AIProvider {
   // Static cache to hold active context cache names across instances
   private static activeCaches: Record<string, { name: string, expiresAt: number }> = {};
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, baseURL?: string) {
     if (typeof process !== 'undefined' && process.platform === 'android' && process.env.NODE_TLS_REJECT_UNAUTHORIZED === undefined) {
       process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     }
 
+    const defaultBaseURL = 'https://aiplatform.googleapis.com';
+    const defaultApiVersion = baseURL ? 'v1beta' : 'v1/publishers/google'; // AI Studio typically uses v1beta
+
     this.genAI = new GoogleGenAI({
       apiKey,
       httpOptions: { 
-        baseUrl: 'https://aiplatform.googleapis.com', 
-        apiVersion: 'v1/publishers/google' 
+        baseUrl: baseURL || defaultBaseURL, 
+        apiVersion: baseURL?.includes('generativelanguage') ? 'v1beta' : (baseURL ? 'v1' : 'v1/publishers/google')
       }
     });
   }

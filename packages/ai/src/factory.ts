@@ -18,7 +18,7 @@ export class AIFactory {
 
     switch (config.type) {
       case 'gemini':
-        return new GeminiProvider(config.apiKey);
+        return new GeminiProvider(config.apiKey, config.baseURL);
       case 'openai':
         return new OpenAIProvider(config.apiKey, config.baseURL);
       case 'dashscope':

@@ -1,5 +1,4 @@
-import { getDb, vaultSecrets } from '@naija-agent/database';
-import { eq, and } from 'drizzle-orm';
+import { getDb, vaultSecrets, eq, and } from '@naija-agent/database';
 import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger.js';
 

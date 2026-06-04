@@ -114,7 +114,7 @@ export const referrals = pgTable('referrals', {
 export const chats = pgTable('chats', {
   id: varchar('id', { length: 128 }).primaryKey(), // e.g., 'orgId_userPhone' or 'userPhone_life'
   orgId: varchar('org_id', { length: 64 }).references(() => organizations.id),
-  userPhone: varchar('user_phone', { length: 20 }), // We don't strictly reference users.phone yet to allow un-profiled users
+  userPhone: varchar('user_phone', { length: 64 }), // Increased to 64 to fit full WhatsApp JIDs like 28364215738456@lid_life
   userName: varchar('user_name', { length: 255 }),
   isOptedOut: boolean('is_opted_out').default(false).notNull(),
   isCartActive: boolean('is_cart_active').default(false).notNull(),

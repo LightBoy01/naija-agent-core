@@ -6,6 +6,7 @@ export interface LifePipelineContext {
   // Required data from the incoming Job
   job: Job;
   userPhone: string;
+  phoneId?: string;
   orgId?: string;
   message?: string;
   type: string;

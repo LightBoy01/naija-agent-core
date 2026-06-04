@@ -22,11 +22,12 @@ export interface ModelCapability {
 
 export const GlobalModelRegistry: ModelCapability[] = [
     {
-        id: 'gemini-3-flash-preview',
+        id: 'gemini-2.5-flash',
         provider: 'gemini',
-        apiKeyEnv: 'GEMINI_API_KEY',
-        skills: ['reasoning', 'tool-calling', 'vision-in'],
-        costProfile: 'high',
+        baseURL: 'https://generativelanguage.googleapis.com',
+        apiKeyEnv: 'GEMINI_API_KEY_STUDIO',
+        skills: ['reasoning', 'tool-calling', 'vision-in', 'summarization'],
+        costProfile: 'low',
         maxContext: 1000000
     },
     {
