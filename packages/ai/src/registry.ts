@@ -22,7 +22,7 @@ export interface ModelCapability {
 
 export const GlobalModelRegistry: ModelCapability[] = [
     {
-        id: 'gemini-3.5-flash',
+        id: 'models/gemini-3.5-flash',
         provider: 'gemini',
         baseURL: 'https://generativelanguage.googleapis.com',
         apiKeyEnv: 'GEMINI_API_KEY_STUDIO',
@@ -31,7 +31,7 @@ export const GlobalModelRegistry: ModelCapability[] = [
         maxContext: 1000000
     },
     {
-        id: 'gemini-3.1-pro-preview',
+        id: 'models/gemini-3.1-pro-preview',
         provider: 'gemini',
         baseURL: 'https://generativelanguage.googleapis.com',
         apiKeyEnv: 'GEMINI_API_KEY_STUDIO',
@@ -40,7 +40,7 @@ export const GlobalModelRegistry: ModelCapability[] = [
         maxContext: 1000000
     },
     {
-        id: 'gemini-3.1-flash-lite',
+        id: 'models/gemini-3.1-flash-lite',
         provider: 'gemini',
         baseURL: 'https://generativelanguage.googleapis.com',
         apiKeyEnv: 'GEMINI_API_KEY_STUDIO',
@@ -49,7 +49,7 @@ export const GlobalModelRegistry: ModelCapability[] = [
         maxContext: 1000000
     },
     {
-        id: 'gemini-2.5-flash',
+        id: 'models/gemini-2.5-flash',
         provider: 'gemini',
         baseURL: 'https://generativelanguage.googleapis.com',
         apiKeyEnv: 'GEMINI_API_KEY_STUDIO',

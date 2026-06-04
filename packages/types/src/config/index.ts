@@ -29,27 +29,27 @@ export const SystemConfig = {
     // Models
     MODELS: {
         // --- ZYNUX (Business OS) ---
-        ZYNUX_PRIMARY: 'gemini-3.5-flash',
-        ZYNUX_WORKER: 'gemini-3.1-flash-lite',
-        ZYNUX_FALLBACK: 'gemini-2.5-flash',
+        ZYNUX_PRIMARY: 'models/gemini-3.5-flash',
+        ZYNUX_WORKER: 'models/gemini-3.1-flash-lite',
+        ZYNUX_FALLBACK: 'models/gemini-2.5-flash',
 
         // --- AELIXXR (Life OS) ---
-        AELIXXR_PRIMARY: 'gemini-3.5-flash',
-        AELIXXR_WORKER: 'gemini-3.1-flash-lite',
-        AELIXXR_FALLBACK: 'gemini-2.5-flash',
+        AELIXXR_PRIMARY: 'models/gemini-3.5-flash',
+        AELIXXR_WORKER: 'models/gemini-3.1-flash-lite',
+        AELIXXR_FALLBACK: 'models/gemini-2.5-flash',
 
         // --- ROUTER (Gateway) ---
-        ROUTER_PRIMARY: 'gemini-3.1-flash-lite',
-        ROUTER_FALLBACK: 'gemini-2.5-flash',
+        ROUTER_PRIMARY: 'models/gemini-3.1-flash-lite',
+        ROUTER_FALLBACK: 'models/gemini-2.5-flash',
 
         // --- DEEPSEEK (V4) ---
         DEEPSEEK_PRO: 'deepseek-v4-pro',
         DEEPSEEK_FLASH: 'deepseek-v4-flash',
 
         // Legacy keys to prevent immediate breakage (deprecated)
-        DEFAULT: 'gemini-3.5-flash',
-        FALLBACK_L2: 'gemini-2.5-flash',
-        FALLBACK_L3: 'gemini-2.5-flash',
+        DEFAULT: 'models/gemini-3.5-flash',
+        FALLBACK_L2: 'models/gemini-2.5-flash',
+        FALLBACK_L3: 'models/gemini-2.5-flash',
     },    // Defaults
     DEFAULTS: {
         TIMEZONE: 'Africa/Lagos',

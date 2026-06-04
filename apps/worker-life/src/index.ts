@@ -38,7 +38,7 @@ const fallbackProviderType = (process.env.AI_PROVIDER_FALLBACK || 'gemini') as a
 const aiOrchestrator = AIFactory.createOrchestrator(
     {
         type: primaryProviderType,
-        apiKey: process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY,
+        apiKey: process.env.GEMINI_API_KEY_STUDIO || process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY,
         model: process.env.GEMINI_MODEL_LOS || SystemConfig.MODELS.AELIXXR_PRIMARY
     },
     {
@@ -49,7 +49,7 @@ const aiOrchestrator = AIFactory.createOrchestrator(
     }
 );
 
-const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || '';
+const apiKey = process.env.GEMINI_API_KEY_STUDIO || process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || '';
 
 // --- Dynamic Tools & MCP Setup ---
 let globalLifeTools: any[] | null = null;
