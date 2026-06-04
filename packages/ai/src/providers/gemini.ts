@@ -15,14 +15,18 @@ export class GeminiProvider implements AIProvider {
       process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     }
 
-    const defaultBaseURL = 'https://aiplatform.googleapis.com';
-    const defaultApiVersion = baseURL ? 'v1beta' : 'v1/publishers/google'; // AI Studio typically uses v1beta
+    let defaultBaseURL = 'https://aiplatform.googleapis.com';
+    if (apiKey && apiKey.startsWith('AIza')) {
+      defaultBaseURL = 'https://generativelanguage.googleapis.com';
+    }
+    const resolvedBaseURL = baseURL || defaultBaseURL;
+    const resolvedApiVersion = resolvedBaseURL.includes('generativelanguage') ? 'v1beta' : 'v1/publishers/google';
 
     this.genAI = new GoogleGenAI({
       apiKey,
       httpOptions: { 
-        baseUrl: baseURL || defaultBaseURL, 
-        apiVersion: baseURL?.includes('generativelanguage') ? 'v1beta' : (baseURL ? 'v1' : 'v1/publishers/google')
+        baseUrl: resolvedBaseURL, 
+        apiVersion: resolvedApiVersion
       }
     });
   }
