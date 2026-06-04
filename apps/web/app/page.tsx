@@ -27,10 +27,10 @@ export default function LandingPage() {
           detects fake receipts, and closes deals on WhatsApp while you sleep.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-          <Link href="/setup/zynux" className="px-8 py-4 bg-zinc-900 text-white text-lg font-bold rounded-2xl hover:bg-zinc-800 transition-all shadow-xl shadow-zinc-200 flex items-center justify-center gap-2">
+          <Link href="/qr/zynux" className="px-8 py-4 bg-zinc-900 text-white text-lg font-bold rounded-2xl hover:bg-zinc-800 transition-all shadow-xl shadow-zinc-200 flex items-center justify-center gap-2">
             <span>🔗</span> Link Zynux
           </Link>
-          <Link href="/setup/aelixxr" className="px-8 py-4 bg-green-600 text-white text-lg font-bold rounded-2xl hover:bg-green-500 transition-all shadow-xl shadow-green-200 flex items-center justify-center gap-2">
+          <Link href="/qr/aelixxr" className="px-8 py-4 bg-green-600 text-white text-lg font-bold rounded-2xl hover:bg-green-500 transition-all shadow-xl shadow-green-200 flex items-center justify-center gap-2">
             <span>🔗</span> Link Aelixxr
           </Link>
           <Link href="/dashboard" className="px-8 py-4 bg-white text-zinc-900 text-lg font-bold rounded-2xl border-2 border-zinc-100 hover:border-zinc-200 transition-all flex items-center justify-center">
