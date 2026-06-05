@@ -227,7 +227,7 @@ func (m *Manager) handleMessage(orgID string, evt *events.Message) {
 	// - Aelixxr (Masterbot) always marks as read instantly (blue ticks).
 	// - Zynux (Client Bots) leaves it as unread (grey ticks) so human admins can easily spot unread chats when they open their WhatsApp.
 	if orgID == "naija-agent-master" || orgID == "aelixxr" {
-		if err := m.clients[orgID].MarkRead([]types.MessageID{evt.Info.ID}, evt.Info.Timestamp, evt.Info.Chat, evt.Info.Sender); err != nil {
+		if err := m.clients[orgID].MarkRead(context.Background(), []types.MessageID{evt.Info.ID}, evt.Info.Timestamp, evt.Info.Chat, evt.Info.Sender); err != nil {
 			m.log.Warnf("Failed to mark message as read: %v", err)
 		}
 	}
@@ -368,7 +368,7 @@ func (m *Manager) SendTyping(orgID, to string) error {
 		return fmt.Errorf("invalid JID: %v", err)
 	}
 
-	return client.SendChatState(jid, types.ChatStateComposing)
+	return client.SendChatPresence(context.Background(), jid, types.ChatPresenceComposing, types.ChatPresenceMediaText)
 }
 
 func (m *Manager) Shutdown() {
