@@ -357,6 +357,20 @@ func (m *Manager) SendMessage(orgID, to, text string) error {
 	return err
 }
 
+func (m *Manager) SendTyping(orgID, to string) error {
+	client, err := m.GetClient(orgID)
+	if err != nil {
+		return err
+	}
+
+	jid, err := types.ParseJID(to)
+	if err != nil {
+		return fmt.Errorf("invalid JID: %v", err)
+	}
+
+	return client.SendChatState(jid, types.ChatStateComposing)
+}
+
 func (m *Manager) Shutdown() {
 	m.mu.Lock()
 	defer m.mu.Unlock()

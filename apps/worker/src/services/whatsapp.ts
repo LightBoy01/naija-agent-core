@@ -227,6 +227,36 @@ export class WhatsAppService {
     }
   }
 
+  /**
+   * Dispatches a Typing Indicator (ChatStateComposing) to the Sovereign Go Sidecar.
+   */
+  async sendTypingIndicator(to: string): Promise<boolean> {
+    if (this.phoneId.startsWith('baileys-')) {
+       const orgId = this.phoneId.replace('baileys-', '');
+       const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
+       const apiKey = process.env.ADMIN_API_KEY;
+       
+       try {
+         await axios.post(
+           `${sidecarUrl}/typing`,
+           { orgId, to },
+           {
+             headers: {
+               'X-API-Key': apiKey || '',
+               'Content-Type': 'application/json'
+             }
+           }
+         );
+         return true;
+       } catch (e: any) {
+         console.error('❌ [SOVEREIGN TYPING] Failed:', e.response?.data || e.message);
+         return false;
+       }
+    }
+    // Fallback logic for Meta Official API not needed if Sovereign architecture is strict
+    return false;
+  }
+
   async sendTemplate(to: string, templateName: string, languageCode: string = 'en_US'): Promise<string> {
     // --- SOVEREIGN ROUTING ---
     if (this.phoneId.startsWith('baileys-')) {

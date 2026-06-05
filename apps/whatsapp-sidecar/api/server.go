@@ -41,6 +41,7 @@ func (s *Server) Start(port string) {
 	mux.HandleFunc("/send", s.handleSend)
 	mux.HandleFunc("/connect", s.handleConnect)
 	mux.HandleFunc("/pair", s.handlePair)
+	mux.HandleFunc("/typing", s.handleTyping)
 	mux.HandleFunc("/download/", s.handleDownload)
 
 	http.ListenAndServe(":"+port, mux)
@@ -144,6 +145,34 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 	
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "sent"})
+}
+
+func (s *Server) handleTyping(w http.ResponseWriter, r *http.Request) {
+	if !s.checkAuth(w, r) {
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		OrgID string `json:"orgId"`
+		To    string `json:"to"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := s.mgr.SendTyping(req.OrgID, req.To); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "typing_sent"})
 }
 
 func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {

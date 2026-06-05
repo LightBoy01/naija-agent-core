@@ -131,6 +131,12 @@ ${globalProtocol}
   }
 
   let aiResponse;
+
+  // --- TRIGGER TYPING INDICATOR ---
+  tenantWhatsAppService.sendTypingIndicator(from).catch(e => 
+      logger.warn({ error: e.message }, 'Failed to send typing indicator')
+  );
+
   if (type === 'image' && mediaBuffer && mediaMime) {
       aiResponse = await ai.analyzeImage(mediaBuffer, mediaMime, content.caption || "Analyze this", {
           model: tenantModelName,
