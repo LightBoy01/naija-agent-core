@@ -123,20 +123,26 @@ const messagePipeline = new MessagePipeline()
   .use(BillingInterceptor);
 
 // --- Hydrate Sidecar Map in Redis ---
-import { getAllOrgs } from '@naija-agent/database';
+import { getDb } from '@naija-agent/firebase';
 async function hydrateSidecar() {
-    const orgs = await getAllOrgs();
-    for (const org of orgs) {
-        const config = org.config as any;
-        if (config?.botPhone) {
+    const db = getDb();
+    const snapshot = await db.collection('organizations').get();
+    let count = 0;
+    for (const doc of snapshot.docs) {
+        const org = doc.data();
+        const orgId = doc.id;
+        const config = org.config || {};
+        if (config.botPhone) {
             const jid = `${config.botPhone}@s.whatsapp.net`;
-            await redisClient.set(`sidecar_map:${jid}`, org.id);
-            await redisClient.set(`sidecar_map:${config.botPhone}`, org.id); // fallback
+            await redisClient.set(`sidecar_map:${jid}`, orgId);
+            await redisClient.set(`sidecar_map:${config.botPhone}`, orgId); // fallback
+            count++;
         }
     }
-    logger.info(`✅ Hydrated sidecar mapping for ${orgs.length} organizations in Redis`);
+    logger.info(`✅ Hydrated sidecar mapping for ${count} organizations in Redis from Firebase`);
 }
 hydrateSidecar().catch(e => logger.error({error: e.message}, "Failed to hydrate sidecar mapping"));
+
 
 // --- Main Worker ---
 const worker = new Worker<JobData>(
