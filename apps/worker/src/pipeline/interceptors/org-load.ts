@@ -11,7 +11,25 @@ export const OrgLoadInterceptor: Interceptor = {
   name: 'OrgLoad',
   execute: async (ctx: PipelineContext) => {
     // 1. Load Core Organization Data
-    const org = await getOrgById(ctx.orgId);
+    let org = await getOrgById(ctx.orgId);
+    
+    // --- RACE CONDITION FALLBACK ---
+    // If Go Sidecar booted before Node.js hydrated Redis, it will pass the raw phone number
+    // as the orgId (e.g. "2349015772541"). We must query Firebase to find the mapped ID.
+    if (!org) {
+      const { getDb } = await import('@naija-agent/firebase');
+      const db = getDb();
+      const fallbackQuery = await db.collection('organizations')
+          .where('config.botPhone', '==', ctx.orgId)
+          .limit(1)
+          .get();
+      
+      if (!fallbackQuery.empty) {
+          org = fallbackQuery.docs[0].data() as any;
+          // Rewrite the ctx.orgId to the correct string ID (e.g., 'zynux')
+          ctx.orgId = fallbackQuery.docs[0].id;
+      }
+    }
     if (!org) {
       ctx.shortCircuit = true;
       ctx.shortCircuitReason = 'ORG_NOT_FOUND';

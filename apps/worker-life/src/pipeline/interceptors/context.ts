@@ -7,7 +7,24 @@ export const ContextInterceptor: LifeInterceptor = {
   name: 'LifeContextLoad',
   execute: async (ctx: LifePipelineContext) => {
     // 1. Load Organization (if applicable)
-    ctx.org = ctx.orgId ? await getOrgById(ctx.orgId) : null;
+    let org = ctx.orgId ? await getOrgById(ctx.orgId) : null;
+    
+    // --- RACE CONDITION FALLBACK ---
+    if (!org && ctx.orgId) {
+      const { getDb } = await import('@naija-agent/firebase');
+      const db = getDb();
+      const fallbackQuery = await db.collection('organizations')
+          .where('config.botPhone', '==', ctx.orgId)
+          .limit(1)
+          .get();
+      
+      if (!fallbackQuery.empty) {
+          org = fallbackQuery.docs[0].data() as any;
+          ctx.orgId = fallbackQuery.docs[0].id;
+      }
+    }
+    
+    ctx.org = org;
 
     // 2. Load Aelixxr Core Memory & Stats
     const context = await lifeMemory.getContext(ctx.userPhone);
