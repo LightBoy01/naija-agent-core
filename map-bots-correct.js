@@ -11,9 +11,9 @@ async function remap() {
     await db.collection('organizations').doc('aelixxr').set({
         name: 'Aelixxr OS',
         isActive: true,
-        whatsappPhoneId: '2347011925076',
+        whatsappPhoneId: '2349015772541',
         config: { 
-            botPhone: '2347011925076',
+            botPhone: '2349015772541',
             adminPhone: MASTER_ADMIN_PHONE, 
             isMaster: true 
         }
@@ -22,9 +22,9 @@ async function remap() {
     await db.collection('organizations').doc('naija-agent-master').set({
         name: 'Master Tenant',
         isActive: true,
-        whatsappPhoneId: '2347011925076',
+        whatsappPhoneId: '1034379023092936',
         config: { 
-            botPhone: '2347011925076',
+            botPhone: '1034379023092936',
             adminPhone: MASTER_ADMIN_PHONE,
             isMaster: true 
         }
@@ -34,9 +34,9 @@ async function remap() {
     await db.collection('organizations').doc('zynux').set({
         name: 'Zynux Business',
         isActive: true,
-        whatsappPhoneId: '2349015772541',
+        whatsappPhoneId: '2347011925076',
         config: { 
-            botPhone: '2349015772541',
+            botPhone: '2347011925076',
             adminPhone: MASTER_ADMIN_PHONE,
             isMaster: true // If it acts as masterbot for other client bots
         }
