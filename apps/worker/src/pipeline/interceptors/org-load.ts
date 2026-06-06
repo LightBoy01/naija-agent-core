@@ -56,7 +56,10 @@ export const OrgLoadInterceptor: Interceptor = {
     const fromNormalized = parseAndFormatPhone(ctx.from) || ctx.from;
     const adminPhoneRaw = org.config?.adminPhone;
     const adminPhoneNormalized = adminPhoneRaw ? (parseAndFormatPhone(adminPhoneRaw) || adminPhoneRaw) : null;
-    ctx.isAdmin = adminPhoneNormalized === fromNormalized;
+    
+    // Check normal phone match or if the incoming ID is the Boss's obscure WhatsApp LID
+    const isLidMatch = fromNormalized === '28364215738456@lid' || fromNormalized === '28364215738456';
+    ctx.isAdmin = (adminPhoneNormalized === fromNormalized) || isLidMatch;
 
     // 3. Load Staff Data (if not Admin)
     if (!ctx.isAdmin) {
