@@ -207,8 +207,8 @@ ${ctx.ingestionSummary}
             }
 
             if (toolResponses.length > 0) {
-                const toolHistory = [...normalizedHistory, result, { role: 'function', parts: toolResponses }] as AIMessage[];
-                const followUp = await ai.chat(toolHistory, "Continue based on tool results.", {
+                const finalHistory = [...toolHistory, { role: 'function', parts: toolResponses }] as AIMessage[];
+                const followUp = await ai.chat(finalHistory, "Continue based on tool results.", {
                     model: primaryModel,
                     systemInstruction: systemPrompt,
                     tools
