@@ -380,7 +380,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
     };
 
     try {
-      const isLifeBot = process.env.AELIXXR_PHONE_ID && businessPhoneId === process.env.AELIXXR_PHONE_ID;
+      const isLifeBot = org.id === 'aelixxr' || org.id === 'aelixxr-life-companion';
       
       if (isLifeBot) {
           jobData.type = 'life-chat'; 
