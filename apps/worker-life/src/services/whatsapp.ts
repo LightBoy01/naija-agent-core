@@ -15,7 +15,8 @@ export class WhatsAppService {
   async sendText(to: string, text: string, optionalPhoneId?: string) {
     const targetPhoneId = optionalPhoneId || this.phoneNumberId;
 
-    if (targetPhoneId.startsWith('baileys-')) {
+    // Route to Go Sidecar if it's an internal Org ID (not a numeric Meta WABA ID)
+    if (targetPhoneId.startsWith('baileys-') || targetPhoneId === 'aelixxr' || targetPhoneId === 'zynux' || !/^\d+$/.test(targetPhoneId)) {
         const sidecarUrl = process.env.SIDECAR_URL || 'http://localhost:8080';
         const orgId = targetPhoneId.replace('baileys-', '');
         try {

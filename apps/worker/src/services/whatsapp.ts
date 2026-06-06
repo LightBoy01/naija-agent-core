@@ -44,7 +44,7 @@ export class WhatsAppService {
     const finalBody = body || "I'm sorry, I couldn't generate a response. Please try again.";
 
     // --- SOVEREIGN ROUTING ---
-    if (this.phoneId.startsWith('baileys-')) {
+    if (this.phoneId.startsWith('baileys-') || this.phoneId === 'aelixxr' || this.phoneId === 'zynux' || !/^\d+$/.test(this.phoneId)) {
        const orgId = this.phoneId.replace('baileys-', '');
        await this.sendToSovereign(orgId, to, finalBody);
        return `SOV-${Date.now()}`;
@@ -90,7 +90,7 @@ export class WhatsAppService {
   // Send Image Message
   async sendImage(to: string, imageUrl: string | Buffer, caption?: string): Promise<string> {
     // --- SOVEREIGN ROUTING ---
-    if (this.phoneId.startsWith('baileys-')) {
+    if (this.phoneId.startsWith('baileys-') || this.phoneId === 'aelixxr' || this.phoneId === 'zynux' || !/^\d+$/.test(this.phoneId)) {
        const orgId = this.phoneId.replace('baileys-', '');
        const text = caption ? `${caption}\n\n${imageUrl}` : `${imageUrl}`;
        await this.sendToSovereign(orgId, to, text);
@@ -136,8 +136,8 @@ export class WhatsAppService {
   // Download Media (Audio/Image)
   async downloadMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
     // If it's a whatsmeow ID (usually starts with a prefix or doesn't look like a Meta ID)
-    // or if we detect the sidecar context. For now, check if phoneId is 'baileys-'
-    if (this.phoneId.startsWith('baileys-')) {
+    // If it's a whatsmeow ID (usually starts with a prefix or doesn't look like a Meta ID)
+    if (this.phoneId.startsWith('baileys-') || this.phoneId === 'aelixxr' || this.phoneId === 'zynux' || !/^\d+$/.test(this.phoneId)) {
        return this.downloadMediaFromSovereign(mediaId);
     }
 
@@ -231,7 +231,7 @@ export class WhatsAppService {
    * Dispatches a Typing Indicator (ChatStateComposing) to the Sovereign Go Sidecar.
    */
   async sendTypingIndicator(to: string): Promise<boolean> {
-    if (this.phoneId.startsWith('baileys-')) {
+    if (this.phoneId.startsWith('baileys-') || this.phoneId === 'aelixxr' || this.phoneId === 'zynux' || !/^\d+$/.test(this.phoneId)) {
        const orgId = this.phoneId.replace('baileys-', '');
        const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
        const apiKey = process.env.ADMIN_API_KEY;

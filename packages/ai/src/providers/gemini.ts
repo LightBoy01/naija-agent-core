@@ -83,7 +83,10 @@ export class GeminiProvider implements AIProvider {
               return { functionResponse: p.functionResponse };
           }
           if (p.functionCall) {
-              return { functionCall: p.functionCall };
+              // The Universal SDK (@google/genai) rejects the 'id' field. Strip it out.
+              const cleanCall = { ...p.functionCall };
+              if ('id' in cleanCall) delete (cleanCall as any).id;
+              return { functionCall: cleanCall };
           }
           if (p.inlineData) {
               return { inlineData: p.inlineData };

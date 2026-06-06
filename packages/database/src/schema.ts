@@ -140,6 +140,49 @@ export const messages = pgTable('messages', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+// --- Products (Commerce Catalog) ---
+export const products = pgTable('products', {
+  id: varchar('id', { length: 128 }).primaryKey(),
+  orgId: varchar('org_id', { length: 64 }).references(() => organizations.id).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  nameLowercase: varchar('name_lowercase', { length: 255 }),
+  description: text('description'),
+  price: decimal('price', { precision: 20, scale: 2 }),
+  stock: integer('stock').default(0).notNull(),
+  reserved: integer('reserved').default(0).notNull(),
+  lowStockThreshold: integer('low_stock_threshold').default(3).notNull(),
+  isLowStock: boolean('is_low_stock').default(false).notNull(),
+  metadata: jsonb('metadata'), // image URLs, variants, etc.
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => {
+  return {
+    orgIdIdx: index('products_org_id_idx').on(table.orgId),
+    lowStockIdx: index('products_low_stock_idx').on(table.isLowStock),
+  };
+});
+
+// --- Activities (Bookings, Waybills, Operations) ---
+export const activities = pgTable('activities', {
+  id: varchar('id', { length: 128 }).primaryKey(),
+  orgId: varchar('org_id', { length: 64 }).references(() => organizations.id).notNull(),
+  type: varchar('type', { length: 50 }).notNull(), // 'booking', 'waybill'
+  status: varchar('status', { length: 50 }).default('pending').notNull(),
+  summary: text('summary'),
+  amount: decimal('amount', { precision: 20, scale: 2 }),
+  customerPhone: varchar('customer_phone', { length: 20 }),
+  assignedStaffPhone: varchar('assigned_staff_phone', { length: 20 }),
+  metadata: jsonb('metadata'), // startTime, duration, reminder flags, cart items
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => {
+  return {
+    orgIdIdx: index('activities_org_id_idx').on(table.orgId),
+    customerPhoneIdx: index('activities_customer_phone_idx').on(table.customerPhone),
+    typeStatusIdx: index('activities_type_status_idx').on(table.type, table.status),
+  };
+});
+
 // --- Cart Items (Commerce) ---
 export const cartItems = pgTable('cart_items', {
   id: varchar('id', { length: 128 }).primaryKey(),
