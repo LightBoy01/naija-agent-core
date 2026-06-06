@@ -46,9 +46,22 @@ export async function handleLifeChat(job: Job, deps: ChatDependencies) {
     const rawMessage = job.data.message !== undefined ? job.data.message : job.data.content?.text;
     const orgId = job.data.orgId;
     const type = job.data.type;
-    const imageId = job.data.imageId || job.data.content?.imageId || (type === 'image' || type === 'video' ? job.data.content?.fileName : undefined);
-    const documentId = job.data.documentId || job.data.content?.documentId || (type === 'document' ? job.data.content?.fileName : undefined);
-    const audioId = job.data.audioId || job.data.content?.audioId || (type === 'audio' ? job.data.content?.fileName : undefined);
+    const fileName = job.data.content?.fileName;
+    
+    let isImage = type === 'image' || type === 'video';
+    let isDoc = type === 'document';
+    let isAudio = type === 'audio';
+
+    if (fileName && type === 'life-chat') {
+        const lower = fileName.toLowerCase();
+        if (lower.endsWith('.pdf') || lower.endsWith('.doc') || lower.endsWith('.docx')) isDoc = true;
+        else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.mp4') || lower.endsWith('.png')) isImage = true;
+        else if (lower.endsWith('.ogg') || lower.endsWith('.mp3')) isAudio = true;
+    }
+
+    const imageId = job.data.imageId || job.data.content?.imageId || (isImage ? fileName : undefined);
+    const documentId = job.data.documentId || job.data.content?.documentId || (isDoc ? fileName : undefined);
+    const audioId = job.data.audioId || job.data.content?.audioId || (isAudio ? fileName : undefined);
     const hops = job.data.hops || 0;
     const phoneId = job.data.phoneId;
     
