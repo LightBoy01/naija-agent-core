@@ -64,5 +64,12 @@ export function getTenantTools(
     allFunctionDeclarations.push(...SYSTEM_TOOLS);
   }
 
-  return [{ functionDeclarations: allFunctionDeclarations }];
+  // --- DEDUPLICATE TOOLS ---
+  const uniqueToolsMap = new Map();
+  for (const tool of allFunctionDeclarations) {
+    uniqueToolsMap.set(tool.name, tool);
+  }
+  const uniqueFunctionDeclarations = Array.from(uniqueToolsMap.values());
+
+  return [{ functionDeclarations: uniqueFunctionDeclarations }];
 }
