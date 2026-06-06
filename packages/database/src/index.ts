@@ -4,4 +4,7 @@ export * from './chat.js';
 export * from './cron.js';
 export * from './fraud.js';
 export * from './organizations.js';
+export * from './products.js';
+export * from './activities.js';
+export * from './stats.js';
 export * from 'drizzle-orm';

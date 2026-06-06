@@ -1,6 +1,6 @@
 import { db, getDb } from './db.js';
-import { chats, messages } from './schema.js';
-import { eq, desc, sql } from 'drizzle-orm';
+import { chats, messages, cartItems, products } from './schema.js';
+import { eq, desc, sql, and, lt, gt } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { Message } from '@naija-agent/types';
 
@@ -129,16 +129,12 @@ export async function getNetworkChats(orgId: string, limit = 50): Promise<any[]>
   const sqlDb = getDb();
 
   try {
-    const query = sqlDb.select()
-      .from(chats)
-      .orderBy(desc(chats.lastMessageAt))
-      .limit(limit);
-    
+    let rows;
     if (orgId !== 'naija-agent-master') {
-      query.where(eq(chats.orgId, orgId));
+      rows = await sqlDb.select().from(chats).where(eq(chats.orgId, orgId)).orderBy(desc(chats.lastMessageAt)).limit(limit);
+    } else {
+      rows = await sqlDb.select().from(chats).orderBy(desc(chats.lastMessageAt)).limit(limit);
     }
-
-    const rows = await query;
     
     // Normalize to the format expected by the Web Dashboard
     return rows.map(row => ({
@@ -157,19 +153,177 @@ export async function getNetworkChats(orgId: string, limit = 50): Promise<any[]>
   }
 }
 
+// --- COMMERCE / CART WORKFLOWS ---
+
+export async function addToCart(
+  orgId: string, 
+  userPhone: string, 
+  productId: string, 
+  quantity: number
+): Promise<{ success: boolean; message: string }> {
+  const sqlDb = getDb();
+  const chatId = `${orgId}_${userPhone}`;
+
+  try {
+    return await sqlDb.transaction(async (tx) => {
+      // 1. Get Product with Lock
+      const productResult = await tx.select({
+        stock: products.stock,
+        reserved: products.reserved,
+        name: products.name,
+        price: products.price
+      })
+      .from(products)
+      .where(and(eq(products.id, productId), eq(products.orgId, orgId)))
+      .for('update');
+
+      if (productResult.length === 0) return { success: false, message: 'PRODUCT_NOT_FOUND' };
+      
+      const product = productResult[0];
+      const available = product.stock - product.reserved;
+
+      if (available < quantity) {
+        return { success: false, message: `INSUFFICIENT_STOCK: Only ${available} units available.` };
+      }
+
+      // 2. Reserve Stock
+      await tx.update(products)
+        .set({ reserved: sql`${products.reserved} + ${quantity}` })
+        .where(eq(products.id, productId));
+
+      // 3. Add to Cart Items
+      const existingItem = await tx.select()
+        .from(cartItems)
+        .where(and(eq(cartItems.chatId, chatId), eq(cartItems.productId, productId)))
+        .limit(1);
+      
+      if (existingItem.length > 0) {
+        await tx.update(cartItems)
+          .set({ quantity: existingItem[0].quantity + quantity })
+          .where(eq(cartItems.id, existingItem[0].id));
+      } else {
+        await tx.insert(cartItems).values({
+          id: randomUUID(),
+          chatId,
+          productId,
+          name: product.name,
+          price: product.price || '0',
+          quantity
+        });
+      }
+
+      // 4. Update Chat State
+      await tx.update(chats)
+        .set({ 
+          isCartActive: true, 
+          lastCartUpdateAt: sql`CURRENT_TIMESTAMP`,
+          updatedAt: sql`CURRENT_TIMESTAMP`
+        })
+        .where(eq(chats.id, chatId));
+
+      return { success: true, message: 'ADDED' };
+    });
+  } catch (e: any) {
+    console.error('[SQL] addToCart failed:', e.message);
+    return { success: false, message: e.message };
+  }
+}
+
+export async function removeFromCart(
+  orgId: string, 
+  userPhone: string, 
+  productId: string, 
+  quantity?: number
+): Promise<{ success: boolean; message: string }> {
+  const sqlDb = getDb();
+  const chatId = `${orgId}_${userPhone}`;
+
+  try {
+    return await sqlDb.transaction(async (tx) => {
+      const itemResult = await tx.select()
+        .from(cartItems)
+        .where(and(eq(cartItems.chatId, chatId), eq(cartItems.productId, productId)))
+        .limit(1);
+      
+      if (itemResult.length === 0) return { success: false, message: 'ITEM_NOT_IN_CART' };
+
+      const currentQty = itemResult[0].quantity;
+      const removeQty = (quantity && quantity < currentQty) ? quantity : currentQty;
+
+      // 1. Release Reservation
+      await tx.update(products)
+        .set({ reserved: sql`${products.reserved} - ${removeQty}` })
+        .where(and(eq(products.id, productId), eq(products.orgId, orgId)));
+
+      // 2. Update/Delete Cart Item
+      if (removeQty === currentQty) {
+        await tx.delete(cartItems).where(eq(cartItems.id, itemResult[0].id));
+      } else {
+        await tx.update(cartItems)
+          .set({ quantity: currentQty - removeQty })
+          .where(eq(cartItems.id, itemResult[0].id));
+      }
+
+      // 3. Check if cart is now empty
+      const remaining = await tx.select().from(cartItems).where(eq(cartItems.chatId, chatId)).limit(1);
+      if (remaining.length === 0) {
+        await tx.update(chats).set({ isCartActive: false }).where(eq(chats.id, chatId));
+      }
+
+      return { success: true, message: removeQty === currentQty ? 'REMOVED_ENTIRELY' : 'QUANTITY_REDUCED' };
+    });
+  } catch (e: any) {
+    console.error('[SQL] removeFromCart failed:', e.message);
+    return { success: false, message: e.message };
+  }
+}
+
+export async function getCart(orgId: string, userPhone: string) {
+  const sqlDb = getDb();
+  const chatId = `${orgId}_${userPhone}`;
+  
+  const items = await sqlDb.select().from(cartItems).where(eq(cartItems.chatId, chatId));
+  
+  let totalKobo = 0;
+  items.forEach(item => {
+    totalKobo += Math.round(parseFloat(item.price) * item.quantity * 100);
+  });
+
+  return { items, totalKobo };
+}
+
+export async function clearCart(orgId: string, userPhone: string): Promise<void> {
+  const sqlDb = getDb();
+  const chatId = `${orgId}_${userPhone}`;
+
+  await sqlDb.transaction(async (tx) => {
+    const items = await tx.select().from(cartItems).where(eq(cartItems.chatId, chatId));
+    
+    for (const item of items) {
+      await tx.update(products)
+        .set({ reserved: sql`${products.reserved} - ${item.quantity}` })
+        .where(and(eq(products.id, item.productId), eq(products.orgId, orgId)));
+    }
+
+    await tx.delete(cartItems).where(eq(cartItems.chatId, chatId));
+    await tx.update(chats).set({ isCartActive: false }).where(eq(chats.id, chatId));
+  });
+}
+
 export async function getAbandonedCarts(maxAgeMinutes: number = 120, minAgeMinutes: number = 30) {
   const sqlDb = getDb();
-  const now = Date.now();
-  const minAgeTime = new Date(now - (minAgeMinutes * 60 * 1000));
-  const maxAgeTime = new Date(now - (maxAgeMinutes * 60 * 1000));
+  const now = new Date();
+  const minAgeTime = new Date(now.getTime() - (minAgeMinutes * 60 * 1000));
+  const maxAgeTime = new Date(now.getTime() - (maxAgeMinutes * 60 * 1000));
 
-  // We can't do direct date inequalities easily with drizzle mapped helpers without sql`...`, so we'll use raw SQL snippets.
   try {
       const abandonedChats = await sqlDb.select().from(chats)
         .where(
-          sql`${chats.isCartActive} = 1 AND 
-              ${chats.lastCartUpdateAt} <= ${minAgeTime} AND 
-              ${chats.lastCartUpdateAt} >= ${maxAgeTime}`
+          and(
+            eq(chats.isCartActive, true),
+            lt(chats.lastCartUpdateAt, minAgeTime),
+            gt(chats.lastCartUpdateAt, maxAgeTime)
+          )
         );
 
       const abandoned: { orgId: string, userPhone: string, chatId: string }[] = [];
@@ -178,7 +332,7 @@ export async function getAbandonedCarts(maxAgeMinutes: number = 120, minAgeMinut
         const lastNudge = data.lastNudgeAt ? data.lastNudgeAt.getTime() : 0;
         
         // Nudge Cooldown: Don't nudge if nudged in last 24 hours
-        if (now - lastNudge > 24 * 60 * 60 * 1000) {
+        if (now.getTime() - lastNudge > 24 * 60 * 60 * 1000) {
            abandoned.push({
              orgId: data.orgId as string,
              userPhone: data.userPhone as string,
@@ -189,44 +343,38 @@ export async function getAbandonedCarts(maxAgeMinutes: number = 120, minAgeMinut
 
       return abandoned;
   } catch (error) {
-      console.error('[DB] getAbandonedCarts failed', error);
+      console.error('[SQL] getAbandonedCarts failed', error);
       return [];
   }
+}
+
+export async function getExpiredCarts(expirationMinutes: number = 15) {
+  const db = getDb();
+  const expirationTime = new Date(Date.now() - expirationMinutes * 60 * 1000);
+  return await db.select().from(chats)
+    .where(
+      and(
+        eq(chats.isCartActive, true),
+        lt(chats.lastCartUpdateAt, expirationTime)
+      )
+    );
 }
 
 export async function markCartNudged(chatId: string) {
   const sqlDb = getDb();
   await sqlDb.update(chats)
-    .set({ lastNudgeAt: sql`CURRENT_TIMESTAMP` })
+    .set({ lastNudgeAt: new Date() })
     .where(eq(chats.id, chatId));
 }
 
-/**
- * Syncs the active cart state from Firebase to SQL to ensure reminders work.
- */
 export async function syncCartState(chatId: string, isActive: boolean) {
   const sqlDb = getDb();
   await sqlDb.update(chats)
     .set({ 
       isCartActive: isActive, 
-      lastCartUpdateAt: isActive ? sql`CURRENT_TIMESTAMP` : null,
-      updatedAt: sql`CURRENT_TIMESTAMP`
+      lastCartUpdateAt: isActive ? new Date() : null,
+      updatedAt: new Date()
     })
-    .where(eq(chats.id, chatId));
-}
-
-
-export async function getExpiredCarts(expirationMinutes: number = 15) {
-  const db = getDb();
-  const expirationTime = new Date(Date.now() - expirationMinutes * 60 * 1000);
-  const activeCarts = await db.select().from(chats).where(eq(chats.isCartActive, true));
-  return activeCarts.filter(c => c.lastCartUpdateAt && c.lastCartUpdateAt < expirationTime);
-}
-
-export async function clearCart(chatId: string) {
-  const db = getDb();
-  await db.update(chats)
-    .set({ isCartActive: false, lastCartUpdateAt: null })
     .where(eq(chats.id, chatId));
 }
 

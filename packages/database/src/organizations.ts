@@ -1,8 +1,9 @@
 import { getDb } from './db.js';
-import { organizations } from './schema.js';
-import { eq, sql } from 'drizzle-orm';
+import { organizations, systemLogs, networkMetadata } from './schema.js';
+import { eq, sql, and } from 'drizzle-orm';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 
 export async function createTenant(data: {
   id: string;
@@ -18,22 +19,38 @@ export async function createTenant(data: {
   const bridgeSecret = crypto.randomBytes(16).toString('hex');
   const bonusKobo = 100000;
   
-  await db.insert(organizations).values({
-    id: data.id,
-    name: data.name,
-    balanceKobo: bonusKobo,
-    isActive: true,
-    timezone: data.timezone || 'Africa/Lagos',
-    whatsappPhoneId: data.whatsappPhoneId,
-    systemPrompt: data.systemPrompt,
-    config: {
-      adminPhone: data.adminPhone,
-      adminPin: hashedPin,
-      bridgeSecret,
-      useSmsBridge: true,
-      model: 'gemma-4-26b-a4b-it',
-      tools: ['web_search']
-    }
+  await db.transaction(async (tx) => {
+    await tx.insert(organizations).values({
+      id: data.id,
+      name: data.name,
+      balanceKobo: bonusKobo,
+      isActive: true,
+      status: 'ACTIVE',
+      timezone: data.timezone || 'Africa/Lagos',
+      whatsappPhoneId: data.whatsappPhoneId,
+      systemPrompt: data.systemPrompt,
+      config: {
+        adminPhone: data.adminPhone,
+        adminPin: hashedPin,
+        bridgeSecret,
+        useSmsBridge: true,
+        model: 'gemma-4-26b-a4b-it',
+        tools: ['web_search']
+      }
+    });
+
+    // Update global vault total
+    await tx.insert(networkMetadata).values({
+      key: 'global',
+      totalVaultKobo: bonusKobo,
+      activeClients: 1
+    }).onConflictDoUpdate({
+      target: networkMetadata.key,
+      set: {
+        totalVaultKobo: sql`${networkMetadata.totalVaultKobo} + ${bonusKobo}`,
+        activeClients: sql`${networkMetadata.activeClients} + 1`
+      }
+    });
   });
 }
 
@@ -47,28 +64,49 @@ export async function registerTrialInterest(data: {
   const db = getDb();
   const trialBonus = 100000;
   
-  await db.insert(organizations).values({
-    id: data.id,
-    name: data.name,
-    balanceKobo: trialBonus,
-    isActive: true,
-    timezone: data.timezone || 'Africa/Lagos',
-    whatsappPhoneId: 'PENDING',
-    config: {
+  await db.transaction(async (tx) => {
+    await tx.insert(organizations).values({
+      id: data.id,
+      name: data.name,
+      balanceKobo: trialBonus,
+      isActive: true,
       status: 'TRIAL',
-      adminPhone: data.adminPhone,
-      botPhone: data.botPhone,
-      model: 'gemma-4-26b-a4b-it',
-      tools: ['web_search']
-    }
+      timezone: data.timezone || 'Africa/Lagos',
+      whatsappPhoneId: 'PENDING',
+      config: {
+        status: 'TRIAL',
+        adminPhone: data.adminPhone,
+        botPhone: data.botPhone,
+        model: 'gemma-4-26b-a4b-it',
+        tools: ['web_search']
+      }
+    });
+
+    await tx.insert(networkMetadata).values({
+      key: 'global',
+      totalVaultKobo: trialBonus,
+      activeClients: 1
+    }).onConflictDoUpdate({
+      target: networkMetadata.key,
+      set: {
+        totalVaultKobo: sql`${networkMetadata.totalVaultKobo} + ${trialBonus}`,
+        activeClients: sql`${networkMetadata.activeClients} + 1`
+      }
+    });
   });
 }
 
 export async function topupTenant(tenantId: string, amount: number, reference: string) {
   const db = getDb();
-  await db.update(organizations)
-    .set({ balanceKobo: sql`${organizations.balanceKobo} + ${amount}` })
-    .where(eq(organizations.id, tenantId));
+  await db.transaction(async (tx) => {
+    await tx.update(organizations)
+      .set({ balanceKobo: sql`${organizations.balanceKobo} + ${amount}` })
+      .where(eq(organizations.id, tenantId));
+    
+    await tx.update(networkMetadata)
+      .set({ totalVaultKobo: sql`${networkMetadata.totalVaultKobo} + ${amount}` })
+      .where(eq(networkMetadata.key, 'global'));
+  });
 }
 
 export async function getActiveOrganizations() {
@@ -103,7 +141,40 @@ export async function activateTenant(orgId: string, phoneId: string, accessToken
   await db.update(organizations).set({
     whatsappPhoneId: phoneId,
     config,
-    isActive: true
+    isActive: true,
+    status: 'ACTIVE'
+  }).where(eq(organizations.id, orgId));
+}
+
+export async function suspendOrganization(orgId: string, reason: string): Promise<void> {
+  const db = getDb();
+  const org = await getOrgById(orgId);
+  if (!org) return;
+
+  const config = (org.config as any) || {};
+  config.suspensionReason = reason;
+
+  await db.update(organizations).set({
+    isActive: false,
+    status: 'SUSPENDED',
+    config,
+    updatedAt: new Date(),
+  }).where(eq(organizations.id, orgId));
+}
+
+export async function unsuspendOrganization(orgId: string): Promise<void> {
+  const db = getDb();
+  const org = await getOrgById(orgId);
+  if (!org) return;
+
+  const config = (org.config as any) || {};
+  delete config.suspensionReason;
+
+  await db.update(organizations).set({
+    isActive: true,
+    status: 'ACTIVE',
+    config,
+    updatedAt: new Date(),
   }).where(eq(organizations.id, orgId));
 }
 
@@ -111,9 +182,17 @@ export async function getOrgStats(orgId: string) {
   const db = getDb();
   const org = await getOrgById(orgId);
   if (!org) return null;
+
+  // Optimized chat count
+  const chatResult = await db.execute(sql`SELECT COUNT(*) as count FROM chats WHERE org_id = ${orgId}`);
+  const chatCount = Number(chatResult[0]?.count || 0);
+
   return {
     balance: org.balanceKobo,
     isActive: org.isActive,
+    status: org.status,
+    name: org.name,
+    chatCount,
     updatedAt: org.updatedAt
   };
 }
@@ -121,27 +200,65 @@ export async function getOrgStats(orgId: string) {
 export async function getNetworkStats(orgId: string) {
   if (orgId !== 'naija-agent-master') throw new Error('UNAUTHORIZED');
   const db = getDb();
+  
+  const meta = await db.select().from(networkMetadata).where(eq(networkMetadata.key, 'global'));
+  const stats = meta[0] || { totalVaultKobo: 0, activeClients: 0 };
+
   const orgs = await db.select().from(organizations);
-  let totalVaultKobo = 0;
-  orgs.forEach(o => totalVaultKobo += o.balanceKobo);
+  
   return {
-    activeClients: orgs.filter(o => o.isActive).length,
-    totalVaultKobo,
+    activeClients: stats.activeClients,
+    totalVaultKobo: stats.totalVaultKobo,
     clients: orgs
   };
 }
 
 export async function logSystemEvent(orgId: string, eventType: string, summary: string, metadata: any = {}) {
-  console.log(`[SYSTEM EVENT] ${orgId} - ${eventType}: ${summary}`);
+  const db = getDb();
+  try {
+    await db.insert(systemLogs).values({
+      id: randomUUID(),
+      orgId,
+      eventType,
+      summary,
+      metadata,
+      timestamp: new Date()
+    });
+  } catch (e) {
+    console.error(`[SQL] logSystemEvent failed:`, e);
+  }
 }
 
-export async function setMfaCode(orgId: string, code: string) {
+export async function setMfaCode(orgId: string, code: string, expiryMinutes = 5) {
   const db = getDb();
   const org = await getOrgById(orgId);
   if (!org) return;
+
+  const expiry = new Date(Date.now() + expiryMinutes * 60 * 1000);
   const config = (org.config as any) || {};
   config.mfaCode = code;
-  await db.update(organizations).set({ config }).where(eq(organizations.id, orgId));
+  config.mfaExpiresAt = expiry.toISOString();
+
+  await db.update(organizations).set({ config, updatedAt: new Date() }).where(eq(organizations.id, orgId));
+}
+
+export async function verifyMfaCode(orgId: string, code: string): Promise<boolean> {
+  const org = await getOrgById(orgId);
+  if (!org || !(org.config as any)?.mfaCode || !(org.config as any)?.mfaExpiresAt) return false;
+
+  const now = new Date();
+  const expiry = new Date((org.config as any).mfaExpiresAt);
+
+  if (now > expiry) return false;
+  if ((org.config as any).mfaCode !== code) return false;
+
+  const db = getDb();
+  const config = (org.config as any);
+  delete config.mfaCode;
+  delete config.mfaExpiresAt;
+
+  await db.update(organizations).set({ config, updatedAt: new Date() }).where(eq(organizations.id, orgId));
+  return true;
 }
 
 export async function getOrgByPhoneId(phoneId: string) {
@@ -152,20 +269,15 @@ export async function getOrgByPhoneId(phoneId: string) {
 
 export async function getOrgByBridgeSecret(secret: string) {
   const db = getDb();
-  const orgs = await db.select().from(organizations);
-  return orgs.find(o => (o.config as any)?.bridgeSecret === secret) || null;
+  // Using JSONB search for bridgeSecret in config
+  const orgs = await db.select().from(organizations).where(sql`config->>'bridgeSecret' = ${secret}`);
+  return orgs[0] || null;
 }
 
 export async function findOrgByAdminPhone(phone: string) {
   const db = getDb();
-  // Simplified for SQLite/Postgres hybrid testing; ideal to use JSONB extraction in raw Postgres
-  const orgs = await db.select().from(organizations);
-  return orgs.find(o => (o.config as any)?.adminPhone === phone) || null;
-}
-
-export async function getOrgDailyStats(orgId: string, dateStr: string) {
-  // Placeholder for Postgres implementation of daily stats
-  return { salesKobo: 0, expensesKobo: 0, pendingActivities: 0, newCustomers: 0 };
+  const orgs = await db.select().from(organizations).where(sql`config->>'adminPhone' = ${phone}`);
+  return orgs[0] || null;
 }
 
 // Transaction Logic

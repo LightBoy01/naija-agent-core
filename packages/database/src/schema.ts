@@ -40,13 +40,19 @@ export const organizations = pgTable('organizations', {
   name: varchar('name', { length: 255 }).notNull(),
   balanceKobo: bigint('balance_kobo', { mode: 'number' }).default(0).notNull(),
   isActive: boolean('is_active').default(true).notNull(),
+  status: varchar('status', { length: 50 }).default('ACTIVE').notNull(), // 'ACTIVE', 'SUSPENDED', 'TRIAL', etc.
   region: varchar('region', { length: 10 }).default('NG').notNull(),
   sector: varchar('sector', { length: 50 }).default('commerce').notNull(),
+  deploymentModel: varchar('deployment_model', { length: 50 }).default('SHARED').notNull(), // 'SHARED', 'DEDICATED'
+  costPerReply: integer('cost_per_reply').default(3300).notNull(), // Kobo
   whatsappPhoneId: varchar('whatsapp_phone_id', { length: 100 }),
   proxyUrl: varchar('proxy_url', { length: 255 }), // SOCKS5/HTTP proxy for this tenant
   timezone: varchar('timezone', { length: 50 }).default('Africa/Lagos').notNull(),
-  config: jsonb('config'),
+  onboardingStep: varchar('onboarding_step', { length: 50 }).default('NONE').notNull(),
+  onboardingData: jsonb('onboarding_data'),
   systemPrompt: text('system_prompt'),
+  config: jsonb('config'),
+  trialStartedAt: timestamp('trial_started_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -60,7 +66,10 @@ export const users = pgTable('users', {
   pinHash: varchar('pin_hash', { length: 255 }), // Salted Bcrypt
   pinLockUntil: timestamp('pin_lock_until'),
   pinAttempts: integer('pin_attempts').default(0).notNull(),
-  context: jsonb('context'), // Goals, Preferences, Family, etc.
+  family: jsonb('family'),
+  goals: jsonb('goals'),
+  preferences: jsonb('preferences'),
+  context: jsonb('context'), // Legacy catch-all for migration
   sessionStatus: varchar('session_status', { length: 50 }), // e.g. 'IDLE', 'AWAITING_PIN'
   sessionExpiry: timestamp('session_expiry'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -72,12 +81,15 @@ export const transactions = pgTable('transactions', {
   id: varchar('id', { length: 128 }).primaryKey(),
   userId: varchar('user_id', { length: 20 }).references(() => users.phone),
   orgId: varchar('org_id', { length: 64 }).references(() => organizations.id),
-  type: varchar('type', { length: 50 }).notNull(), // 'deposit', 'withdrawal', 'vending', 'conversion'
+  type: varchar('type', { length: 50 }).notNull(), // 'deposit', 'withdrawal', 'vending', 'conversion', 'topup'
   amount: decimal('amount', { precision: 20, scale: 2 }).notNull(),
   currency: varchar('currency', { length: 10 }).default('NGN').notNull(),
   status: varchar('status', { length: 20 }).default('pending').notNull(), // 'pending', 'success', 'failed', 'refunded'
   reference: varchar('reference', { length: 255 }).unique(), // Gateway Ref
+  smsId: varchar('sms_id', { length: 128 }), // Link to incoming bridge SMS
   metadata: jsonb('metadata'),
+  verifiedAt: timestamp('verified_at'),
+  confirmedAt: timestamp('confirmed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -252,3 +264,87 @@ export const heartbeats = pgTable('heartbeats', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+// --- Knowledge Base (RAG & Rules) ---
+export const knowledge = pgTable('knowledge', {
+  slug: varchar('slug', { length: 128 }).primaryKey(),
+  orgId: varchar('org_id', { length: 64 }).references(() => organizations.id).notNull(),
+  key: varchar('key', { length: 128 }).notNull(),
+  content: text('content').notNull(),
+  imageUrl: varchar('image_url', { length: 512 }),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => {
+  return {
+    orgIdIdx: index('knowledge_org_id_idx').on(table.orgId),
+  };
+});
+
+// --- Staff Members ---
+export const staff = pgTable('staff', {
+  phone: varchar('phone', { length: 20 }).primaryKey(),
+  orgId: varchar('org_id', { length: 64 }).references(() => organizations.id).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  role: varchar('role', { length: 50 }).notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => {
+  return {
+    orgIdIdx: index('staff_org_id_idx').on(table.orgId),
+  };
+});
+
+// --- System Logs (Audit Trail) ---
+export const systemLogs = pgTable('system_logs', {
+  id: varchar('id', { length: 128 }).primaryKey(),
+  orgId: varchar('org_id', { length: 64 }).references(() => organizations.id).notNull(),
+  eventType: varchar('event_type', { length: 50 }).notNull(),
+  summary: text('summary').notNull(),
+  metadata: jsonb('metadata'),
+  timestamp: timestamp('timestamp').defaultNow().notNull(),
+}, (table) => {
+  return {
+    orgIdIdx: index('system_logs_org_id_idx').on(table.orgId),
+    eventTypeIdx: index('system_logs_event_type_idx').on(table.eventType),
+  };
+});
+
+// --- Daily Snapshots (Analytics) ---
+export const dailySnapshots = pgTable('daily_snapshots', {
+  orgId: varchar('org_id', { length: 64 }).references(() => organizations.id).notNull(),
+  date: varchar('date', { length: 20 }).notNull(), // 'YYYY-MM-DD'
+  totalSalesKobo: bigint('total_sales_kobo', { mode: 'number' }).default(0).notNull(),
+  totalExpensesKobo: bigint('total_expenses_kobo', { mode: 'number' }).default(0).notNull(),
+  metadata: jsonb('metadata'),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => {
+  return {
+    pk: primaryKey({ columns: [table.orgId, table.date] }),
+  };
+});
+
+// --- Network Metadata (Global Stats) ---
+export const networkMetadata = pgTable('network_metadata', {
+  key: varchar('key', { length: 50 }).primaryKey(), // e.g., 'global'
+  totalVaultKobo: bigint('total_vault_kobo', { mode: 'number' }).default(0).notNull(),
+  activeClients: integer('active_clients').default(0).notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// --- Staging Products (Review Area) ---
+export const stagingProducts = pgTable('staging_products', {
+  id: varchar('id', { length: 128 }).primaryKey(),
+  orgId: varchar('org_id', { length: 64 }).references(() => organizations.id).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  nameLowercase: varchar('name_lowercase', { length: 255 }),
+  description: text('description'),
+  price: decimal('price', { precision: 20, scale: 2 }),
+  stock: integer('stock').default(0).notNull(),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => {
+  return {
+    orgIdIdx: index('staging_products_org_id_idx').on(table.orgId),
+  };
+});
+
