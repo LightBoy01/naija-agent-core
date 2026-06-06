@@ -143,10 +143,7 @@ ${ctx.ingestionSummary}
         const { primaryModel, tools } = await getDynamicModels(systemPrompt);
         
         // --- TRIGGER TYPING INDICATOR ---
-        // Fire and forget (do not await so it doesn't block LLM call)
-        whatsappService.sendTypingIndicator(ctx.userPhone).catch(e => 
-             logger.warn({ error: e.message }, 'Failed to send typing indicator')
-        );
+        // (Typing indicator temporarily disabled to prevent crash)
 
         let result;
         if (ctx.mediaBuffer && ctx.mediaMime) {
