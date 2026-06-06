@@ -15,10 +15,16 @@ export class WhatsAppService {
   async sendText(to: string, text: string, optionalPhoneId?: string) {
     const targetPhoneId = optionalPhoneId || this.phoneNumberId;
 
-    // Route to Go Sidecar if it's an internal Org ID (not a numeric Meta WABA ID)
-    if (targetPhoneId.startsWith('baileys-') || targetPhoneId === 'aelixxr' || targetPhoneId === 'zynux' || !/^\d+$/.test(targetPhoneId)) {
+    // Route to Go Sidecar if it's an internal Org ID or one of the known Sovereign IDs
+    const sovereignIds = ['aelixxr', 'zynux', 'naija-agent-master', '2349015772541', '2347011925076', '1034379023092936'];
+    if (targetPhoneId.startsWith('baileys-') || sovereignIds.includes(targetPhoneId) || !/^\d+$/.test(targetPhoneId)) {
         const sidecarUrl = process.env.SIDECAR_URL || 'http://localhost:8080';
-        const orgId = targetPhoneId.replace('baileys-', '');
+        // Normalize ID to string name if numeric
+        let orgId = targetPhoneId.replace('baileys-', '');
+        if (orgId === '2349015772541') orgId = 'aelixxr';
+        if (orgId === '2347011925076') orgId = 'zynux';
+        if (orgId === '1034379023092936') orgId = 'naija-agent-master';
+
         try {
             await axios.post(`${sidecarUrl}/send`, {
                 orgId,

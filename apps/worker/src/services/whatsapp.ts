@@ -44,8 +44,13 @@ export class WhatsAppService {
     const finalBody = body || "I'm sorry, I couldn't generate a response. Please try again.";
 
     // --- SOVEREIGN ROUTING ---
-    if (this.phoneId.startsWith('baileys-') || this.phoneId === 'aelixxr' || this.phoneId === 'zynux' || !/^\d+$/.test(this.phoneId)) {
-       const orgId = this.phoneId.replace('baileys-', '');
+    const sovereignIds = ['aelixxr', 'zynux', 'naija-agent-master', '2349015772541', '2347011925076', '1034379023092936'];
+    if (this.phoneId.startsWith('baileys-') || sovereignIds.includes(this.phoneId) || !/^\d+$/.test(this.phoneId)) {
+       let orgId = this.phoneId.replace('baileys-', '');
+       if (orgId === '2349015772541') orgId = 'aelixxr';
+       if (orgId === '2347011925076') orgId = 'zynux';
+       if (orgId === '1034379023092936') orgId = 'naija-agent-master';
+       
        await this.sendToSovereign(orgId, to, finalBody);
        return `SOV-${Date.now()}`;
     }
