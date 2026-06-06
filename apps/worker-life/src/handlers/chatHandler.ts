@@ -45,10 +45,10 @@ export async function handleLifeChat(job: Job, deps: ChatDependencies) {
     const userPhone = job.data.userPhone || job.data.from || job.data.From;
     const rawMessage = job.data.message !== undefined ? job.data.message : job.data.content?.text;
     const orgId = job.data.orgId;
-    const imageId = job.data.imageId || job.data.content?.imageId;
-    const documentId = job.data.documentId || job.data.content?.documentId;
-    const audioId = job.data.audioId || job.data.content?.audioId;
     const type = job.data.type;
+    const imageId = job.data.imageId || job.data.content?.imageId || (type === 'image' || type === 'video' ? job.data.content?.fileName : undefined);
+    const documentId = job.data.documentId || job.data.content?.documentId || (type === 'document' ? job.data.content?.fileName : undefined);
+    const audioId = job.data.audioId || job.data.content?.audioId || (type === 'audio' ? job.data.content?.fileName : undefined);
     const hops = job.data.hops || 0;
     const phoneId = job.data.phoneId;
     

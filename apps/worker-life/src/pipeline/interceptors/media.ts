@@ -10,8 +10,23 @@ export const MediaInterceptor: LifeInterceptor = {
     const mediaId = ctx.imageId || ctx.documentId || ctx.audioId;
     
     if (mediaId) {
-        // 1. Download Media from WhatsApp
-        const { buffer, mimeType } = await whatsappService.downloadMedia(mediaId);
+        let buffer: Buffer;
+        let mimeType: string = ctx.mediaMime || 'application/octet-stream';
+
+        if (mediaId.startsWith('/tmp/')) {
+            const fs = await import('fs/promises');
+            buffer = await fs.readFile(mediaId);
+            if (mediaId.endsWith('.pdf')) mimeType = 'application/pdf';
+            else if (mediaId.endsWith('.jpg') || mediaId.endsWith('.jpeg')) mimeType = 'image/jpeg';
+            else if (mediaId.endsWith('.mp4')) mimeType = 'video/mp4';
+            else if (mediaId.endsWith('.ogg')) mimeType = 'audio/ogg';
+        } else {
+            // 1. Download Media from WhatsApp
+            const dl = await whatsappService.downloadMedia(mediaId);
+            buffer = dl.buffer;
+            mimeType = dl.mimeType;
+        }
+
         ctx.mediaBuffer = buffer;
         ctx.mediaMime = mimeType;
         
