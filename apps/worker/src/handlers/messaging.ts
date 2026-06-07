@@ -88,6 +88,7 @@ export async function handleMessage(job: Job<JobData>, deps: MessagingDependenci
 ${personaPrompt}
 
 [SYSTEM CONTEXT]:
+- UNIX Timestamp: ${Date.now()}
 - Time: ${currentLocalTime} (${orgTimeZone})
 - Currency: ${currency.code} (${currency.symbol})
 - Admin Status: ${adminStatus}

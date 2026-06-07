@@ -138,6 +138,7 @@ ${ctx.ingestionSummary}
 
 ---
 [CONTEXT]:
+- UNIX Timestamp: ${Date.now()}
 - UTC: ${new Date().toISOString()}
 - Local: ${ctx.localTime} (${ctx.timezone})
 - Energy: ${ctx.energyCredits}
