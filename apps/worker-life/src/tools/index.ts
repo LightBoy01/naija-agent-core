@@ -41,6 +41,8 @@ export async function getOrchestratorTools(): Promise<Tool[]> {
   
   const allowedNames = [
     'delegate_task', 
+    'delegate_to_hermes',
+    'web_search',
     'save_note', 
     'create_reminder',
     'log_feedback', 
