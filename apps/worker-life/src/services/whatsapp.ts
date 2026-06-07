@@ -89,6 +89,36 @@ export class WhatsAppService {
     }
   }
 
+  /**
+   * Dispatches a Typing Indicator (ChatStateComposing) to the Sovereign Go Sidecar.
+   */
+  async sendTypingIndicator(to: string): Promise<boolean> {
+    const targetPhoneId = this.phoneNumberId;
+    const sovereignIds = ['aelixxr', 'zynux', 'naija-agent-master', '2349015772541', '2347011925076', '1034379023092936'];
+    
+    if (targetPhoneId.startsWith('baileys-') || sovereignIds.includes(targetPhoneId) || !/^\d+$/.test(targetPhoneId)) {
+        let orgId = targetPhoneId.replace('baileys-', '');
+        if (orgId === '2349015772541') orgId = 'aelixxr';
+        if (orgId === '2347011925076') orgId = 'zynux';
+        if (orgId === '1034379023092936') orgId = 'naija-agent-master';
+
+        const sidecarUrl = process.env.SIDECAR_URL || 'http://localhost:8080';
+        try {
+            await axios.post(`${sidecarUrl}/typing`, {
+                orgId,
+                to
+            }, {
+                headers: { 'X-API-Key': process.env.ADMIN_API_KEY }
+            });
+            return true;
+        } catch (error: any) {
+            logger.warn({ error: error.response?.data || error.message }, 'Sidecar Typing Failed');
+            return false;
+        }
+    }
+    return false;
+  }
+
   async downloadMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
     try {
       // 1. Get Media URL

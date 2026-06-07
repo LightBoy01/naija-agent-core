@@ -21,16 +21,38 @@ export interface WebhookRouteOptions {
 }
 
 // Send Typing Indicator and Mark as Read
-async function sendTypingIndicator(phoneId: string, messageId: string, token: string, logger: any) {
+async function sendTypingIndicator(phoneId: string, messageId: string, token: string, logger: any, from?: string) {
   try {
+    const sovereignIds = ['aelixxr', 'zynux', 'naija-agent-master', '2349015772541', '2347011925076', '1034379023092936'];
+    const isSovereign = phoneId.startsWith('baileys-') || sovereignIds.includes(phoneId) || !/^\d+$/.test(phoneId);
+
+    if (isSovereign) {
+       let orgId = phoneId.replace('baileys-', '');
+       if (orgId === '2349015772541') orgId = 'aelixxr';
+       if (orgId === '2347011925076') orgId = 'zynux';
+       if (orgId === '1034379023092936') orgId = 'naija-agent-master';
+
+       const sidecarUrl = process.env.SIDECAR_URL || 'http://localhost:8080';
+       const apiKey = process.env.ADMIN_API_KEY;
+
+       import('axios').then(axios => {
+           axios.default.post(`${sidecarUrl}/typing`, { 
+               orgId, 
+               to: from || 'SYSTEM_MARK_READ' 
+           }, {
+               headers: { 'X-API-Key': apiKey || '' }
+           }).catch(e => {
+                // Ignore errors
+           });
+       });
+       return;
+    }
+
     const url = `https://graph.facebook.com/v21.0/${phoneId}/messages`;
     const body = {
       messaging_product: 'whatsapp',
       status: 'read',
       message_id: messageId,
-      typing_indicator: {
-        type: 'text'
-      }
     };
     
     // Non-blocking fire and forget
@@ -325,7 +347,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
     // --- UX: TRIGGER TYPING INDICATOR ---
     const apiToken = (org.config as any)?.whatsappToken || process.env.WHATSAPP_API_TOKEN;
     if (apiToken) {
-      sendTypingIndicator(businessPhoneId, message.id, apiToken, logger);
+      sendTypingIndicator(businessPhoneId, message.id, apiToken, logger, from);
     }
 
     const processedKey = `processed:${org.id}:${message.id}`;

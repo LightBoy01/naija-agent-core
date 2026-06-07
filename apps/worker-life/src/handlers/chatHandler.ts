@@ -157,7 +157,9 @@ ${ctx.ingestionSummary}
         const { primaryModel, tools } = await getDynamicModels(systemPrompt);
         
         // --- TRIGGER TYPING INDICATOR ---
-        // (Typing indicator temporarily disabled to prevent crash)
+        whatsappService.sendTypingIndicator(ctx.userPhone).catch(e => 
+            logger.warn({ error: e.message }, 'Failed to send typing indicator')
+        );
 
         let result;
         if (ctx.mediaBuffer && ctx.mediaMime) {

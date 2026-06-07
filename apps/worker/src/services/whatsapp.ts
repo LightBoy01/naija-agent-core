@@ -253,9 +253,14 @@ export class WhatsAppService {
    * Dispatches a Typing Indicator (ChatStateComposing) to the Sovereign Go Sidecar.
    */
   async sendTypingIndicator(to: string): Promise<boolean> {
-    if (this.phoneId.startsWith('baileys-') || this.phoneId === 'aelixxr' || this.phoneId === 'zynux' || !/^\d+$/.test(this.phoneId)) {
-       const orgId = this.phoneId.replace('baileys-', '');
-       const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
+    const sovereignIds = ['aelixxr', 'zynux', 'naija-agent-master', '2349015772541', '2347011925076', '1034379023092936'];
+    if (this.phoneId.startsWith('baileys-') || sovereignIds.includes(this.phoneId) || !/^\d+$/.test(this.phoneId)) {
+       let orgId = this.phoneId.replace('baileys-', '');
+       if (orgId === '2349015772541') orgId = 'aelixxr';
+       if (orgId === '2347011925076') orgId = 'zynux';
+       if (orgId === '1034379023092936') orgId = 'naija-agent-master';
+
+       const sidecarUrl = process.env.SIDECAR_URL || 'http://localhost:8080';
        const apiKey = process.env.ADMIN_API_KEY;
        
        try {
@@ -275,7 +280,6 @@ export class WhatsAppService {
          return false;
        }
     }
-    // Fallback logic for Meta Official API not needed if Sovereign architecture is strict
     return false;
   }
 
