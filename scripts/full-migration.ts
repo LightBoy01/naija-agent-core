@@ -16,7 +16,8 @@ import {
   dailySnapshots,
   networkMetadata,
   cartItems,
-  heartbeats
+  heartbeats,
+  vaultDocuments
 } from '../packages/database/dist/index.js';
 import { eq, sql as rawSql } from 'drizzle-orm';
 import dotenv from 'dotenv';
@@ -209,6 +210,12 @@ async function migrate() {
     }
   }
 
+  // --- 2.5. Phone ID Correction (Oga Boss Request) ---
+  console.log('🔧 Correcting Master Bot Phone ID mapping...');
+  await sqlDb.update(organizations)
+    .set({ whatsappPhoneId: '2347011925076' }) // +234 701 192 5076
+    .where(eq(organizations.id, 'naija-agent-master'));
+
   // --- 3. Users (Life OS) & Memories ---
   console.log('\n👤 Migrating Users & Memories...');
   const usersSnapshot = await firestore.collection('user_profiles').get();
@@ -304,9 +311,9 @@ async function migrate() {
         set: { summary: data.summary || null }
       });
 
-      // Messages (Limited to last 50 per chat for migration speed, can be increased)
+      // Messages (Increased to 5000 to ensure no data loss)
       const msgSnap = await firestore.collection('chats').doc(doc.id).collection('messages')
-        .orderBy('timestamp', 'desc').limit(50).get();
+        .orderBy('timestamp', 'desc').limit(5000).get();
       
       for (const mDoc of msgSnap.docs) {
         const mData = mDoc.data();
@@ -344,6 +351,45 @@ async function migrate() {
     } catch (err: any) {
       console.error(`❌ Failed Chat ${doc.id}: ${err.message}`);
     }
+  }
+
+  // --- 4.5 Document Vault ---
+  console.log('\n🗄️ Migrating Document Vault...');
+  const vaultUsersSnap = await firestore.collection('vault').get();
+  for (const userDoc of vaultUsersSnap.docs) {
+    const userId = userDoc.id;
+    const docsSnap = await firestore.collection('vault').doc(userId).collection('docs').get();
+    for (const doc of docsSnap.docs) {
+      const data = doc.data();
+      try {
+        await sqlDb.insert(vaultDocuments).values({
+          id: doc.id,
+          userId: userId,
+          orgId: data.orgId || null,
+          type: data.type || 'Other',
+          title: data.title || null,
+          summary: data.summary || 'Migrated File',
+          content: data.content || null,
+          extractedData: data.extractedData || {},
+          storageUrl: data.storageUrl || null,
+          gcsUri: data.gcsUri || null,
+          provider: data.provider || 'gcs',
+          originalMediaId: data.originalMediaId || null,
+          mimeType: data.mimeType || 'application/octet-stream',
+          caption: data.caption || null,
+          tags: data.tags || [],
+          embedding: data.embedding ? { data: data.embedding } : null,
+          createdAt: data.createdAt ? new Date(data.createdAt) : new Date(),
+          updatedAt: data.updatedAt ? new Date(data.updatedAt) : new Date()
+        }).onConflictDoUpdate({
+          target: vaultDocuments.id,
+          set: { updatedAt: new Date() }
+        });
+      } catch (err: any) {
+        console.error(`❌ Failed Vault Doc ${doc.id}: ${err.message}`);
+      }
+    }
+    console.log(`✅ Vault: Migrated ${docsSnap.size} documents for user ${userId}`);
   }
 
   // --- 5. Transactions ---

@@ -59,7 +59,7 @@ export const organizations = pgTable('organizations', {
 
 // --- User Profiles (Life OS Users) ---
 export const users = pgTable('users', {
-  phone: varchar('phone', { length: 20 }).primaryKey(), // Primary key is the E.164 phone number
+  phone: varchar('phone', { length: 64 }).primaryKey(), // Primary key is the E.164 phone number
   name: varchar('name', { length: 255 }),
   energyCredits: integer('energy_credits').default(100).notNull(),
   vaultBalanceKobo: bigint('vault_balance_kobo', { mode: 'number' }).default(0).notNull(),
@@ -79,7 +79,7 @@ export const users = pgTable('users', {
 // --- Transactions (Financial Ledger) ---
 export const transactions = pgTable('transactions', {
   id: varchar('id', { length: 128 }).primaryKey(),
-  userId: varchar('user_id', { length: 20 }).references(() => users.phone),
+  userId: varchar('user_id', { length: 64 }).references(() => users.phone),
   orgId: varchar('org_id', { length: 64 }).references(() => organizations.id),
   type: varchar('type', { length: 50 }).notNull(), // 'deposit', 'withdrawal', 'vending', 'conversion', 'topup'
   amount: decimal('amount', { precision: 20, scale: 2 }).notNull(),
@@ -96,7 +96,7 @@ export const transactions = pgTable('transactions', {
 // --- Semantic Memory (Long-term Facts) ---
 export const memories = pgTable('memories', {
   id: varchar('id', { length: 128 }).primaryKey(),
-  userId: varchar('user_id', { length: 20 }).references(() => users.phone),
+  userId: varchar('user_id', { length: 64 }).references(() => users.phone),
   orgId: varchar('org_id', { length: 64 }).references(() => organizations.id),
   category: varchar('category', { length: 50 }).notNull(), // 'fact', 'preference', 'episodic'
   content: text('content').notNull(),
@@ -114,8 +114,8 @@ export const memories = pgTable('memories', {
 // --- Referrals (Growth Loop) ---
 export const referrals = pgTable('referrals', {
   id: varchar('id', { length: 128 }).primaryKey(),
-  referrerPhone: varchar('referrer_phone', { length: 20 }).references(() => users.phone).notNull(),
-  referredPhone: varchar('referred_phone', { length: 20 }).notNull(),
+  referrerPhone: varchar('referrer_phone', { length: 64 }).references(() => users.phone).notNull(),
+  referredPhone: varchar('referred_phone', { length: 64 }).notNull(),
   status: varchar('status', { length: 20 }).default('pending').notNull(), // 'pending', 'completed', 'rewarded'
   rewardAmount: integer('reward_amount').default(50).notNull(), // Energy Credits
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -182,8 +182,8 @@ export const activities = pgTable('activities', {
   status: varchar('status', { length: 50 }).default('pending').notNull(),
   summary: text('summary'),
   amount: decimal('amount', { precision: 20, scale: 2 }),
-  customerPhone: varchar('customer_phone', { length: 20 }),
-  assignedStaffPhone: varchar('assigned_staff_phone', { length: 20 }),
+  customerPhone: varchar('customer_phone', { length: 64 }),
+  assignedStaffPhone: varchar('assigned_staff_phone', { length: 64 }),
   metadata: jsonb('metadata'), // startTime, duration, reminder flags, cart items
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -209,7 +209,7 @@ export const cartItems = pgTable('cart_items', {
 // --- Sovereign Cron Jobs (Phase 3: Long-Running Autonomy) ---
 export const cronJobs = pgTable('cron_jobs', {
   id: varchar('id', { length: 128 }).primaryKey(),
-  userId: varchar('user_id', { length: 20 }).references(() => users.phone).notNull(),
+  userId: varchar('user_id', { length: 64 }).references(() => users.phone).notNull(),
   orgId: varchar('org_id', { length: 64 }).references(() => organizations.id).notNull(),
   name: varchar('name', { length: 255 }).notNull(), // User-friendly name (e.g., 'Visa Monitor')
   instruction: text('instruction').notNull(), // The raw prompt/goal for the Hermes worker
@@ -242,7 +242,7 @@ export const fraudRegistry = pgTable('fraud_registry', {
 // --- IronClaw Vault (Secrets Management) ---
 export const vaultSecrets = pgTable('vault_secrets', {
   id: varchar('id', { length: 128 }).primaryKey(),
-  userId: varchar('user_id', { length: 20 }).references(() => users.phone).notNull(),
+  userId: varchar('user_id', { length: 64 }).references(() => users.phone).notNull(),
   serviceName: varchar('service_name', { length: 100 }).notNull(),
   credentials: jsonb('credentials').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -252,7 +252,7 @@ export const vaultSecrets = pgTable('vault_secrets', {
 // --- Heartbeats (Lightweight Deterministic Reminders) ---
 export const heartbeats = pgTable('heartbeats', {
   id: varchar('id', { length: 128 }).primaryKey(),
-  userId: varchar('user_id', { length: 20 }).references(() => users.phone).notNull(),
+  userId: varchar('user_id', { length: 64 }).references(() => users.phone).notNull(),
   type: varchar('type', { length: 50 }).notNull(), // 'reminder', 'market', etc.
   query: varchar('query', { length: 255 }), // For polling configurations
   intervalDescription: varchar('interval_description', { length: 255 }),
@@ -281,7 +281,7 @@ export const knowledge = pgTable('knowledge', {
 
 // --- Staff Members ---
 export const staff = pgTable('staff', {
-  phone: varchar('phone', { length: 20 }).primaryKey(),
+  phone: varchar('phone', { length: 64 }).primaryKey(),
   orgId: varchar('org_id', { length: 64 }).references(() => organizations.id).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   role: varchar('role', { length: 50 }).notNull(),
@@ -345,6 +345,35 @@ export const stagingProducts = pgTable('staging_products', {
 }, (table) => {
   return {
     orgIdIdx: index('staging_products_org_id_idx').on(table.orgId),
+  };
+});
+
+// --- Sovereign Vault (Document Storage) ---
+export const vaultDocuments = pgTable('vault_documents', {
+  id: varchar('id', { length: 128 }).primaryKey(),
+  userId: varchar('user_id', { length: 64 }).references(() => users.phone).notNull(),
+  orgId: varchar('org_id', { length: 64 }).references(() => organizations.id),
+  type: varchar('type', { length: 50 }).notNull(), // 'Receipt', 'Note', 'Identity_Doc', etc.
+  title: varchar('title', { length: 255 }),
+  summary: text('summary').notNull(),
+  content: text('content'),
+  extractedData: jsonb('extracted_data'),
+  storageUrl: text('storage_url'),
+  gcsUri: text('gcs_uri'),
+  provider: varchar('provider', { length: 50 }), // 'gcs', 'cloudinary', 'cloudflare-r2'
+  originalMediaId: varchar('original_media_id', { length: 255 }),
+  mimeType: varchar('mime_type', { length: 100 }).notNull(),
+  caption: text('caption'),
+  tags: jsonb('tags'),
+  embedding: customType<{ data: number[] }>({
+    dataType() { return 'vector(768)'; }
+  })('embedding'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => {
+  return {
+    userIdIdx: index('vault_docs_user_id_idx').on(table.userId),
+    typeIdx: index('vault_docs_type_idx').on(table.type),
   };
 });
 
