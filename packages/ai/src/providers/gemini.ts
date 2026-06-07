@@ -77,7 +77,7 @@ export class GeminiProvider implements AIProvider {
   private normalizeHistory(history: AIMessage[]) {
     // 1. Map roles
     let chatHistory = history.map(msg => ({
-      role: msg.role === 'model' || msg.role === 'system' ? 'model' : 'user',
+      role: (msg.role === 'model' || msg.role === 'system' || msg.role === 'assistant') ? 'model' : 'user',
       parts: msg.parts.map(p => {
           if (p.functionResponse) {
               return { functionResponse: p.functionResponse };

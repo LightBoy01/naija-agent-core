@@ -100,7 +100,7 @@ export class OpenAIProvider implements AIProvider {
         return null;
       }).filter(Boolean);
 
-      const openAIRole = msg.role === 'model' ? 'assistant' : 'user';
+      const openAIRole = (msg.role === 'model' || msg.role === 'assistant') ? 'assistant' : 'user';
       
       // Handle tool calls from the assistant
       const toolCalls = msg.parts
