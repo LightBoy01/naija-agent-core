@@ -213,6 +213,23 @@ export class WhatsAppService {
    * Fetches media from the Sovereign Go Sidecar instead of Meta.
    */
   private async downloadMediaFromSovereign(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
+    if (mediaId.startsWith('/tmp/')) {
+        try {
+            const fs = await import('fs/promises');
+            const buffer = await fs.readFile(mediaId);
+            let mimeType = 'application/octet-stream';
+            if (mediaId.endsWith('.pdf')) mimeType = 'application/pdf';
+            else if (mediaId.endsWith('.jpg') || mediaId.endsWith('.jpeg')) mimeType = 'image/jpeg';
+            else if (mediaId.endsWith('.mp4')) mimeType = 'video/mp4';
+            else if (mediaId.endsWith('.ogg')) mimeType = 'audio/ogg';
+            
+            return { buffer, mimeType };
+        } catch (err: any) {
+            console.error('❌ [SOVEREIGN DOWNLOAD] Local file read failed:', err.message);
+            throw new Error(`Failed to read local media file: ${err.message}`);
+        }
+    }
+
     const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
     const apiKey = process.env.ADMIN_API_KEY;
     
