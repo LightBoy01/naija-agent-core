@@ -218,9 +218,10 @@ const worker = new Worker<JobData>(
         ai: aiOrchestrator,
         redisClient: redisClient as any,
         tenantTools: ctx.tenantTools || [],
-        sectorPack: ctx.sectorPack
-      };
-
+        sectorPack: ctx.sectorPack,
+        mediaBuffer: (ctx as any).mediaBuffer,
+        mediaMime: (ctx as any).mediaMime
+        };
       return await handleMessage(job, deps);
     } catch (error: any) {
       const isFinalAttempt = job.attemptsMade >= (job.opts.attempts || 3) - 1; 

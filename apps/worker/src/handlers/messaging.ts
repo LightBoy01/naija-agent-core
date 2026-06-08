@@ -31,6 +31,8 @@ export interface MessagingDependencies {
   redisClient: Redis;
   tenantTools: any[];
   sectorPack?: SectorPack;
+  mediaBuffer?: Buffer | null;
+  mediaMime?: string | null;
 }
 
 export async function handleMessage(job: Job<JobData>, deps: MessagingDependencies): Promise<{ success: boolean; reason?: string }> {
@@ -118,16 +120,18 @@ ${globalProtocol}
 
   const tenantModelName = org.config?.model || SystemConfig.MODELS.ZYNUX_PRIMARY;
   let userMessageContent = "";
-  let mediaBuffer: Buffer | null = null;
-  let mediaMime: string | null = null;
+  let mediaBuffer: Buffer | null = deps.mediaBuffer || null;
+  let mediaMime: string | null = deps.mediaMime || null;
 
   if (type === 'text' && content.text) {
     userMessageContent = content.text;
   } else if (type === 'audio' || type === 'image' || type === 'document') {
-    const mediaId = content.audioId || content.imageId || content.documentId;
-    const { buffer, mimeType } = await tenantWhatsAppService.downloadMedia(mediaId!);
-    mediaBuffer = buffer;
-    mediaMime = mimeType;
+    if (!mediaBuffer) {
+        const mediaId = content.audioId || content.imageId || content.documentId;
+        const { buffer, mimeType } = await tenantWhatsAppService.downloadMedia(mediaId!);
+        mediaBuffer = buffer;
+        mediaMime = mimeType;
+    }
     userMessageContent = `[${type.toUpperCase()}]`;
   }
 
