@@ -14,6 +14,7 @@ import { Redis } from 'ioredis';
 import { formatCurrency } from '../utils/currency.js';
 import { logger } from '../utils/logger.js';
 import crypto from 'crypto';
+import axios from 'axios';
 
 export async function handleOnboarding(
   job: Job<JobData>,
@@ -63,7 +64,7 @@ export async function handleOnboarding(
              if (botPhone.length < 10 || isNaN(parseInt(botPhone))) {
                 reply = "Abeg enter a valid phone number (11 digits).";
              } else {
-                // --- CREATE TENANT & TRIGGER META ---
+                // --- CREATE TENANT & TRIGGER SIDECAR PAIRING ---
                 reply = `Creating your Empire account for *${nextData.name}*... ⏳`;
                 await tenantWhatsAppService.sendText(from, reply);
 
@@ -80,38 +81,53 @@ export async function handleOnboarding(
                       timezone: 'Africa/Lagos'
                    });
 
-                   // 2. Trigger Meta (Master Token)
-                   const wabaId = process.env.WHATSAPP_WABA_ID;
-                   const masterToken = process.env.WHATSAPP_API_TOKEN;
-                   
-                   if (!wabaId || !masterToken) throw new Error('System Config Error: Missing WABA ID/Token');
-                   
-                   const sovereignService = new WhatsAppService(masterToken, '');
-                   const { phoneId } = await sovereignService.addPhoneNumber(wabaId, botPhone, nextData.name);
+                   // 2. Request Pairing Code from Sidecar
+                   const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
+                   const apiKey = process.env.ADMIN_API_KEY;
 
-                   // 3. Update Tenant with Pending Setup
+                   const response = await axios.post(
+                      `${sidecarUrl}/pair`,
+                      { orgId: newOrgId, phone: botPhone },
+                      {
+                         headers: {
+                            'X-API-Key': apiKey || '',
+                            'Content-Type': 'application/json'
+                         }
+                      }
+                   );
+
+                   const pairingCode = response.data.code;
+                   if (!pairingCode) throw new Error('Sidecar failed to generate pairing code.');
+
+                   // 3. Set Redis Mapping (for Sidecar routing)
+                   const { parseAndFormatPhone } = await import('@naija-agent/types');
+                   const normalizedBotPhone = parseAndFormatPhone(botPhone);
+                   if (normalizedBotPhone) {
+                       const rawPhone = normalizedBotPhone.replace('+', '');
+                       const jid = `${rawPhone}@s.whatsapp.net`;
+                       await redisClient.set(`sidecar_map:${jid}`, newOrgId);
+                       await redisClient.set(`sidecar_map:${rawPhone}`, newOrgId);
+                       logger.info({ orgId: newOrgId, jid }, '🔗 [AUTO-ONBOARDING] Hydrated sidecar mapping in Redis');
+                   }
+
+                   // 4. Update Tenant with Pending Setup
                    const { getDb } = await import('@naija-agent/firebase');
                    await (await getDb()).collection('organizations').doc(newOrgId).update({
-                       status: 'AWAITING_OTP',
+                       status: 'AWAITING_SIDECAR',
                        pendingSetup: {
-                           phoneId,
-                           accessToken: masterToken,
-                           wabaId,
+                           botPhone,
+                           pairingCode,
                            initiatedAt: new Date().toISOString()
                        }
                    });
 
-                   // 4. Trigger OTP SMS
-                   const activationService = new WhatsAppService(masterToken, phoneId);
-                   await activationService.requestCode('SMS');
-
                    // 5. Cleanup Prospect State
                    await redisClient.del(prospectKey);
 
-                   reply = `✅ *Account Created!* \n\nI have asked Meta to send a *6-digit SMS code* to ${botPhone}.\n\n👉 *Type the code here immediately to activate your bot!*`;
+                   reply = `✅ *Account Created!* \n\n🔑 *YOUR PAIRING CODE:* ${pairingCode}\n\n👉 *To Activate:*\n1. Open WhatsApp on your *Bot Phone* (${botPhone}).\n2. Go to **Settings > Linked Devices**.\n3. Tap **Link a Device**.\n4. Tap **Link with phone number instead**.\n5. Enter the code above.\n\nOnce done, your Digital Apprentice will wake up! 🚀`;
 
                 } catch (e: any) {
-                   logger.error({ error: e.message }, '❌ [PROSPECT FLOW] Failed');
+                   logger.error({ error: e.message }, '❌ [PROSPECT FLOW] Sidecar Pairing Failed');
                    reply = `❌ *Setup Failed:* ${e.message}\n\nPlease check the number and try again.`;
                 }
              }
@@ -426,7 +442,7 @@ export async function handleOnboarding(
               reply = "Okay. Type *#back* to edit the last step, or *#reset* to start over.";
           }
       } else if (nextStep === 'BOT_PHONE') {
-          // --- SOVEREIGN AUTO-IGNITION ---
+          // --- SOVEREIGN AUTO-IGNITION (SIDECAR) ---
           const botPhone = text.replace(/\s+/g, '');
           // Basic validation
           if (botPhone.length < 10) {
@@ -434,104 +450,67 @@ export async function handleOnboarding(
              return { success: true };
           }
 
-          reply = `Generated WABA Request for *${botPhone}*... ⏳`;
+          reply = `Generating Pairing Code for *${botPhone}*... ⏳`;
           await tenantWhatsAppService.sendText(from, reply);
 
           try {
-             // 1. Save Preliminary Data (So we have a record even if Meta fails)
-             await completeOnboarding(orgId, { ...nextData, botPhone: botPhone }); // Save Name, Bank, etc.
+             // 1. Save Preliminary Data
+             await completeOnboarding(orgId, { ...nextData, botPhone: botPhone }); 
              
-             // 2. Trigger Meta (Using Sovereign/Master Token)
-             const wabaId = process.env.WHATSAPP_WABA_ID; 
-             const masterToken = process.env.WHATSAPP_API_TOKEN;
-             if (!wabaId) throw new Error('System Error: Sovereign WABA ID missing.');
-             if (!masterToken) throw new Error('System Error: Sovereign API Token missing.');
+             // 2. Request Pairing Code from Sidecar
+             const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
+             const apiKey = process.env.ADMIN_API_KEY;
 
-             const sovereignService = new WhatsAppService(masterToken, ''); 
-             const { phoneId } = await sovereignService.addPhoneNumber(wabaId, botPhone, nextData.name || 'New Business');
-             
-             // 3. Update Org with Pending Setup
+             const response = await axios.post(
+                `${sidecarUrl}/pair`,
+                { orgId, phone: botPhone },
+                {
+                   headers: {
+                      'X-API-Key': apiKey || '',
+                      'Content-Type': 'application/json'
+                   }
+                }
+             );
+
+             const pairingCode = response.data.code;
+             if (!pairingCode) throw new Error('Sidecar failed to generate pairing code.');
+
+             // 3. Set Redis Mapping (for Sidecar routing)
+             const { parseAndFormatPhone } = await import('@naija-agent/types');
+             const normalizedBotPhone = parseAndFormatPhone(botPhone);
+             if (normalizedBotPhone) {
+                 const rawPhone = normalizedBotPhone.replace('+', '');
+                 const jid = `${rawPhone}@s.whatsapp.net`;
+                 await redisClient.set(`sidecar_map:${jid}`, orgId);
+                 await redisClient.set(`sidecar_map:${rawPhone}`, orgId);
+                 logger.info({ orgId, jid }, '🔗 [AUTO-ONBOARDING] Hydrated sidecar mapping in Redis');
+             }
+
+             // 4. Update Org with Pending Setup
              const { getDb } = await import('@naija-agent/firebase');
              await (await getDb()).collection('organizations').doc(orgId).update({
-                 whatsappPhoneId: 'PENDING', // Mark as pending
-                 status: 'AWAITING_OTP',
+                 whatsappPhoneId: 'PENDING',
+                 status: 'AWAITING_SIDECAR',
                  pendingSetup: {
-                     phoneId,
-                     accessToken: masterToken,
-                     wabaId,
+                     botPhone,
+                     pairingCode,
                      initiatedAt: new Date().toISOString()
                  }
              });
 
-             // 4. Trigger OTP
-             const activationService = new WhatsAppService(masterToken, phoneId);
-             await activationService.requestCode('SMS');
-
              nextStep = 'OTP_WAIT';
-             reply = `✅ *Meta Accepted!* \n\nI have asked them to send a *6-digit SMS code* to ${botPhone}.\n\n👉 *Type the code here immediately!*`;
+             reply = `✅ *Pairing Code Generated!* \n\n🔑 *CODE:* ${pairingCode}\n\n👉 *To Activate:*\n1. Open WhatsApp on your *Bot Phone*.\n2. Go to **Settings > Linked Devices**.\n3. Tap **Link a Device**.\n4. Tap **Link with phone number instead**.\n5. Enter the code above.\n\nOnce linked, your Digital Apprentice will be ready! 🚀`;
 
           } catch (e: any) {
-             logger.error({ orgId, error: e.message }, '❌ [AUTO-ONBOARDING] Failed');
-             reply = `❌ *Setup Failed:* ${e.message}\n\nPlease check if the SIM is active and try again (Type the number again).`;
-             // Stay on BOT_PHONE step to retry
+             logger.error({ orgId, error: e.message }, '❌ [AUTO-ONBOARDING] Sidecar Pairing Failed');
+             reply = `❌ *Setup Failed:* ${e.message}\n\nPlease check if the SIM is active and try again.`;
           }
       } else if (nextStep === 'OTP_WAIT') {
-          // --- TENANT OTP ACTIVATION ---
-          // This allows the TENANT (using their own phone, which is also the Admin Phone) to verify
-          if (/^\d{6}$/.test(text)) {
-             const { getDb, activateTenant } = await import('@naija-agent/firebase');
-             const orgDoc = await (await getDb()).collection('organizations').doc(orgId).get();
-             const orgData = orgDoc.data();
-             const setup = orgData?.pendingSetup;
-
-             if (setup && setup.phoneId && setup.accessToken) {
-                logger.info({ orgId }, '🚀 [TENANT-IGNITION] Attempting Meta Registration');
-                await tenantWhatsAppService.sendText(from, `Verifying code *${text}*... ⏳`);
-
-                try {
-                   const activationService = new WhatsAppService(setup.accessToken, setup.phoneId);
-                   
-                   // 1. Register with Meta
-                   await activationService.registerNumber(text);
-                   
-                   // 2. Subscribe WABA
-                   if (setup.wabaId) {
-                      await activationService.subscribeWaba(setup.wabaId);
-                   }
-
-                   // 3. Activate
-                   await activateTenant(orgId, setup.phoneId, setup.accessToken);
-
-                   // 4. Cleanup
-                   await (await getDb()).collection('organizations').doc(orgId).update({ 
-                      pendingSetup: null,
-                      onboardingStep: 'COMPLETE'
-                   });
-
-                   logger.info({ orgId }, '✅ [TENANT-IGNITION] Success');
-                   
-                   reply = `⚡ *ACTIVATION SUCCESSFUL!* 🚀\n\nYour bot is now LIVE! \n\nCustomers can message this number to start buying.\n\nType *#status* to check your health.`;
-                   nextStep = 'COMPLETE';
-
-                   if (process.env.MASTER_ADMIN_PHONE) {
-                      const masterToken = process.env.WHATSAPP_API_TOKEN;
-                      const masterPhoneId = process.env.WHATSAPP_PHONE_ID;
-                      if (masterToken && masterPhoneId) {
-                         const masterService = new WhatsAppService(masterToken, masterPhoneId);
-                         await masterService.sendText(process.env.MASTER_ADMIN_PHONE, `⚡ *AUTO-IGNITION SUCCESS (Self-Verify)*\n\nBusiness: ${org.name}\nBoss: ${from}\nStatus: LIVE 🚀`);
-                      }
-                   }
-
-                } catch (err: any) {
-                   logger.error({ orgId, error: err.message }, '❌ [TENANT-IGNITION] Failed');
-                   reply = `❌ *Verification Failed:* ${err.message}\n\nPlease check if the code is correct.`;
-                }
-             } else {
-                reply = "⚠️ System Error: Setup details lost. Please type *#reset* to start over.";
-             }
-          } else {
-             reply = "Waiting for 6-digit code... (Check the Bot SIM)";
-          }
+          // --- SIDECAR ACTIVATION MONITOR ---
+          // Since sidecar linking is automatic (it will just connect), 
+          // we tell the user to wait or type #status.
+          reply = "Your bot is linking... ⏳\n\nPlease wait a few seconds, then type *#status* to see if I am LIVE! 🚀";
+          return { success: true };
       }
 
       if (reply) {

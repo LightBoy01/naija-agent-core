@@ -55,13 +55,33 @@ async function migrate() {
   // --- 2. Organizations & Nested Collections ---
   console.log('🏢 Migrating Organizations & Dependencies...');
   const orgsSnapshot = await firestore.collection('organizations').get();
+  
+  // Helper to ensure an organization exists in SQL (handles orphan dependencies)
+  async function ensureOrgExists(id: string, name?: string) {
+    await sqlDb.insert(organizations).values({
+      id,
+      name: name || `Legacy ${id}`,
+      balanceKobo: 0,
+      isActive: false,
+      status: 'ARCHIVED',
+      region: 'NG',
+      sector: 'commerce',
+      deploymentModel: 'SHARED',
+      costPerReply: 3300,
+      timezone: 'Africa/Lagos'
+    }).onConflictDoUpdate({
+      target: organizations.id,
+      set: { updatedAt: new Date() }
+    });
+  }
+
   for (const doc of orgsSnapshot.docs) {
     const data = doc.data();
     try {
       // 2a. Base Org
       await sqlDb.insert(organizations).values({
         id: doc.id,
-        name: data.name || 'Unknown Org',
+        name: data.name || `Legacy ${doc.id}`,
         balanceKobo: data.balance || 0,
         isActive: data.isActive !== false,
         status: data.status || 'ACTIVE',
@@ -292,6 +312,10 @@ async function migrate() {
   for (const doc of chatsSnapshot.docs) {
     const data = doc.data();
     try {
+      if (data.organizationId) {
+        await ensureOrgExists(data.organizationId);
+      }
+
       await sqlDb.insert(chats).values({
         id: doc.id,
         orgId: data.organizationId || null,
@@ -398,6 +422,10 @@ async function migrate() {
   for (const doc of txSnapshot.docs) {
     const data = doc.data();
     try {
+      if (data.orgId) {
+        await ensureOrgExists(data.orgId);
+      }
+
       await sqlDb.insert(transactions).values({
         id: doc.id,
         userId: data.from || null,

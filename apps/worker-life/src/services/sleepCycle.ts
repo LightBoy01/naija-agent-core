@@ -21,30 +21,33 @@ export class SleepCycleService {
             const currentContext = await lifeMemory.getContext(userId);
 
             const prompt = `
-You are Aelixxr's Subconscious Mind. Your job is to read the recent chat history between Aelixxr (the AI) and the User, and do two things:
-1. Extract any new, permanent facts about the user's life.
-2. Summarize the key topics and "vibe" of this interaction for long-term memory.
+            You are Aelixxr's Subconscious Mind. Your job is to read the recent chat history between Aelixxr (the AI) and the User, and extract permanent facts for the User's Life Context.
 
-Facts to extract:
-- Names of family members or friends.
-- Long-term goals (e.g., "Japa to UK", "Buy a house").
-- Health conditions or allergies.
-- Persistent preferences (e.g., "likes cheap markets", "vegetarian").
+            Facts to extract (Cultural & Practical Nuance):
+            1. **Permanent Facts:** Names of family/friends, spouse, children's schools.
+            2. **Long-term Goals:** "Japa to UK", "Build house in village", "Rent due date".
+            3. **Financial Commitments:** Debt, recurring bills, specific market preferences.
+            4. **Health & Life:** Conditions, allergies, specific medications mentioned.
+            5. **Rapport & Soul:** Does the user like Pidgin or formal English? Do they prefer blunt honesty or soft encouragement?
+            6. **Social Capital:** Who does the user trust or rely on?
 
-Current Life Context:
-${JSON.stringify(currentContext)}
+            Current Life Context:
+            ${JSON.stringify(currentContext)}
 
-Recent Chat History:
-${history.map((m: any) => `${m.role === 'assistant' ? 'Aelixxr' : 'User'}: ${m.content}`).join('\n')}
+            Recent Chat History:
+            ${history.map((m: any) => `${m.role === 'assistant' ? 'Aelixxr' : 'User'}: ${m.content}`).join('\\n')}
 
-INSTRUCTION: 
-1. Output a JSON object containing 'updates' for the Life Context.
-2. Output a 'summary' string (1-2 sentences) of the interaction.
-3. Output an 'importance' score (1-5) for this interaction.
+            INSTRUCTION: 
+            1. Output a JSON object containing 'updates' for the Life Context.
+            2. Output a 'summary' string (1-2 sentences) describing the core of this interaction.
+            3. Output an 'importance' score (1-5) for this interaction.
 
-CRITICAL: If you are adding a new item to an array (like 'goals' or 'allergies'), you MUST output the ENTIRE combined array.
-If there is nothing new to learn, 'updates' should be {}.
-`;
+            CRITICAL: 
+            - If adding to an array (goals, preferences), output the ENTIRE combined array.
+            - If there is nothing new, 'updates' should be {}.
+            - Standardize all currency amounts to Naira/Kobo.
+            `;
+
 
             const schema = {
                 type: Type.OBJECT,

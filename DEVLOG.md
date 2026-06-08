@@ -725,3 +725,25 @@
 
 ---
 _⚓ "A stable financial life is the foundation of user flourishing."_
+
+## Session 42: The Sovereign Migration & Onboarding Evolution (2026-06-07)
+**Status:** 🟢 **Completed & Hardened**
+
+### **Context:**
+*   **The Goal:** Eliminate the final external cloud dependency (Supabase) by migrating the primary database to the self-hosted VPS PostgreSQL instance. Simultaneously, completely replace the legacy QR code/SMS onboarding flow with a frictionless, instant WhatsApp Pairing Code flow.
+
+### **Actions Taken:**
+*   **Database Sovereignty (Zero-Loss Migration):**
+    *   **Decommissioned Supabase:** Pointed `DATABASE_URL` to the internal VPS Postgres (`naija_ledger`).
+    *   **Migration Script Hardening:** Upgraded `scripts/full-migration.ts` to automatically spawn "Stub Organizations" for orphaned chats and transactions during the transfer from Firebase.
+    *   **Result:** 100% of chats, users, and financial records were securely migrated to the VPS.
+*   **Onboarding Friction Removal (Pairing Codes):**
+    *   **Sidecar Fixes:** Diagnosed and patched a `400 Bad Request` error in `whatsmeow` by correcting the `clientDisplayName` to strict Meta standards (`Chrome (Linux)`) and implementing a WebSockets synchronization delay in `manager.go`.
+    *   **Instant Hydration:** The Master Bot and Prospect Handler now automatically generate an 8-character Pairing Code for new clients, immediately registering the new `sidecar_map` in Redis. As soon as the client enters the code, their AI is live.
+*   **AI Infrastructure Robustness:**
+    *   **Context Caching Resiliency:** Fixed persistent 404 errors in Gemini Context Caching by implementing a fallback mechanism that automatically tries versioned models (`-001`) before falling back to base models, ensuring large System Prompts (like business knowledge) are cached securely without crashing.
+    *   **JID Routing Fix:** Patched the Go Sidecar to correctly append `@s.whatsapp.net` to raw numeric strings, eliminating "unknown server" crashes.
+
+### **Self-Assessment:**
+*   **Strong:** Achieved complete data sovereignty. We now control the API, the queue, the workers, the WhatsApp socket, and the database entirely on a single €12/mo VPS.
+*   **UX Excellence:** The onboarding flow has gone from a multi-step, confusing SMS/QR process to a single, instant pairing code directly inside the chat.

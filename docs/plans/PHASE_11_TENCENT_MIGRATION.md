@@ -12,7 +12,7 @@ We are transitioning to a hybrid containerized setup to balance extreme scalabil
 | **Hermes Body** (`hermes-agent`)| Local | **Tencent Lighthouse (VPS)** | Agents need 30+ minutes for browser automation and research loops. No timeouts. |
 | **Message Queue** | Local Redis | **TencentDB for Redis** | Fully managed, highly available spine of the network. |
 | **Media Storage** | Cloudinary / Firebase | **Tencent COS (Cloud Object Storage)** | Cheaper, Sovereign control, fully S3-compatible. |
-| **Database** | Supabase Postgres | *Keep Supabase (for now)* | Avoid migrating too many stateful layers at once. Supabase Pooler handles connections perfectly. |
+| **Database** | VPS PostgreSQL | *Active (Migrated)* | Supabase decommissioned. VPS handles all core state. |
 
 ---
 

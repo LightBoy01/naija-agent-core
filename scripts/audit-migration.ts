@@ -12,6 +12,8 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+console.log(`🔗 DB_URL: ${process.env.DATABASE_URL?.split('@')[1]}`);
+
 async function audit() {
   const firestore = getFirestore();
   const sqlDb = sql;

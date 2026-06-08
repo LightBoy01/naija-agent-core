@@ -251,6 +251,8 @@
     - [x] Fix MCP fetch SSL bypass & add native tiered `web_search` tool.
 
 ## Phase 10: The Agentic Network Architecture (Planning) 🟡
+- [x] **Migrate to Sovereign VPS PostgreSQL:** Completed data migration and decommissioned Supabase.
+- [x] **Frictionless Onboarding 2.0:** Deployed WhatsApp Pairing Codes replacing QR scans.
 - [ ] **Migrate to Triad Architecture:** Extract hardcoded TS prompts into `Soul.md`, `Agent.md`, and `Skill.md`.
 - [ ] **Implement RAM Caching:** Build memory loader with `fs.watch` for hot-reloading markdown brains.
 - [ ] **Constitutional Hybrid Middleware:** Build a deterministic router that intercepts high-stakes tool execution (e.g., Vault deletion) and enforces strict Playbooks/PIN auth before hitting the LLM.

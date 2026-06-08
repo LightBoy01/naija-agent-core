@@ -49,17 +49,18 @@ export class GeminiProvider implements AIProvider {
       }
 
       // 2. We need a specific model version for caching (e.g. gemini-3.5-flash-001)
-      // If using a generic alias, we append -001 as a best-effort, or bypass caching if it fails.
+      // If using a generic alias, we append -001 as a best-effort.
+      // In 2026, most models support caching, but specific versioning is required.
       const versionedModel = modelName.includes('-00') ? modelName : `${modelName}-001`;
 
       try {
-          console.log(`[GEMINI] Creating new Context Cache for hash ${hash.substring(0,8)}...`);
+          console.log(`[GEMINI] Creating Context Cache for hash ${hash.substring(0,8)} using ${versionedModel}...`);
           const cache = await this.genAI.caches.create({
               model: versionedModel,
               config: {
                   systemInstruction: systemInstruction,
-                  contents: [{ role: 'user', parts: [{ text: "Initialize Context" }] }], // Required dummy content
-                  ttl: '3600s' // 1 hour
+                  contents: [{ role: 'user', parts: [{ text: "Initialize Context" }] }], 
+                  ttl: '3600s' 
               }
           });
           
@@ -69,8 +70,28 @@ export class GeminiProvider implements AIProvider {
           };
           return cache.name as string;
       } catch (error: any) {
-          console.warn(`⚠️ [GEMINI] Context Caching failed (Content might be < 2048 tokens or model unsupported): ${error.message}. Proceeding without cache.`);
-          return null; // Fallback to normal execution
+          // If the versioned model failed, try one more time with the raw model name if it's not already versioned
+          if (!modelName.includes('-00') && (error.message.includes('not found') || error.message.includes('not supported'))) {
+              try {
+                  const retryCache = await this.genAI.caches.create({
+                      model: modelName,
+                      config: {
+                          systemInstruction: systemInstruction,
+                          contents: [{ role: 'user', parts: [{ text: "Initialize Context" }] }],
+                          ttl: '3600s'
+                      }
+                  });
+                  GeminiProvider.activeCaches[hash] = {
+                      name: retryCache.name as string,
+                      expiresAt: now + (3600 * 1000)
+                  };
+                  return retryCache.name as string;
+              } catch (retryError) {
+                  // Both failed, proceed without cache
+              }
+          }
+          console.warn(`⚠️ [GEMINI] Context Caching failed: ${error.message}. Proceeding without cache.`);
+          return null; 
       }
   }
 

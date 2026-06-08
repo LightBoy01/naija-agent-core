@@ -18,103 +18,63 @@ if (process.env.NODE_ENV !== 'production' && process.env.NODE_TLS_REJECT_UNAUTHO
 }
 
 // --- GCS Configuration with Sanitization ---
-function getStorageClient() {
-  const projectId = process.env.FIREBASE_PROJECT_ID || 'naija-agent-core';
-  let credentials;
-
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
-    try {
-      const cleanBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64.replace(/[^A-Za-z0-9+/=]/g, '');
-      const decoded = Buffer.from(cleanBase64, 'base64').toString('utf8');
-      const sanitized = decoded.replace(/[\n\r]/g, '');
-      credentials = JSON.parse(sanitized);
-    } catch (e) {}
-  }
-
+const getStorage = () => {
   return new Storage({
-    projectId,
-    ...(credentials ? { credentials } : {})
+    projectId: process.env.FIREBASE_PROJECT_ID,
   });
-}
+};
 
-const storage = getStorageClient();
 const BUCKET_NAME = process.env.FIREBASE_STORAGE_BUCKET || 'naija-agent-core.firebasestorage.app';
 
-// --- The Vault Document Schema ---
-export const VaultDocumentSchema = z.object({
-  id: z.string(),
-  userId: z.string(), // WhatsApp Phone ID
-  orgId: z.string().optional(),
-  type: z.string(), 
-  title: z.string().optional(),
-  summary: z.string(),
-  content: z.string().optional(),
-  extractedData: z.object({
-    amount: z.number().optional(),
-    currency: z.string().optional(),
-    date: z.string().optional(),
-    issuer: z.string().optional(),
-    receiver: z.string().optional(),
-    reference: z.string().optional(),
-    duration: z.number().optional(),
-    forensicAnalysis: z.string().optional(),
-  }),
-  storageUrl: z.string().optional(), // Public/Signed URL (OSS, Cloudinary or GCS)
-  gcsUri: z.string().optional(), // gs:// path if on GCS
-  provider: z.enum(['cloudinary', 'gcs', 'alibaba-oss', 'tencent-cos', 'cloudflare-r2']).optional(),
-  originalMediaId: z.string().optional(),
-  mimeType: z.string(),
-  caption: z.string().optional(),
-  createdAt: z.string(),
-  tags: z.array(z.string()),
-  embedding: z.array(z.number()).optional(),
-});
-
-export type VaultDocument = z.infer<typeof VaultDocumentSchema>;
-
-// --- Helper Functions ---
-
-async function uploadToGCS(userId: string, buffer: Buffer, mimeType: string): Promise<{ url: string; gcsUri: string; provider: 'gcs' }> {
-    const bucket = storage.bucket(BUCKET_NAME);
-    const fileId = crypto.randomUUID();
-    const extension = mimeType.split('/')[1] || 'bin';
-    const filePath = `vault/${userId}/${fileId}.${extension}`;
-    const file = bucket.file(filePath);
-  
-    await file.save(buffer, {
-      contentType: mimeType,
-      public: true,
-      metadata: { userId, type: 'vault_doc' }
-    });
-  
-    return {
-      url: `https://storage.googleapis.com/${BUCKET_NAME}/${filePath}`,
-      gcsUri: `gs://${BUCKET_NAME}/${filePath}`,
-      provider: 'gcs'
-    };
+export interface VaultDocument {
+  id: string;
+  userId: string;
+  orgId?: string;
+  type: 'Receipt' | 'Invoice' | 'Utility_Bill' | 'Contract' | 'Identity_Doc' | 'Medical_Record' | 'Official_Letter' | 'Ticket' | 'Voice_Note' | 'Video_Clip' | 'Note' | 'Other';
+  title: string;
+  summary: string;
+  content?: string;
+  extractedData: {
+    amount?: number | null;
+    currency?: string | null;
+    date?: string | null;
+    issuer?: string | null;
+    receiver?: string | null;
+    reference?: string | null;
+    duration?: number | null;
+    forensicAnalysis?: string;
+  };
+  storageUrl?: string;
+  gcsUri?: string;
+  provider: 'gcs' | 'cloudinary' | 'cloudflare-r2' | 'alibaba' | 'local';
+  originalMediaId?: string;
+  mimeType: string;
+  caption?: string;
+  createdAt: string;
+  tags: string[];
+  embedding?: number[];
 }
 
-async function uploadToVault(userId: string, buffer: Buffer, mimeType: string, orgId?: string): Promise<{ url: string; gcsUri?: string; provider: 'cloudinary' | 'gcs' | 'alibaba-oss' | 'tencent-cos' | 'cloudflare-r2' }> {
-  const fileId = crypto.randomUUID();
-  const extension = mimeType.split('/')[1] || 'bin';
-  const fileName = `${fileId}.${extension}`;
-
-  const url = await uploadMedia(orgId || 'vault', fileName, buffer, mimeType, { userId });
+// --- Internal: Cloud Upload Logic ---
+async function uploadToVault(userId: string, buffer: Buffer, mimeType: string, orgId?: string): Promise<{ url: string; gcsUri?: string; provider: VaultDocument['provider'] }> {
+  const fileName = `${crypto.randomUUID()}.${mimeType.split('/')[1] || 'bin'}`;
+  const effectiveOrgId = orgId || 'vault';
   
-  let provider: 'cloudinary' | 'gcs' | 'alibaba-oss' | 'tencent-cos' | 'cloudflare-r2' = 'gcs';
-  if (url.includes('cloudinary')) provider = 'cloudinary';
-  else if (url.includes('aliyuncs.com')) provider = 'alibaba-oss';
-  else if (url.includes('myqcloud.com')) provider = 'tencent-cos';
-  else if (url.startsWith('r2://') || (process.env.CLOUDFLARE_R2_PUBLIC_DOMAIN && url.includes(process.env.CLOUDFLARE_R2_PUBLIC_DOMAIN))) provider = 'cloudflare-r2';
+  const url = await uploadMedia(effectiveOrgId, fileName, buffer, mimeType);
 
-  return { 
-    url, 
-    provider,
-    gcsUri: provider === 'gcs' ? `gs://${BUCKET_NAME}/orgs/${orgId || 'vault'}/media/${fileName}` : undefined
+  let provider: VaultDocument['provider'] = 'local';
+  if (url.includes('cloudinary')) provider = 'cloudinary';
+  else if (url.includes('r2.dev')) provider = 'cloudflare-r2';
+  else if (url.includes('googleapis.com')) provider = 'gcs';
+
+  return {
+    url,
+    gcsUri: provider === 'gcs' ? `gs://${BUCKET_NAME}/orgs/${effectiveOrgId}/media/${fileName}` : undefined,
+    provider
   };
 }
 
-
+// --- Internal: Multi-Modal Extraction ---
 async function extractMultimodalMetadata(
     buffer: Buffer, 
     mimeType: string, 
@@ -123,13 +83,8 @@ async function extractMultimodalMetadata(
     apiKey: string
 ): Promise<any> {
   const { SystemConfig } = await import('@naija-agent/types');
-  const genAI = new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      baseUrl: 'https://aiplatform.googleapis.com',
-      apiVersion: 'v1/publishers/google'
-    }
-  });
+  const finalApiKey = process.env.GEMINI_API_KEY_STUDIO || process.env.GEMINI_API_KEY || apiKey;
+  const modelName = (SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3.5-flash').replace(/^models\//, '');
 
   const prompt = `
   You are an elite Forensic Analyst and Document Classification AI for the "Aelixxr Sovereign Vault".
@@ -181,24 +136,29 @@ async function extractMultimodalMetadata(
         };
     }
 
-    const modelName = SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3.1-flash-lite-preview';
-    logger.info({ role: 'Multimodal', model: modelName }, '🖼️ Extracting file metadata');
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${finalApiKey}`;
+    logger.info({ role: 'Multimodal', model: modelName }, '🖼️ Extracting file metadata via REST');
     
-    const result = await genAI.models.generateContent({
-      model: modelName,
+    const body = {
       contents: [{
-        role: 'user',
         parts: [
           { text: prompt },
-          // Strategy: Use fileUri if on GCS (Efficient), otherwise send raw bytes (Bridge)
           gcsUri ? { fileData: { fileUri: gcsUri, mimeType } } : { inlineData: { data: buffer.toString('base64'), mimeType } }
         ]
       }]
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
     });
-    const text = result.text || "";
+
+    const result = await response.json() as any;
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
     return safeParseJSON(text) || { summary: 'Processed File', category: 'Other', tags: [] };
   } catch (e: any) {
-    logger.error({ error: e.message }, 'Multimodal metadata extraction failed');
+    logger.error({ error: e.message }, 'Multimodal metadata extraction failed via REST');
     return { summary: 'Unprocessed File', category: 'Other', tags: [], content: `Extraction failed: ${e.message}` };
   }
 }
@@ -210,55 +170,34 @@ async function getMultimodalEmbedding(
     textContext: string, 
     apiKey: string
 ): Promise<number[]> {
-  const embeddingKey = process.env.GEMINI_EMBEDDING_API_KEY || apiKey;
-  const useBypass = !process.env.GEMINI_EMBEDDING_API_KEY;
-
-  const genAI = new GoogleGenAI({
-    apiKey: embeddingKey,
-    ...(useBypass ? {
-      httpOptions: {
-        baseUrl: 'https://aiplatform.googleapis.com',
-        apiVersion: 'v1/publishers/google'
-      }
-    } : {})
-  });
-
+  const embeddingKey = process.env.GEMINI_API_KEY_STUDIO || process.env.GEMINI_API_KEY_EMBEDDING || apiKey;
+  const modelName = 'gemini-embedding-2';
+  
   try {
-    const supportedMimes = [
-        'image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif',
-        'audio/wav', 'audio/mp3', 'audio/aiff', 'audio/aac', 'audio/ogg', 'audio/flac',
-        'video/mp4', 'video/mpeg', 'video/mov', 'video/avi', 'video/x-flv', 'video/mpg', 'video/webm', 'video/wmv', 'video/3gpp',
-        'application/pdf'
-    ];
-
-    if (!supportedMimes.includes(mimeType)) {
-        logger.warn({ mimeType }, '⚠️ MimeType not supported for multimodal embedding. Skipping vector generation.');
-        return [];
-    }
-
-    const modelName = 'gemini-embedding-2';
-    logger.info({ role: 'Embedding', model: modelName }, '🧬 Generating vector embedding');
-
-    const result = await genAI.models.embedContent({
-      model: modelName,
-      contents: [{
-        role: 'user',
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:embedContent?key=${embeddingKey}`;
+    
+    const body = {
+      content: {
         parts: [
           { text: textContext },
           gcsUri ? { fileData: { fileUri: gcsUri, mimeType } } : { inlineData: { data: buffer.toString('base64'), mimeType } }
         ]
-      }],
-      config: {
-        outputDimensionality: 768
       }
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
     });
-      
-      return result.embeddings?.[0]?.values || [];
-    } catch (e: any) {
-      logger.error({ error: e.message }, 'Failed to generate multimodal embedding');
-      return [];
-    }
+
+    const result = await response.json() as any;
+    return result.embedding?.values || [];
+  } catch (e: any) {
+    logger.error({ error: e.message }, 'Failed to generate multimodal embedding via REST');
+    return [];
   }
+}
 
 // --- Main: Ingest Document ---
 export async function ingestDocument(
@@ -330,13 +269,8 @@ export async function ingestNote(
 
   // 1. Extract Metadata (The "Intelligence")
   const { SystemConfig } = await import('@naija-agent/types');
-  const genAI = new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      baseUrl: 'https://aiplatform.googleapis.com',
-      apiVersion: 'v1/publishers/google'
-    }
-  });
+  const finalApiKey = process.env.GEMINI_API_KEY_STUDIO || apiKey;
+  const modelName = (SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3.5-flash').replace(/^models\//, '');
 
   const prompt = `
   Analyze this text note for a Life OS Vault.
@@ -346,11 +280,17 @@ export async function ingestNote(
 
   let analysis = { title: 'Note', summary: 'Saved Note', category: 'Note', tags: [] };
   try {
-    const result = await genAI.models.generateContent({
-        model: SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3-flash-preview',
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${finalApiKey}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }]
+      })
     });
-    analysis = safeParseJSON(result.text || "") || analysis;
+    const result = await response.json() as any;
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    analysis = safeParseJSON(text) || analysis;
   } catch (e) {}
 
   // 2. Save to Database
@@ -365,7 +305,8 @@ export async function ingestNote(
     mimeType: 'text/plain',
     extractedData: {},
     createdAt: new Date().toISOString(),
-    tags: analysis.tags || []
+    tags: analysis.tags || [],
+    provider: 'local'
   };
 
   if (options?.orgId) doc.orgId = options.orgId;

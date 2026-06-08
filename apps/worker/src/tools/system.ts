@@ -239,7 +239,7 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
     }
 
     case 'register_trial_interest': {
-        // registerTrialInterest signature: ({ id, name, adminPhone, botPhone, timezone })
+        // 1. Register in Database
         await registerTrialInterest({
             id: args.id,
             name: args.name,
@@ -247,9 +247,45 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
             botPhone: args.botPhone,
             timezone: args.timezone
         });
+
+        // 2. Normalize Phone and Set Redis Mapping (for Sidecar routing)
+        const { parseAndFormatPhone } = await import('@naija-agent/types');
+        const normalizedBotPhone = parseAndFormatPhone(args.botPhone);
+        if (normalizedBotPhone && ctx.redisClient) {
+            const rawPhone = normalizedBotPhone.replace('+', '');
+            const jid = `${rawPhone}@s.whatsapp.net`;
+            await ctx.redisClient.set(`sidecar_map:${jid}`, args.id);
+            await ctx.redisClient.set(`sidecar_map:${rawPhone}`, args.id);
+            logger.info({ orgId: args.id, jid }, '🔗 [AUTO-ONBOARDING] Hydrated sidecar mapping in Redis');
+        }
+
+        // 3. Automatically request WhatsApp Pairing Code from Sidecar
+        const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
+        const apiKey = process.env.ADMIN_API_KEY;
+        
+        let pairingCodeMsg = "";
+        try {
+            const response = await axios.post(
+                `${sidecarUrl}/pair`,
+                { orgId: args.id, phone: args.botPhone },
+                {
+                    headers: {
+                        'X-API-Key': apiKey || '',
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            if (response.data.code) {
+                pairingCodeMsg = `\n\n🔑 *YOUR PAIRING CODE:* ${response.data.code}\n\n👉 *To Activate:* Go to your Bot Phone's WhatsApp > Linked Devices > Link with phone number instead, and enter this code.`;
+            }
+        } catch (e: any) {
+            logger.error({ error: e.response?.data || e.message, orgId: args.id }, '❌ [AUTO-PAIR] Failed during trial registration');
+        }
+
         return { 
             status: 'success', 
-            message: `Great! We've registered your interest for ${args.name}. Your new Bot Phone will be ${args.botPhone}. We've also credited your account with a FREE ₦1,000 Trial Bonus! Proceed to the dashboard to scan the QR code and wake up your AI.` 
+            message: `Great! We've registered your interest for ${args.name}. Your new Bot Phone will be ${args.botPhone}. We've also credited your account with a FREE ₦1,000 Trial Bonus!${pairingCodeMsg || ' Proceed to the dashboard to scan the QR code and wake up your AI.'}` 
         };
     }
 

@@ -55,7 +55,7 @@ export async function handleDailyReport(
 
     if (lowStockItems.length > 0) {
       const itemList = lowStockItems.map(p => `- ${p.name} (*Only ${p.stock} left*)`).join('\n');
-      reportMessage += `📦 *RESTOCK ALERT:*\n${itemList}\n\n`;
+      reportMessage += `📦 *MORNING RITUAL: RESTOCK ALERT*\n\nOga, these items are almost finished:\n${itemList}\n\n*Pro-tip:* Reply with the SKU and new count (e.g., 'IPHONE-15 10') to update me sharp-sharp! 📈\n\n`;
     }
 
     // 🏰 [NETWORK EFFECT]: Anonymized Empire Benchmark

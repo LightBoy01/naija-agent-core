@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
@@ -198,14 +199,20 @@ func (m *Manager) PairPhone(orgID, phone string) (string, error) {
 
 	err := client.Connect()
 	if err != nil {
-		return "", err
+	        return "", err
 	}
 
 	m.clients[orgID] = client
 
+	// --- ROBUSTNESS: Wait for WebSocket stability ---
+	// Research shows calling PairPhone too fast results in 400 Bad Request
+	time.Sleep(2 * time.Second)
+
 	// Request pairing code
 	// phone should be international format without +
-	code, err := client.PairPhone(context.Background(), phone, true, whatsmeow.PairClientChrome, "Naija Agent Bot")
+	// clientDisplayName must follow "Browser (OS)" format strictly
+	code, err := client.PairPhone(context.Background(), phone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
+
 	if err != nil {
 		return "", err
 	}
@@ -346,7 +353,13 @@ func (m *Manager) SendMessage(orgID, to, text string) error {
 		return err
 	}
 
-	jid, err := types.ParseJID(to)
+	// Standardize JID if it's a raw phone number
+	jidStr := to
+	if !contains(to, "@") {
+		jidStr = fmt.Sprintf("%s@s.whatsapp.net", to)
+	}
+
+	jid, err := types.ParseJID(jidStr)
 	if err != nil {
 		return fmt.Errorf("invalid JID: %v", err)
 	}
@@ -355,6 +368,15 @@ func (m *Manager) SendMessage(orgID, to, text string) error {
 		Conversation: &text,
 	})
 	return err
+}
+
+func contains(s, substr string) bool {
+	for i := 0; i < len(s)-len(substr)+1; i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *Manager) SendTyping(orgID, to string) error {
