@@ -48,10 +48,18 @@ export class GeminiProvider implements AIProvider {
           return existing.name;
       }
 
-      // 2. We need a specific model version for caching (e.g. gemini-3.5-flash-001)
+      // 2. We need a specific model version for caching (e.g. models/gemini-1.5-flash-001)
       // If using a generic alias, we append -001 as a best-effort.
       // In 2026, most models support caching, but specific versioning is required.
-      const versionedModel = modelName.includes('-00') ? modelName : `${modelName}-001`;
+      let versionedModel = modelName;
+      if (!versionedModel.startsWith('models/')) {
+          versionedModel = `models/${versionedModel}`;
+      }
+      if (!versionedModel.includes('-00')) {
+          // Gemini 3.5 Flash doesn't support caching yet in some regions/keys, 
+          // fallback to 1.5-flash-001 for caching the system prompt to guarantee it works.
+          versionedModel = 'models/gemini-1.5-flash-001';
+      }
 
       try {
           console.log(`[GEMINI] Creating Context Cache for hash ${hash.substring(0,8)} using ${versionedModel}...`);
