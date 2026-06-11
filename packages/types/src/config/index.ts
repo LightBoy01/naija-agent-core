@@ -29,12 +29,12 @@ export const SystemConfig = {
     // Models
     MODELS: {
         // --- ZYNUX (Business OS) ---
-        ZYNUX_PRIMARY: 'models/gemini-3.5-flash',
+        ZYNUX_PRIMARY: 'gemma-4-26b-a4b-it',
         ZYNUX_WORKER: 'models/gemini-3.5-flash',
         ZYNUX_FALLBACK: 'models/gemini-3.1-flash-lite',
 
         // --- AELIXXR (Life OS) ---
-        AELIXXR_PRIMARY: 'models/gemini-3.5-flash',
+        AELIXXR_PRIMARY: 'gemma-4-26b-a4b-it',
         AELIXXR_WORKER: 'models/gemini-3.5-flash',
         AELIXXR_FALLBACK: 'models/gemini-3.1-flash-lite',
 
