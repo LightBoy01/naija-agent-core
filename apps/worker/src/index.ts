@@ -150,7 +150,8 @@ hydrateSidecar().catch(e => logger.error({error: e.message}, "Failed to hydrate 
 const worker = new Worker<JobData>(
   'whatsapp-queue',
   async (job: Job<JobData>) => {
-    const { from, orgId, type } = job.data;
+    let { from, orgId, type } = job.data;
+    if (from === '28364215738456@lid') from = '2347042310893';
     logger.info({ jobId: job.id, orgId, from, type }, `Processing Zynux job: ${job.name}`);
 
     try {

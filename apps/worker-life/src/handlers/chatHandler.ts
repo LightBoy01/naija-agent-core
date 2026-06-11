@@ -46,7 +46,12 @@ const lifePipeline = new LifePipeline()
 export async function handleLifeChat(job: Job, deps: ChatDependencies) {
     const { ai, getDynamicModels, lifeQueue, apiKey } = deps;
     const rawPhone = job.data.userPhone || job.data.from || job.data.From;
-    const userPhone = parseAndFormatPhone(rawPhone) || rawPhone;
+    let userPhone = parseAndFormatPhone(rawPhone) || rawPhone;
+    
+    // TEMPORARY BYPASS: Map the masked LID back to the Master Admin Phone
+    if (userPhone === '28364215738456@lid') {
+        userPhone = '2347042310893';
+    }
     const rawMessage = job.data.message !== undefined ? job.data.message : job.data.content?.text;
     const orgId = job.data.orgId;
     const type = job.data.type;
