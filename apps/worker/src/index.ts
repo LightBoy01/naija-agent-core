@@ -110,12 +110,14 @@ import { FraudInterceptor } from './pipeline/interceptors/fraud.js';
 import { SecurityInterceptor } from './pipeline/interceptors/security.js';
 import { MfaInterceptor } from './pipeline/interceptors/mfa.js';
 import { BillingInterceptor } from './pipeline/interceptors/billing.js';
+import { SpamInterceptor } from './pipeline/interceptors/spam.js';
 import { MediaInterceptor } from './pipeline/interceptors/media.js';
 
 // Setup Pipeline
 const messagePipeline = new MessagePipeline()
   .use(OrgLoadInterceptor)
   .use(MediaInterceptor)
+  .use(SpamInterceptor)
   .use(RateLimitInterceptor)
   .use(FraudInterceptor)
   .use(SecurityInterceptor)

@@ -1,5 +1,5 @@
 import { Job } from 'bullmq';
-import { SystemConfig, formatCurrency } from '@naija-agent/types';
+import { SystemConfig, formatCurrency, parseAndFormatPhone } from '@naija-agent/types';
 import { 
     getOrgById, 
 } from '@naija-agent/firebase';
@@ -22,8 +22,10 @@ import { ContextInterceptor } from '../pipeline/interceptors/context.js';
 import { SecurityInterceptor } from '../pipeline/interceptors/security.js';
 import { BatteryInterceptor } from '../pipeline/interceptors/battery.js';
 import { MediaInterceptor } from '../pipeline/interceptors/media.js';
+import { SpamInterceptor } from '../pipeline/interceptors/spam.js';
 
 import { redactPII } from '../utils/security.js';
+
 
 import { redisClient } from '../index.js';
 
@@ -36,13 +38,15 @@ export interface ChatDependencies {
 
 const lifePipeline = new LifePipeline()
     .use(ContextInterceptor)
+    .use(SpamInterceptor)
     .use(SecurityInterceptor)
     .use(BatteryInterceptor)
     .use(MediaInterceptor);
 
 export async function handleLifeChat(job: Job, deps: ChatDependencies) {
     const { ai, getDynamicModels, lifeQueue, apiKey } = deps;
-    const userPhone = job.data.userPhone || job.data.from || job.data.From;
+    const rawPhone = job.data.userPhone || job.data.from || job.data.From;
+    const userPhone = parseAndFormatPhone(rawPhone) || rawPhone;
     const rawMessage = job.data.message !== undefined ? job.data.message : job.data.content?.text;
     const orgId = job.data.orgId;
     const type = job.data.type;
@@ -123,7 +127,7 @@ export async function handleLifeChat(job: Job, deps: ChatDependencies) {
             
             if (vector.length === 768) {
                 const { lifeMemory } = await import('../services/lifeMemory.js');
-                const memoryResults = await lifeMemory.searchSemanticMemory(ctx.userPhone, vector, 3);
+                const memoryResults = await lifeMemory.searchSemanticMemory(userPhone, vector, 3);
                 if (memoryResults && memoryResults.length > 0) {
                     semanticMemories = `\n[LONG-TERM RECALL (Relevant to current context)]:\n${memoryResults.map(m => `- ${m.content}`).join('\n')}`;
                     logger.info({ memories: memoryResults.map(m => m.content), userPhone }, '🧠 Retrieved Semantic Memories');
@@ -146,7 +150,7 @@ ${ctx.ingestionSummary}
 - Active Monitors: ${JSON.stringify(ctx.activeMonitors)}${semanticMemories}
 ---`;
 
-        const chatId = await findOrCreateChat(ctx.orgId || 'naija-agent-master', `${ctx.userPhone}_life`, 'User');
+        const chatId = await findOrCreateChat(ctx.orgId || 'naija-agent-master', `${userPhone}_life`, 'User');
         const history = await getChatHistory(chatId, 10);
         
         const normalizedHistory: AIMessage[] = history.map((m: any) => ({
@@ -157,7 +161,7 @@ ${ctx.ingestionSummary}
         const { primaryModel, tools } = await getDynamicModels(systemPrompt);
         
         // --- TRIGGER TYPING INDICATOR ---
-        whatsappService.sendTypingIndicator(ctx.userPhone).catch(e => 
+        whatsappService.sendTypingIndicator(userPhone).catch(e => 
             logger.warn({ error: e.message }, 'Failed to send typing indicator')
         );
 
@@ -198,7 +202,7 @@ ${ctx.ingestionSummary}
                         hops: (job.data.hops || 0) + 1
                     });
                     const replyMsg = `I'm consulting my ${call.args.sector} expert... ⏳`;
-                    await whatsappService.sendText(ctx.userPhone, replyMsg, ctx.phoneId);
+                    await whatsappService.sendText(userPhone, replyMsg, ctx.phoneId);
                     const safeUserMessage = ctx.message ? redactPII(ctx.message) : (ctx.type === 'text' ? '[Empty Message]' : `[${ctx.type.toUpperCase()}]`);
                     await saveMessage(chatId, { role: 'user', content: safeUserMessage, type: ctx.type as any });
                     await saveMessage(chatId, { role: 'assistant', content: replyMsg, type: 'text' });
@@ -206,17 +210,17 @@ ${ctx.ingestionSummary}
                     return { success: true, delegated: true };
                 }
 
-                const billResult = await billingService.billForTool(ctx.userPhone, call.name, ctx.energyCredits);
+                const billResult = await billingService.billForTool(userPhone, call.name, ctx.energyCredits);
                 if (!billResult.success) { 
                     text = billResult.errorText || "Insufficient energy."; 
                     break; 
                 }
                 
-                const toolResult = await executeLifeTool(call.name, { ...call.args, userId: ctx.userPhone, sessionId: chatId }, job.id);
+                const toolResult = await executeLifeTool(call.name, { ...call.args, userId: userPhone, sessionId: chatId }, job.id);
                 
                 if (toolResult && toolResult.error) {
                     logger.error({ toolName: call.name, error: toolResult.error }, '🛠️ Tool Execution Returned Error. Triggering Refund.');
-                    await billingService.refundCredits(ctx.userPhone, billResult.costInCredits);
+                    await billingService.refundCredits(userPhone, billResult.costInCredits);
                 }
                 
                 toolResponses.push({ functionResponse: { name: call.name, response: toolResult } });
@@ -231,14 +235,14 @@ ${ctx.ingestionSummary}
                 });
                 text = followUp.text;
                 if (followUp.thinking) {
-                    logger.info({ userPhone: ctx.userPhone, thinking: followUp.thinking }, '🧠 [Agentic Thought - FollowUp]');
+                    logger.info({ userPhone: userPhone, thinking: followUp.thinking }, '🧠 [Agentic Thought - FollowUp]');
                 }
             }
         }
 
         if (text) {
-                await billingService.billForMessage(ctx.userPhone);
-                await whatsappService.sendText(ctx.userPhone, Formatter.format(text), ctx.phoneId);
+                await billingService.billForMessage(userPhone);
+                await whatsappService.sendText(userPhone, Formatter.format(text), ctx.phoneId);
                 const safeUserMessage = ctx.message ? redactPII(ctx.message) : (ctx.type === 'text' ? '[Empty Message]' : `[${ctx.type.toUpperCase()}]`);
                 await saveMessage(chatId, { role: 'user', content: safeUserMessage, type: ctx.type as any });
 

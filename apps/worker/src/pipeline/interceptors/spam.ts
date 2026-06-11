@@ -1,0 +1,39 @@
+import { PipelineContext, Interceptor } from '../types.js';
+import crypto from 'crypto';
+
+export const SpamInterceptor: Interceptor = {
+  name: 'Spam',
+  execute: async (ctx: PipelineContext) => {
+    // Only apply spam check to text messages
+    if (ctx.type !== 'text' || !ctx.job.data.text) {
+      return ctx;
+    }
+
+    const textPayload = ctx.job.data.text.trim();
+    if (!textPayload) return ctx;
+
+    // Create a short hash of the text
+    const textHash = crypto.createHash('md5').update(textPayload).digest('hex');
+    
+    // Redis key structure: spam_history:<orgId>:<userPhone>:<textHash>
+    const spamKey = `spam_history:${ctx.orgId}:${ctx.from}:${textHash}`;
+    
+    // Increment the counter for this specific exact text payload
+    const count = await ctx.redisClient.incr(spamKey);
+    
+    if (count === 1) {
+      // If it's the first time we see this text, set expiration window (e.g. 10 minutes = 600s)
+      await ctx.redisClient.expire(spamKey, 600);
+    }
+
+    // If the same exact text has been sent 3 or more times within the window
+    if (count >= 3) {
+      ctx.shortCircuit = true;
+      ctx.shortCircuitReason = 'SPAM_REPETITION';
+      // Silently drop to prevent bot-to-bot loops. No warning sent!
+      return ctx;
+    }
+
+    return ctx;
+  }
+};
