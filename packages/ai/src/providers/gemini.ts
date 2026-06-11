@@ -55,11 +55,7 @@ export class GeminiProvider implements AIProvider {
       if (!versionedModel.startsWith('models/')) {
           versionedModel = `models/${versionedModel}`;
       }
-      if (!versionedModel.includes('-00')) {
-          // Gemini 3.5 Flash doesn't support caching yet in some regions/keys, 
-          // fallback to 1.5-flash-001 for caching the system prompt to guarantee it works.
-          versionedModel = 'models/gemini-1.5-flash-001';
-      }
+
 
       try {
           console.log(`[GEMINI] Creating Context Cache for hash ${hash.substring(0,8)} using ${versionedModel}...`);

@@ -240,13 +240,20 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
 
     case 'register_trial_interest': {
         // 1. Register in Database
-        await registerTrialInterest({
-            id: args.id,
-            name: args.name,
-            adminPhone: args.adminPhone,
-            botPhone: args.botPhone,
-            timezone: args.timezone
-        });
+        try {
+            await registerTrialInterest({
+                id: args.id,
+                name: args.name,
+                adminPhone: args.adminPhone,
+                botPhone: args.botPhone,
+                timezone: args.timezone
+            });
+        } catch (error: any) {
+            if (error.message && error.message.includes('unique constraint')) {
+                return { status: 'error', reason: `Organization ID '${args.id}' already exists. Please choose a different ID.` };
+            }
+            throw error;
+        }
 
         // 2. Normalize Phone and Set Redis Mapping (for Sidecar routing)
         const { parseAndFormatPhone } = await import('@naija-agent/types');
