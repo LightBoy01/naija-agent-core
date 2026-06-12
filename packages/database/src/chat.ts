@@ -32,6 +32,28 @@ export async function findOrCreateChat(orgId: string, userPhone: string, userNam
   }
 }
 
+export async function getChatDemoState(chatId: string): Promise<string | null> {
+  const sqlDb = getDb();
+  try {
+    const res = await sqlDb.select({ activeDemoNiche: chats.activeDemoNiche }).from(chats).where(eq(chats.id, chatId)).limit(1);
+    return res[0]?.activeDemoNiche || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function setChatDemoState(chatId: string, niche: string | null): Promise<void> {
+  const sqlDb = getDb();
+  try {
+    await sqlDb.update(chats).set({ 
+      activeDemoNiche: niche, 
+      demoStartedAt: niche ? sql`CURRENT_TIMESTAMP` : null 
+    }).where(eq(chats.id, chatId));
+  } catch (e) {
+    console.error(`[DB] Failed to set demo state for ${chatId}:`, e);
+  }
+}
+
 /**
  * Saves a message to SQL.
  */

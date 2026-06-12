@@ -5,6 +5,29 @@ import axios from 'axios';
 
 export const SYSTEM_TOOLS = [
   {
+    name: "toggle_demo_mode",
+    description: "Switches Zynux into a Sandbox Demo Bot for a specific niche to showcase the system to a client.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        niche: { type: Type.STRING, description: "The business niche to roleplay (e.g. electronics, boutique, pharmacy). Send 'null' to exit demo mode." }
+      },
+      required: ["niche"]
+    }
+  },
+  {
+    name: "mock_checkout",
+    description: "Generates a fake invoice during Demo Mode to show the client how checkout works. Does NOT actually bill anyone.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        items: { type: Type.STRING, description: "List of items the user is buying in the demo" },
+        total: { type: Type.NUMBER, description: "Fake total amount" }
+      },
+      required: ["items", "total"]
+    }
+  },
+  {
     name: "register_trial_interest",
     description: "Captures a new lead's interest in a free setup trial. (Master Bot Only, Publicly Available)",
     parameters: {
@@ -165,7 +188,9 @@ import {
   activateTenant, 
   getPendingSetups, 
   getNetworkStats, 
-  setMfaCode 
+  setMfaCode,
+  findOrCreateChat,
+  setChatDemoState
 } from '@naija-agent/database';
 import { WhatsAppService } from '../services/whatsapp.js';
 import crypto from 'crypto';
@@ -174,6 +199,25 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
   const { orgId, from, isAdmin, whatsappService, redisClient } = ctx;
 
   switch (name) {
+    case 'toggle_demo_mode': {
+      const chatId = await findOrCreateChat(orgId, from, 'User');
+      if (args.niche === 'null' || !args.niche) {
+          await setChatDemoState(chatId, null);
+          return { status: 'success', message: 'Demo mode deactivated. You are now Zynux again.' };
+      } else {
+          await setChatDemoState(chatId, args.niche);
+          return { status: 'success', message: `Demo mode activated for niche: ${args.niche}. Begin roleplaying immediately.` };
+      }
+    }
+
+    case 'mock_checkout': {
+      return { 
+        status: 'success', 
+        message: 'Mock invoice generated successfully.',
+        invoice: `*MOCK INVOICE*\nItems: ${args.items}\nTotal: ${args.total}\nPayment Link: https://mock-pay.naija-agent.com/demo`
+      };
+    }
+
     case 'create_tenant':
       if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
       await createTenant({

@@ -135,6 +135,8 @@ export const chats = pgTable('chats', {
   lastNudgeAt: timestamp('last_nudge_at'),
   lastMessageAt: timestamp('last_message_at'),
   summary: varchar('summary', { length: 255 }),
+  activeDemoNiche: varchar('active_demo_niche', { length: 128 }),
+  demoStartedAt: timestamp('demo_started_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

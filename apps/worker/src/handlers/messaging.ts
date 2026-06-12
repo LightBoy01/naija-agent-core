@@ -3,7 +3,7 @@ import { JobData, Message, StaffData } from '@naija-agent/types';
 import { WhatsAppService } from '../services/whatsapp.js';
 import {
   findOrCreateChat, getChatHistory, saveMessage, verifyAdminSession,
-  getOrgById, logSystemEvent
+  getOrgById, logSystemEvent, getChatDemoState, setChatDemoState
 } from '@naija-agent/database';
 // TODO: Replace getAllKnowledge and getProducts with Postgres equivalents once Knowledge table is migrated
 import { getAllKnowledge, getProducts } from '@naija-agent/firebase'; 
@@ -65,11 +65,36 @@ export async function handleMessage(job: Job<JobData>, deps: MessagingDependenci
       return { success: true, reason: 'COMMAND_CENTER_RESTRICTED' };
   }
 
+  const chatId = await findOrCreateChat(orgId, from, job.data.name || 'User');
+  const activeDemoNiche = await getChatDemoState(chatId);
+
+  // --- HARDCODED DEMO ESCAPE HATCH ---
+  if (activeDemoNiche && (textTrimmed.toLowerCase() === '#exit' || textTrimmed.toLowerCase() === 'exit demo' || textTrimmed.toLowerCase() === 'exit')) {
+      await setChatDemoState(chatId, null);
+      await tenantWhatsAppService.sendText(from, "🛑 [SYSTEM: DEMO MODE ENDED. I am now Zynux again.]");
+      return { success: true };
+  }
+
+  let finalTools = [...tenantTools];
+  if (activeDemoNiche) {
+      const { SYSTEM_TOOLS } = await import('../tools/system.js');
+      finalTools = [{ 
+          functionDeclarations: SYSTEM_TOOLS.filter(t => t.name === 'toggle_demo_mode' || t.name === 'mock_checkout')
+      }];
+  }
+
   // --- PHASE 10: TRIAD PROMPT RESOLUTION ---
   const globalProtocol = promptService.getPrompt('Zynux.Soul.md') || '';
   let personaPrompt = '';
 
-  if (org.config?.isMaster) {
+  if (activeDemoNiche) {
+      personaPrompt = `You are currently in DEMO MODE. Your persona is a sales assistant for a ${activeDemoNiche} business.
+You are roleplaying to show the client how you can sell products in their niche.
+Do NOT reveal you are Zynux during the roleplay. Just act like the perfect assistant for a ${activeDemoNiche} shop.
+Make up a few fake items in your inventory to sell to them.
+If the client agrees to buy, use the mock_checkout tool.
+If the client says they are done or satisfied, use toggle_demo_mode with niche: 'null' to exit demo mode.`;
+  } else if (org.config?.isMaster) {
       personaPrompt = isAdmin 
         ? promptService.getPrompt('Master.Agent.md') 
         : promptService.getPrompt('Onboarding.Agent.md');
@@ -146,7 +171,7 @@ ${globalProtocol}
       aiResponse = await ai.analyzeImage(mediaBuffer, mediaMime, content.caption || "Analyze this", {
           model: tenantModelName,
           systemInstruction: systemPrompt,
-          tools: tenantTools,
+          tools: finalTools,
           responseMimeType: "application/json",
           responseSchema
       });
@@ -154,7 +179,7 @@ ${globalProtocol}
       aiResponse = await ai.chat(normalizedHistory, content.text || "[Media]", {
           model: tenantModelName,
           systemInstruction: systemPrompt,
-          tools: tenantTools,
+          tools: finalTools,
           responseMimeType: "application/json",
           responseSchema
       });
@@ -198,7 +223,7 @@ ${globalProtocol}
           const followUp = await ai.chat(toolHistory, "Continue processing based on tool results.", {
               model: tenantModelName,
               systemInstruction: systemPrompt,
-              tools: tenantTools,
+              tools: finalTools,
               responseMimeType: "application/json",
               responseSchema
           });
