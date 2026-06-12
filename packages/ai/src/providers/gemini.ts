@@ -38,6 +38,9 @@ export class GeminiProvider implements AIProvider {
   }
 
   private async getOrCreateCache(modelName: string, systemInstruction: string): Promise<string | null> {
+      if (modelName.toLowerCase().includes('gemma')) {
+          return null; // Gemma models on GenAI v1beta do not support context caching
+      }
       const hash = this.getInstructionHash(systemInstruction);
       if (!hash) return null;
 
@@ -151,17 +154,24 @@ export class GeminiProvider implements AIProvider {
     return alternatingHistory;
   }
 
+  private stripThinkTags(text: string): string {
+    if (!text) return "";
+    return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  }
+
   private extractText(result: any): string {
     if (!result) return "";
+    let extracted = "";
     try {
       if (result.functionCalls && result.functionCalls.length > 0) {
         if (result.candidates?.[0]?.content?.parts) {
           const textParts = result.candidates[0].content.parts.filter((p: any) => p.text);
-          if (textParts.length > 0) return textParts.map((p: any) => p.text).join("");
+          if (textParts.length > 0) extracted = textParts.map((p: any) => p.text).join("");
         }
-        return "";
+      } else {
+        extracted = result.text || "";
       }
-      return result.text || "";
+      return this.stripThinkTags(extracted);
     } catch (e) {
       return "";
     }

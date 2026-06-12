@@ -135,7 +135,6 @@ ${globalProtocol}
     required: ["internal_thoughts", "whatsapp_message"]
   };
 
-  const chatId = await findOrCreateChat(orgId, from, job.data.name || 'User');
   const history = await getChatHistory(chatId, 10);
   
   const normalizedHistory: AIMessage[] = history.map((m: any) => ({

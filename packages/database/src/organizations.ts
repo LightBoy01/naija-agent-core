@@ -213,21 +213,7 @@ export async function getNetworkStats(orgId: string) {
   };
 }
 
-export async function logSystemEvent(orgId: string, eventType: string, summary: string, metadata: any = {}) {
-  const db = getDb();
-  try {
-    await db.insert(systemLogs).values({
-      id: randomUUID(),
-      orgId,
-      eventType,
-      summary,
-      metadata,
-      timestamp: new Date()
-    });
-  } catch (e) {
-    console.error(`[SQL] logSystemEvent failed:`, e);
-  }
-}
+
 
 export async function setMfaCode(orgId: string, code: string, expiryMinutes = 5) {
   const db = getDb();
