@@ -46,6 +46,18 @@ export const INVENTORY_TOOLS = [
       properties: { query: { type: Type.STRING, description: "Search term" } },
       required: ["query"]
     }
+  },
+  {
+    name: "send_product_image",
+    description: "Sends a product image directly to the customer's WhatsApp. Use this to show a product after finding its imageUrl.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        imageUrl: { type: Type.STRING, description: "The persistent image URL of the product." },
+        caption: { type: Type.STRING, description: "Optional description or price to include with the image." }
+      },
+      required: ["imageUrl"]
+    }
   }
 ];
 
@@ -58,7 +70,7 @@ import {
 import { FieldValue } from 'firebase-admin/firestore';
 
 export async function handleInventoryTools(name: string, args: any, ctx: HandlerContext): Promise<any> {
-  const { orgId, isVisionContext } = ctx;
+  const { orgId, isVisionContext, from, whatsappService } = ctx;
 
   switch (name) {
     case 'save_product':
@@ -101,6 +113,15 @@ export async function handleInventoryTools(name: string, args: any, ctx: Handler
     case 'search_products': {
         const results = await searchProducts(orgId, args.query);
         return { status: 'success', products: results };
+    }
+
+    case 'send_product_image': {
+        try {
+            await whatsappService.sendImage(from, args.imageUrl, args.caption);
+            return { status: 'success', message: 'Image sent successfully to customer.' };
+        } catch (e: any) {
+            return { status: 'error', message: `Failed to send image: ${e.message}` };
+        }
     }
 
     default:
