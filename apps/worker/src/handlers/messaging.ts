@@ -121,7 +121,7 @@ ${personaPrompt}
 - Admin Status: ${adminStatus}
 
 [BUSINESS KNOWLEDGE]:
-${knowledgeContext || 'Empty - Please tell me your prices so I can start selling!'}
+${activeDemoNiche ? 'Empty - Sandbox Mode. Make up fake items.' : (knowledgeContext || 'Empty - Please tell me your prices so I can start selling!')}
 
 ${globalProtocol}
 `;
