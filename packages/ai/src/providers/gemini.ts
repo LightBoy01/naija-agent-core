@@ -21,12 +21,14 @@ export class GeminiProvider implements AIProvider {
     }
     const resolvedBaseURL = baseURL || defaultBaseURL;
     const resolvedApiVersion = resolvedBaseURL.includes('generativelanguage') ? 'v1beta' : 'v1/publishers/google';
+    const isVertexAI = !resolvedBaseURL.includes('generativelanguage');
 
     this.genAI = new GoogleGenAI({
       apiKey,
+      vertexai: isVertexAI,
+      apiVersion: resolvedApiVersion,
       httpOptions: { 
-        baseUrl: resolvedBaseURL, 
-        apiVersion: resolvedApiVersion
+        baseUrl: resolvedBaseURL
       }
     });
   }

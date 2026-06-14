@@ -233,7 +233,7 @@ func (m *Manager) handleMessage(orgID string, evt *events.Message) {
 	// Auto Mark as Read logic:
 	// - Aelixxr (Masterbot) always marks as read instantly (blue ticks).
 	// - Zynux (Client Bots) leaves it as unread (grey ticks) so human admins can easily spot unread chats when they open their WhatsApp.
-	if orgID == "naija-agent-master" || orgID == "aelixxr" {
+	if orgID == "naija-agent-master" || orgID == "aelixxr" || orgID == "aelixxr-life-companion" {
 		if err := m.clients[orgID].MarkRead(context.Background(), []types.MessageID{evt.Info.ID}, evt.Info.Timestamp, evt.Info.Chat, evt.Info.Sender); err != nil {
 			m.log.Warnf("Failed to mark message as read: %v", err)
 		}
@@ -257,7 +257,7 @@ func (m *Manager) handleMessage(orgID string, evt *events.Message) {
 
 	// Determine if it's Life Chat based on orgID
 	jobType := "text"
-	if orgID == "naija-agent-master" || orgID == "aelixxr" { 
+	if orgID == "naija-agent-master" || orgID == "aelixxr" || orgID == "aelixxr-life-companion" { 
 		jobType = "life-chat" 
 	}
 

@@ -53,10 +53,15 @@ export async function handleLifeChat(job: Job, deps: ChatDependencies) {
         userPhone = '2347042310893';
     }
     const rawMessage = job.data.message !== undefined ? job.data.message : job.data.content?.text;
-    const orgId = job.data.orgId;
+    let orgId = job.data.orgId;
     const type = job.data.type;
     const fileName = job.data.content?.fileName;
     
+    // Map 'aelixxr' to the correct organization ID in the database
+    if (orgId === 'aelixxr') {
+        orgId = 'aelixxr-life-companion';
+    }
+
     let isImage = type === 'image' || type === 'video';
     let isDoc = type === 'document';
     let isAudio = type === 'audio';
