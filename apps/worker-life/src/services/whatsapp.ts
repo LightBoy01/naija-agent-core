@@ -37,7 +37,7 @@ export class WhatsAppService {
         const sidecarUrl = process.env.SIDECAR_URL || 'http://localhost:8080';
         // Normalize ID to string name if numeric
         let orgId = targetPhoneId.replace('baileys-', '');
-        if (orgId === '2349015772541') orgId = 'aelixxr';
+        if (orgId === '2349015772541' || orgId === 'aelixxr') orgId = 'aelixxr-life-companion';
         if (orgId === '2347011925076') orgId = 'zynux';
         if (orgId === '1034379023092936') orgId = 'naija-agent-master';
 
@@ -105,7 +105,7 @@ export class WhatsAppService {
     
     if (targetPhoneId.startsWith('baileys-') || sovereignIds.includes(targetPhoneId) || !/^\d+$/.test(targetPhoneId)) {
         let orgId = targetPhoneId.replace('baileys-', '');
-        if (orgId === '2349015772541') orgId = 'aelixxr';
+        if (orgId === '2349015772541' || orgId === 'aelixxr') orgId = 'aelixxr-life-companion';
         if (orgId === '2347011925076') orgId = 'zynux';
         if (orgId === '1034379023092936') orgId = 'naija-agent-master';
 
