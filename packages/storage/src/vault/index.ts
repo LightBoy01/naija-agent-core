@@ -84,7 +84,7 @@ async function extractMultimodalMetadata(
 ): Promise<any> {
   const { SystemConfig } = await import('@naija-agent/types');
   const finalApiKey = process.env.GEMINI_API_KEY_STUDIO || process.env.GEMINI_API_KEY || apiKey;
-  const modelName = (SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3.5-flash').replace(/^models\//, '');
+  const modelName = (SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3-flash-preview').replace(/^models\//, '');
 
   const prompt = `
   You are an elite Forensic Analyst and Document Classification AI for the "Aelixxr Sovereign Vault".
@@ -270,7 +270,7 @@ export async function ingestNote(
   // 1. Extract Metadata (The "Intelligence")
   const { SystemConfig } = await import('@naija-agent/types');
   const finalApiKey = process.env.GEMINI_API_KEY_STUDIO || apiKey;
-  const modelName = (SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3.5-flash').replace(/^models\//, '');
+  const modelName = (SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3-flash-preview').replace(/^models\//, '');
 
   const prompt = `
   Analyze this text note for a Life OS Vault.

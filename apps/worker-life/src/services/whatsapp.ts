@@ -15,31 +15,6 @@ export class WhatsAppService {
   async sendText(to: string, text: string, optionalPhoneId?: string) {
     const targetPhoneId = optionalPhoneId || this.phoneNumberId;
 
-    // Route to Go Sidecar if it's an internal Org ID or one of the known Sovereign IDs
-    const sovereignIds = ['aelixxr', 'zynux', 'naija-agent-master', '2349015772541', '2347011925076', '1034379023092936'];
-    if (targetPhoneId.startsWith('baileys-') || sovereignIds.includes(targetPhoneId) || !/^\d+$/.test(targetPhoneId)) {
-        const sidecarUrl = process.env.SIDECAR_URL || 'http://localhost:8080';
-        // Normalize ID to string name if numeric
-        let orgId = targetPhoneId.replace('baileys-', '');
-        if (orgId === '2349015772541') orgId = 'aelixxr';
-        if (orgId === '2347011925076') orgId = 'zynux';
-        if (orgId === '1034379023092936') orgId = 'naija-agent-master';
-
-        try {
-            await axios.post(`${sidecarUrl}/send`, {
-                orgId,
-                to,
-                text
-            }, {
-                headers: { 'X-API-Key': process.env.ADMIN_API_KEY }
-            });
-            return;
-        } catch (error: any) {
-            logger.error({ error: error.response?.data || error.message }, 'Sidecar WhatsApp Send Failed');
-            return;
-        }
-    }
-
     // 1. Logic: Group paragraphs into coarser "Coarse Bubbles" (Approx 800 chars)
     // This prevents notification fatigue while still chunking long answers.
     const paragraphs = text.split(/\n\n+/);
@@ -55,6 +30,38 @@ export class WhatsAppService {
         }
     }
     if (currentBubble) bubbles.push(currentBubble);
+
+    // Route to Go Sidecar if it's an internal Org ID or one of the known Sovereign IDs
+    const sovereignIds = ['aelixxr', 'zynux', 'naija-agent-master', '2349015772541', '2347011925076', '1034379023092936'];
+    if (targetPhoneId.startsWith('baileys-') || sovereignIds.includes(targetPhoneId) || !/^\d+$/.test(targetPhoneId)) {
+        const sidecarUrl = process.env.SIDECAR_URL || 'http://localhost:8080';
+        // Normalize ID to string name if numeric
+        let orgId = targetPhoneId.replace('baileys-', '');
+        if (orgId === '2349015772541') orgId = 'aelixxr';
+        if (orgId === '2347011925076') orgId = 'zynux';
+        if (orgId === '1034379023092936') orgId = 'naija-agent-master';
+
+        try {
+            for (const bubble of bubbles) {
+                await axios.post(`${sidecarUrl}/send`, {
+                    orgId,
+                    to,
+                    text: bubble
+                }, {
+                    headers: { 'X-API-Key': process.env.ADMIN_API_KEY }
+                });
+                
+                // Slight delay between coarse bubbles (500ms)
+                if (bubbles.length > 1) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+            return;
+        } catch (error: any) {
+            logger.error({ error: error.response?.data || error.message }, 'Sidecar WhatsApp Send Failed');
+            return;
+        }
+    }
     
     try {
       for (const bubble of bubbles) {
