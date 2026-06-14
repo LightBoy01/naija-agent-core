@@ -14,6 +14,21 @@ vi.mock('@naija-agent/firebase', () => ({
   logSystemEvent: vi.fn()
 }));
 
+vi.mock('@naija-agent/database', () => ({
+  getDb: vi.fn().mockReturnValue({
+    select: vi.fn().mockReturnThis(),
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    execute: vi.fn().mockResolvedValue([]),
+  }),
+  fraudRegistry: {},
+  eq: vi.fn(),
+  sql: vi.fn(),
+  and: vi.fn(),
+  syncCartState: vi.fn()
+}));
+
 const mockRedisClient = {
   incr: vi.fn().mockResolvedValue(1),
   expire: vi.fn().mockResolvedValue(1),
