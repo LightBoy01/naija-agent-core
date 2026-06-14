@@ -28,7 +28,7 @@ async function sendTypingIndicator(phoneId: string, messageId: string, token: st
 
     if (isSovereign) {
        let orgId = phoneId.replace('baileys-', '');
-       if (orgId === '2349015772541') orgId = 'aelixxr';
+       if (orgId === '2349015772541') orgId = 'aelixxr-life-companion';
        if (orgId === '2347011925076') orgId = 'zynux';
        if (orgId === '1034379023092936') orgId = 'naija-agent-master';
 

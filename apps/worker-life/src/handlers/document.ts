@@ -21,6 +21,15 @@ export async function handleDocumentIngestion(job: Job, whatsappService: WhatsAp
 
     logger.info({ docId: doc.id, orgId, type: doc.type }, 'Document Vaulted Successfully via Service');
     
+    // 2.5 Inject into NanoMemory (for Exam Cram/PDFs)
+    if (mimeType === 'application/pdf' || mimeType.startsWith('text/')) {
+        const { nanoMemory } = await import('../services/nanoMemory.js');
+        const chunks = await nanoMemory.ingestDocumentFile(from, orgId, buffer, mimeType, caption || 'Uploaded Document');
+        if (chunks > 0) {
+            logger.info({ chunks }, '📚 Successfully injected PDF chunks into NanoMemory');
+        }
+    }
+
     // 3. Notify User
     const amountStr = doc.extractedData?.amount ? `\nAmount: ${doc.extractedData.amount} ${doc.extractedData.currency || ''}` : '';
     await whatsappService.sendText(from, `✅ *Document Vaulted Securely!*\n\n*${doc.title}*\nCategory: ${doc.type}${amountStr}\n\nI have securely filed this away. You can search for it anytime by asking me (e.g., "Find my GTBank receipts from last week").`);

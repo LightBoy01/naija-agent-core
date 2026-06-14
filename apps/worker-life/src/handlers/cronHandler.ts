@@ -44,8 +44,15 @@ export async function handleSovereignCronTick(job: Job, deps: SovereignCronDepen
                 stepCount: cronJob.stepCount || 0
             };
 
+            // --- THUNDERING HERD MITIGATION (JITTER) ---
+            // If thousands of reminders trigger exactly at 8:00 AM, we randomly delay 
+            // dispatching them to the worker between 0 and 300 seconds (5 minutes)
+            // to avoid getting our WhatsApp Sidecar banned for spamming.
+            const jitterMs = Math.floor(Math.random() * 300000);
+
             await lifeQueue.add('execute-slm-task', slmJobData, {
                 jobId: `cron-${cronJob.id}-${Date.now()}`,
+                delay: jitterMs,
                 removeOnComplete: true,
                 removeOnFail: false
             });

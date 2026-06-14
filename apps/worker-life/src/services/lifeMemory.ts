@@ -44,7 +44,7 @@ export class LifeMemoryService {
           sessionExpiry: null,
           createdAt: new Date(),
           updatedAt: new Date()
-        };
+        } as any;
       }
 
       // Merge with any legacy or NoSQL-only context fields
