@@ -276,8 +276,12 @@ export async function handleLifeChatResume(job: Job, deps: ChatDependencies) {
     const { userPhone, slmReport, chatId, sector, orgId, phoneId } = job.data;
     
     const org = await getOrgById(orgId || 'naija-agent-master');
+    const { lifeMemory } = await import('../services/lifeMemory.js');
+    const lifeContext = await lifeMemory.getContext(userPhone);
+    const energyCredits = lifeContext.energyCredits ?? 0;
+    
     const soulPrompt = promptService.getPrompt('Aelixxr.Soul.md');
-    const systemPrompt = `${soulPrompt}\n\n[CONTEXT]: Resuming task from ${sector}.`;
+    const systemPrompt = `${soulPrompt}\n\n[CONTEXT]: Resuming task from ${sector}.\n- Energy: ${energyCredits}`;
 
     const { primaryModel } = await getDynamicModels(systemPrompt);
     const history = await getChatHistory(chatId, 10);
