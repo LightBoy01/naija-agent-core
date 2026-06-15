@@ -35,17 +35,6 @@ export const SYSTEM_TOOLS = [
       }
     },
     {
-      name: 'web_search',
-      description: 'Search the live internet for general knowledge, news, facts, and live information.',
-      parameters: {
-        type: Type.OBJECT,
-        properties: {
-          query: { type: Type.STRING, description: 'The search query (e.g. "Latest news in Nigeria today", "Who won the Champions League match yesterday?").' }
-        },
-        required: ['query']
-      }
-    },
-    {
       name: 'delegate_task',
       description: 'Delegate a specialized task to a sub-agent. Choose the sector carefully: \n- "EducationPack": For quizzes, study plans, and educational research.\n- "LifePack": For searching the user\'s Vault (receipts, notes, alerts) or deleting data.\n- "ResearchPack": For browsing the live internet, fetching webpages, and general news.\n- "CommercePack": For shopping, pricing, and market comparisons.\n- "PropertyPack": For real estate searches, tenancy laws, and property management.\n- "LegalPack": For Nigerian law research, bureaucracy defense, and contract analysis.',
       parameters: {
@@ -147,65 +136,6 @@ export async function executeSystemTool(name: string, args: Record<string, any>,
             logger.info({ userId: args.userId, delay: delay + 2000 }, '⚡ High-reliability nudge queued directly with buffer');
         }
         return toolResult;
-
-      case 'web_search':
-        try {
-          const { GoogleGenAI } = await import('@google/genai');
-          const { SystemConfig } = await import('@naija-agent/types');
-          const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || '';
-          
-          if (!apiKey) {
-            return { error: "I no fit search right now, my access key dey missing." };
-          }
-          
-          let baseUrl = 'https://aiplatform.googleapis.com';
-          let apiVersion = 'v1/publishers/google';
-          if (apiKey.startsWith('AIza')) {
-            baseUrl = 'https://generativelanguage.googleapis.com';
-            apiVersion = 'v1beta';
-          }
-          
-          const searchGenAI = new GoogleGenAI({ 
-            apiKey,
-            vertexai: !apiKey.startsWith('AIza'),
-            apiVersion,
-            httpOptions: { baseUrl }
-          });
-          
-          const trySearch = async (modelName: string) => {
-            const searchResult = await searchGenAI.models.generateContent({
-              model: modelName,
-              contents: [{ role: 'user', parts: [{ text: 'Search for: ' + args.query + '. Summarize the key facts, prices, or news found. DO NOT output your search plan, internal reasoning, or introductory filler. Provide ONLY the final summary.' }] }],
-              config: {
-                tools: [{ googleSearch: {} }] as any
-              }
-            });
-            
-            let text = "";
-            if (searchResult.candidates?.[0]?.content?.parts) {
-                text = searchResult.candidates[0].content.parts.filter((p: any) => p.text).map((p: any) => p.text).join("");
-            } else {
-                text = searchResult.text || "";
-            }
-            return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-          };
-
-          try {
-            const summary = await trySearch(SystemConfig.MODELS.ROUTER_PRIMARY);
-            return { status: 'success', result: summary };
-          } catch (firstTryErr: any) {
-             if (firstTryErr.message.includes('429') || firstTryErr.message.includes('503') || firstTryErr.message.includes('fetch failed') || firstTryErr.message.includes('500') || firstTryErr.message.includes('limit')) {
-                logger.warn('🔄 [LIFE SEARCH FALLBACK] Quota Exceeded or Model Busy. Retrying with Fallback...');
-                const secondSummary = await trySearch(SystemConfig.MODELS.ROUTER_FALLBACK);
-                return { status: 'success', result: secondSummary };
-             } else {
-                throw firstTryErr;
-             }
-          }
-        } catch (err: any) {
-            logger.error({ error: err.message }, 'Web Search Failed');
-            return { error: 'Oga, I don search tire for today! I don reach my limit for now.' };
-        }
 
       case 'delegate_task':
         return { status: 'success', message: 'Delegation handled by Orchestrator.' };

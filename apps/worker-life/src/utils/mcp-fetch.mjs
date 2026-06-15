@@ -27,6 +27,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ['url']
         }
+      },
+      {
+        name: 'brave_web_search',
+        description: 'Performs a web search using Brave Search API to fetch live information, news, and facts.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'The search query' }
+          },
+          required: ['query']
+        }
       }
     ]
   };
@@ -49,6 +60,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: text.substring(0, 10000) }] }; // truncate for safety
     } catch (e) {
       return { content: [{ type: 'text', text: `Error fetching: ${e.message}` }], isError: true };
+    }
+  }
+
+  if (request.params.name === 'brave_web_search') {
+    try {
+      const apiKey = process.env.BRAVE_API_KEY;
+      if (!apiKey) {
+         return { content: [{ type: 'text', text: 'Error: BRAVE_API_KEY environment variable is not set.' }], isError: true };
+      }
+      
+      const query = request.params.arguments.query;
+      const response = await axios.get('https://api.search.brave.com/res/v1/web/search', {
+        params: { q: query, count: 5 },
+        headers: {
+          'Accept': 'application/json',
+          'X-Subscription-Token': apiKey
+        },
+        timeout: 10000
+      });
+      
+      const results = response.data.web?.results || [];
+      if (results.length === 0) {
+         return { content: [{ type: 'text', text: 'No results found.' }] };
+      }
+      
+      const formattedResults = results.map(r => `Title: ${r.title}\nDescription: ${r.description}\nURL: ${r.url}`).join('\n\n');
+      return { content: [{ type: 'text', text: formattedResults }] };
+      
+    } catch (e) {
+      return { content: [{ type: 'text', text: `Brave Search Error: ${e.message}` }], isError: true };
     }
   }
   throw new Error(`Tool not found: ${request.params.name}`);
