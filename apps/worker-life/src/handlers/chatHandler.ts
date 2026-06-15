@@ -205,6 +205,7 @@ ${ctx.ingestionSummary}
                 if (call.name === 'delegate_task') {
                     await lifeQueue.add('execute-slm-task', { 
                         ...job.data, 
+                        userPhone,
                         chatId, 
                         sector: call.args.sector, 
                         instruction: call.args.instruction,

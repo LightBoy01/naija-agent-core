@@ -230,9 +230,7 @@ ${trajectoryStr}`;
         const result = await ai.chat(history, fullInstruction, {
             model,
             systemInstruction: agentPrompt,
-            tools: slmTools,
-            responseMimeType: 'application/json',
-            responseSchema: slmResponseSchema as any
+            tools: slmTools
         });
 
         const slmCalls = result.functionCalls;
