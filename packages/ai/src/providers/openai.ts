@@ -13,6 +13,36 @@ export class OpenAIProvider implements AIProvider {
     });
   }
 
+  private convertSchemaTypes(schema: any): any {
+    if (!schema) return schema;
+    
+    const result = { ...schema };
+    
+    if (typeof result.type === 'string') {
+        const typeMap: Record<string, string> = {
+            'STRING': 'string',
+            'NUMBER': 'number',
+            'INTEGER': 'integer',
+            'BOOLEAN': 'boolean',
+            'ARRAY': 'array',
+            'OBJECT': 'object'
+        };
+        result.type = typeMap[result.type.toUpperCase()] || result.type.toLowerCase();
+    }
+    
+    if (result.properties) {
+        for (const key in result.properties) {
+            result.properties[key] = this.convertSchemaTypes(result.properties[key]);
+        }
+    }
+    
+    if (result.items) {
+        result.items = this.convertSchemaTypes(result.items);
+    }
+    
+    return result;
+  }
+
   /**
    * Translates Gemini-formatted tools to OpenAI-formatted tools.
    */
@@ -28,7 +58,7 @@ export class OpenAIProvider implements AIProvider {
       function: {
         name: decl.name,
         description: decl.description,
-        parameters: decl.parameters
+        parameters: this.convertSchemaTypes(decl.parameters)
       }
     }));
   }
