@@ -74,10 +74,16 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async generateText(prompt: string, options?: AIOptions): Promise<AIResponse> {
+    let sysInstr = options?.systemInstruction;
+    if (options?.responseSchema) {
+        const schemaText = `\n\nCRITICAL: You MUST output your response as a valid JSON object strictly adhering to this schema:\n${JSON.stringify(options.responseSchema, null, 2)}`;
+        sysInstr = sysInstr ? sysInstr + schemaText : schemaText;
+    }
+
     const response = await this.client.chat.completions.create({
       model: options?.model || 'gpt-4-turbo-preview',
       messages: [
-        ...(options?.systemInstruction ? [{ role: 'system', content: options.systemInstruction }] as any : []),
+        ...(sysInstr ? [{ role: 'system', content: sysInstr }] as any : []),
         { role: 'user', content: prompt }
       ],
       temperature: options?.temperature,
@@ -103,7 +109,13 @@ export class OpenAIProvider implements AIProvider {
     const messages: any[] = [];
     
     if (options?.systemInstruction) {
-      messages.push({ role: 'system', content: options.systemInstruction });
+      let sysInstr = options.systemInstruction;
+      if (options.responseSchema) {
+          sysInstr += `\n\nCRITICAL: You MUST output your response as a valid JSON object strictly adhering to this schema:\n${JSON.stringify(options.responseSchema, null, 2)}`;
+      }
+      messages.push({ role: 'system', content: sysInstr });
+    } else if (options?.responseSchema) {
+      messages.push({ role: 'system', content: `CRITICAL: You MUST output your response as a valid JSON object strictly adhering to this schema:\n${JSON.stringify(options.responseSchema, null, 2)}` });
     }
 
     // Convert history to OpenAI format
