@@ -9,7 +9,7 @@ import { promptService } from './services/promptService.js';
 import path from 'path';
 
 // --- AI Abstraction ---
-import { AIOrchestrator, GeminiProvider, OpenAIProvider, AIFactory } from '@naija-agent/ai';
+import { AIOrchestrator, GeminiProvider, OpenAIProvider, AIFactory, GlobalModelRegistry } from '@naija-agent/ai';
 
 // --- Handlers ---
 import { handleLifeChat, handleLifeChatResume, ChatDependencies } from './handlers/chatHandler.js';
@@ -31,23 +31,8 @@ export const redisClient = new Redis(redisUrl || 'redis://localhost:6379', {
     tls: redisUrl?.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
 });
 
-// --- Initialize AI Orchestrator with Smart Fallback (Provider-Based) ---
-const primaryProviderType = (process.env.AI_PROVIDER_PRIMARY || 'gemini') as any;
-const fallbackProviderType = (process.env.AI_PROVIDER_FALLBACK || 'gemini') as any;
-
-const aiOrchestrator = AIFactory.createOrchestrator(
-    {
-        type: primaryProviderType,
-        apiKey: process.env.GEMINI_API_KEY_STUDIO || process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY,
-        model: process.env.GEMINI_MODEL_LOS || SystemConfig.MODELS.AELIXXR_PRIMARY
-    },
-    {
-        type: fallbackProviderType,
-        apiKey: process.env.DEEPSEEK_API_KEY || process.env.GEMINI_API_KEY,
-        baseURL: process.env.DEEPSEEK_BASE_URL || (fallbackProviderType === 'commandcode' ? 'https://api.commandcode.ai/v1' : undefined),
-        model: SystemConfig.MODELS.AELIXXR_FALLBACK
-    }
-);
+// --- Initialize AI Orchestrator with Dynamic Capability Router ---
+const aiOrchestrator = AIFactory.createRouter(GlobalModelRegistry);
 
 const apiKey = process.env.GEMINI_API_KEY_STUDIO || process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || '';
 

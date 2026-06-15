@@ -16,7 +16,7 @@ import {
 } from '@naija-agent/firebase';
 
 // --- AI Abstraction ---
-import { AIOrchestrator, GeminiProvider, AIFactory } from '@naija-agent/ai';
+import { AIOrchestrator, GeminiProvider, AIFactory, GlobalModelRegistry } from '@naija-agent/ai';
 
 import { handleDailyReport, handleMasterReport } from './handlers/reporting.js';
 import { handleOnboarding } from './handlers/onboarding.js';
@@ -71,23 +71,8 @@ if (redisUrl) {
   redisClient = new Redis(redisConfig);
 }
 
-// --- AI Orchestrator with Smart Fallback (Provider-Based) ---
-const primaryProviderType = (process.env.AI_PROVIDER_PRIMARY || 'gemini') as any;
-const fallbackProviderType = (process.env.AI_PROVIDER_FALLBACK || 'gemini') as any;
-
-const aiOrchestrator = AIFactory.createOrchestrator(
-    {
-        type: primaryProviderType,
-        apiKey: process.env.GEMINI_API_KEY_STUDIO || process.env.GEMINI_API_KEY,
-        model: process.env.GEMINI_MODEL || SystemConfig.MODELS.ZYNUX_PRIMARY
-    },
-    {
-        type: fallbackProviderType,
-        apiKey: process.env.DEEPSEEK_API_KEY || process.env.GEMINI_API_KEY,
-        baseURL: process.env.DEEPSEEK_BASE_URL || (fallbackProviderType === 'commandcode' ? 'https://api.commandcode.ai/v1' : undefined),
-        model: SystemConfig.MODELS.ZYNUX_FALLBACK
-    }
-);
+// --- Initialize AI Orchestrator with Dynamic Capability Router ---
+const aiOrchestrator = AIFactory.createRouter(GlobalModelRegistry);
 
 let globalPaymentProvider: PaymentProvider | null = null;
 if (process.env.PAYSTACK_SECRET_KEY) {

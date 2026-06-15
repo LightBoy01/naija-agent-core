@@ -29,13 +29,13 @@ export const SystemConfig = {
     // Models
     MODELS: {
         // --- ZYNUX (Business OS) ---
-        ZYNUX_PRIMARY: 'gemma-4-26b-a4b-it',
-        ZYNUX_WORKER: 'models/gemini-3-flash-preview',
+        ZYNUX_PRIMARY: 'deepseek-v4-flash',
+        ZYNUX_WORKER: 'deepseek-v4-flash',
         ZYNUX_FALLBACK: 'models/gemini-3.1-flash-lite-preview',
 
         // --- AELIXXR (Life OS) ---
-        AELIXXR_PRIMARY: 'gemma-4-26b-a4b-it',
-        AELIXXR_WORKER: 'models/gemini-3-flash-preview',
+        AELIXXR_PRIMARY: 'deepseek-v4-pro',
+        AELIXXR_WORKER: 'deepseek-v4-flash',
         AELIXXR_FALLBACK: 'models/gemini-3.1-flash-lite-preview',
 
         // --- ROUTER (Gateway) ---

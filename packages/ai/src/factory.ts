@@ -11,23 +11,41 @@ export interface ProviderConfig {
 }
 
 export class AIFactory {
+  private static providerPool: Map<string, AIProvider> = new Map();
+
   static createProvider(config: ProviderConfig): AIProvider {
     if (!config.apiKey || config.apiKey === 'mock-key' || config.apiKey.trim() === '') {
       throw new Error(`[ConfigurationError] Missing valid API key for provider: ${config.type}. Halting execution to prevent unauthorized API calls.`);
     }
 
+    // Use a composite key to cache provider instances (improves memory & connection pooling)
+    const cacheKey = `${config.type}-${config.baseURL || 'default'}-${config.apiKey.slice(0, 10)}`;
+    
+    if (this.providerPool.has(cacheKey)) {
+      return this.providerPool.get(cacheKey)!;
+    }
+
+    let provider: AIProvider;
     switch (config.type) {
       case 'gemini':
-        return new GeminiProvider(config.apiKey, config.baseURL);
+        provider = new GeminiProvider(config.apiKey, config.baseURL);
+        break;
       case 'openai':
-        return new OpenAIProvider(config.apiKey, config.baseURL);
+        provider = new OpenAIProvider(config.apiKey, config.baseURL);
+        break;
       case 'dashscope':
-        return new DashScopeProvider(config.apiKey, config.baseURL);
+        provider = new DashScopeProvider(config.apiKey, config.baseURL);
+        break;
       case 'commandcode':
-        return new OpenAIProvider(config.apiKey, config.baseURL || 'https://api.commandcode.ai/v1');
+        // Fixed: Command Code's Provider API requires the /provider/v1 path
+        provider = new OpenAIProvider(config.apiKey, config.baseURL || 'https://api.commandcode.ai/provider/v1');
+        break;
       default:
         throw new Error(`Unknown provider type: ${config.type}`);
     }
+
+    this.providerPool.set(cacheKey, provider);
+    return provider;
   }
 
   // Deprecated: Kept for backwards compatibility until all apps migrate

@@ -69,8 +69,17 @@ export const GlobalModelRegistry: ModelCapability[] = [
     {
         id: 'deepseek-v4-pro',
         provider: 'openai',
-        baseURL: 'https://api.tokenhub.tencentcloud.com/v1',
-        apiKeyEnv: 'TOKENHUB_KEY',
+        baseURL: 'https://api.deepseek.com/v1',
+        apiKeyEnv: 'DEEPSEEK_API_KEY',
+        skills: ['reasoning', 'tool-calling', 'summarization', 'data-processing'],
+        costProfile: 'high',
+        maxContext: 1000000
+    },
+    {
+        id: 'deepseek-v4-flash',
+        provider: 'openai',
+        baseURL: 'https://api.deepseek.com/v1',
+        apiKeyEnv: 'DEEPSEEK_API_KEY',
         skills: ['reasoning', 'tool-calling', 'summarization', 'data-processing'],
         costProfile: 'ultra-low',
         maxContext: 1000000

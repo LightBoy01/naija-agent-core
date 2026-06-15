@@ -52,6 +52,7 @@ export class AIOrchestrator implements AIProvider {
   private async executeWithFailover<T>(
       skill: ModelSkill, 
       cost: 'high' | 'low', 
+      preferredModel: string | undefined,
       fn: (provider: AIProvider, modelId: string) => Promise<T>
   ): Promise<T> {
       const capableModels = this.registry.filter(m => m.skills.includes(skill));
@@ -62,7 +63,14 @@ export class AIOrchestrator implements AIProvider {
       capableModels.sort((a, b) => costScores[a.costProfile] - costScores[b.costProfile]);
       
       // Attempt models starting from the preferred target
-      const targets = cost === 'high' ? [...capableModels].reverse() : capableModels;
+      let targets = cost === 'high' ? [...capableModels].reverse() : capableModels;
+
+      if (preferredModel) {
+          const pref = targets.find(m => m.id === preferredModel);
+          if (pref) {
+              targets = [pref, ...targets.filter(m => m.id !== preferredModel)];
+          }
+      }
 
       let lastError: any = null;
       for (const target of targets) {
@@ -103,7 +111,7 @@ export class AIOrchestrator implements AIProvider {
   }
 
   async generateText(prompt: string, options?: AIOptions): Promise<AIResponse> {
-    return this.executeWithFailover('reasoning', 'low', (p, modelId) => p.generateText(prompt, { ...options, model: modelId }));
+    return this.executeWithFailover('reasoning', 'low', options?.model, (p, modelId) => p.generateText(prompt, { ...options, model: modelId }));
   }
 
   async chat(history: AIMessage[], message: string | import('./index.js').AIMessagePart[], options?: AIOptions): Promise<AIResponse> {
@@ -128,14 +136,14 @@ export class AIOrchestrator implements AIProvider {
         }
     }
 
-    return this.executeWithFailover(skill, cost, (p, modelId) => p.chat(history, message, { ...options, model: modelId }));
+    return this.executeWithFailover(skill, cost, options?.model, (p, modelId) => p.chat(history, message, { ...options, model: modelId }));
   }
 
   async analyzeImage(buffer: Buffer, mimeType: string, prompt: string, options?: AIOptions): Promise<AIResponse> {
-    return this.executeWithFailover('vision-in', 'low', (p, modelId) => p.analyzeImage(buffer, mimeType, prompt, { ...options, model: modelId }));
+    return this.executeWithFailover('vision-in', 'low', options?.model, (p, modelId) => p.analyzeImage(buffer, mimeType, prompt, { ...options, model: modelId }));
   }
 
   async embedText(text: string): Promise<number[]> {
-    return this.executeWithFailover('reasoning', 'low', (p) => p.embedText(text));
+    return this.executeWithFailover('reasoning', 'low', undefined, (p) => p.embedText(text));
   }
 }
