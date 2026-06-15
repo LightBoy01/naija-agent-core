@@ -191,12 +191,12 @@ export async function executeSystemTool(name: string, args: Record<string, any>,
           };
 
           try {
-            const summary = await trySearch(SystemConfig.MODELS.AELIXXR_WORKER);
+            const summary = await trySearch(SystemConfig.MODELS.ROUTER_PRIMARY);
             return { status: 'success', result: summary };
           } catch (firstTryErr: any) {
              if (firstTryErr.message.includes('429') || firstTryErr.message.includes('503') || firstTryErr.message.includes('fetch failed') || firstTryErr.message.includes('500') || firstTryErr.message.includes('limit')) {
                 logger.warn('🔄 [LIFE SEARCH FALLBACK] Quota Exceeded or Model Busy. Retrying with Fallback...');
-                const secondSummary = await trySearch(SystemConfig.MODELS.AELIXXR_FALLBACK);
+                const secondSummary = await trySearch(SystemConfig.MODELS.ROUTER_FALLBACK);
                 return { status: 'success', result: secondSummary };
              } else {
                 throw firstTryErr;

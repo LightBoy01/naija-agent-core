@@ -124,6 +124,8 @@ ${personaPrompt}
 ${activeDemoNiche ? 'Empty - Sandbox Mode. Make up fake items.' : (knowledgeContext || 'Empty - Please tell me your prices so I can start selling!')}
 
 ${globalProtocol}
+
+CRITICAL: You must strictly return your response as a valid JSON object. Do not wrap the JSON in markdown backticks or block quotes.
 `;
 
   const responseSchema = {
@@ -241,8 +243,10 @@ ${globalProtocol}
   }
 
   try {
-      const parsed = JSON.parse(responseText);
-      responseText = parsed.whatsapp_message || responseText;
+      // Strip markdown code block wrappers if the model hallucinated them
+      let cleanText = responseText.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+      const parsed = JSON.parse(cleanText);
+      responseText = parsed.whatsapp_message || cleanText;
   } catch (e) {
       logger.warn({ responseText }, "JSON Parse failed in Zynux");
   }

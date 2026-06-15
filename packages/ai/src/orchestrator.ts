@@ -90,6 +90,7 @@ export class AIOrchestrator implements AIProvider {
               }
               
               const provider = this.providers.get(target.id)!;
+              console.log(`[CapabilityRouter] Executing task via model: ${target.id}`);
               return await fn(provider, target.id);
           } catch (err: any) {
               lastError = err;
