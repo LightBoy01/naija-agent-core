@@ -158,12 +158,18 @@ export async function executeSystemTool(name: string, args: Record<string, any>,
             return { error: "I no fit search right now, my access key dey missing." };
           }
           
+          let baseUrl = 'https://aiplatform.googleapis.com';
+          let apiVersion = 'v1/publishers/google';
+          if (apiKey.startsWith('AIza')) {
+            baseUrl = 'https://generativelanguage.googleapis.com';
+            apiVersion = 'v1beta';
+          }
+          
           const searchGenAI = new GoogleGenAI({ 
             apiKey,
-            httpOptions: {
-              baseUrl: 'https://aiplatform.googleapis.com',
-              apiVersion: 'v1/publishers/google'
-            }
+            vertexai: !apiKey.startsWith('AIza'),
+            apiVersion,
+            httpOptions: { baseUrl }
           });
           
           const trySearch = async (modelName: string) => {
