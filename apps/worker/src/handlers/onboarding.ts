@@ -256,20 +256,18 @@ export async function handleOnboarding(
       // --- PHASE 7.4: GREEDY SEMANTIC EXTRACTION ---
       if ((text === '#setup' || nextStep === 'NAME' || nextStep === 'START') && text.length > 10) {
          try {
-            const genAI = new GoogleGenAI({
-               apiKey: process.env.GEMINI_API_KEY || '',
-               httpOptions: {
-                  baseUrl: 'https://aiplatform.googleapis.com',
-                  apiVersion: 'v1/publishers/google'
-               }
-            });
+            const aiOrchestrator = (await import('@naija-agent/ai')).AIFactory.createRouter((await import('@naija-agent/ai')).GlobalModelRegistry);
             
             const extractionPrompt = `${ONBOARDING_PROMPTS.GREEDY_EXTRACTION}: "${text}"`;
             
-            const result = await genAI.models.generateContent({
-               model: SystemConfig.MODELS.ZYNUX_FALLBACK,
-               contents: extractionPrompt
-            });
+            const result = await aiOrchestrator.generateText(
+               SystemConfig.MODELS.ZYNUX_FALLBACK,
+               SystemConfig.MODELS.ZYNUX_FALLBACK, // no fallback model needed here, just retry same
+               "You are an expert entity extraction system. Return ONLY strict JSON.",
+               [{ role: 'user', content: extractionPrompt }],
+               []
+            );
+            
             const extracted = JSON.parse((result.text || "").replace(/```json|```/g, '').trim());
             
             logger.info({ orgId, extracted }, '🧠 [GREEDY EXTRACTION] AI Extraction Result');

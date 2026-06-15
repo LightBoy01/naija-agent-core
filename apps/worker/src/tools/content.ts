@@ -123,53 +123,32 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
 
     case 'web_search': {
       try {
-        const { GoogleGenAI } = await import('@google/genai');
-        const searchGenAI = new GoogleGenAI({
-           apiKey: process.env.GEMINI_API_KEY || '',
-           httpOptions: {
-              baseUrl: 'https://aiplatform.googleapis.com',
-              apiVersion: 'v1/publishers/google'
-           }
+        const apiKey = process.env.BRAVE_API_KEY;
+        if (!apiKey) {
+           return { error: "I no fit search right now, my access key dey missing." };
+        }
+        
+        const axios = (await import('axios')).default;
+        const response = await axios.get('https://api.search.brave.com/res/v1/web/search', {
+          params: { q: args.query, count: 5 },
+          headers: {
+            'Accept': 'application/json',
+            'X-Subscription-Token': apiKey
+          },
+          timeout: 10000
         });
         
-        const trySearch = async (modelName: string) => {
-          const searchResult = await searchGenAI.models.generateContent({
-            model: modelName,
-            contents: `Search for: ${args.query}. Summarize the key facts, prices, or news found.`,
-            config: {
-              tools: [{ googleSearch: {} }]
-            }
-          });
-          
-          return searchResult.text;
-        };
-
-        try {
-          // Tier 1: Primary Model (ZYNUX_PRIMARY)
-          const summary = await trySearch(SystemConfig.MODELS.ZYNUX_PRIMARY);
-          return { status: 'success', result: summary };
-        } catch (firstTryErr: any) {
-           if (firstTryErr.message.includes('429')) {
-              console.warn(`🔄 [SEARCH FALLBACK L1] Quota Exceeded. Retrying with Worker Model...`);
-              try {
-                  // Tier 2: Worker Model (AELIXXR_WORKER)
-                  const secondSummary = await trySearch(SystemConfig.MODELS.AELIXXR_WORKER);
-                  return { status: 'success', result: secondSummary, metadata: { fallback: 'worker' } };
-              } catch (secondTryErr: any) {
-                  if (secondTryErr.message.includes('429')) {
-                      console.warn(`🔄 [SEARCH FALLBACK L2] Worker Busy. Retrying with Fallback Model...`);
-                      // Tier 3: Fallback (Ultimate Reliability)
-                      const thirdSummary = await trySearch(SystemConfig.MODELS.ZYNUX_FALLBACK);
-                      return { status: 'success', result: thirdSummary, metadata: { fallback: 'fallback' } };
-                  }
-                  throw secondTryErr;
-              }
-           }
-           throw firstTryErr;
+        const results = response.data.web?.results || [];
+        if (results.length === 0) {
+           return { status: 'success', result: 'No results found.' };
         }
+        
+        const summary = results.map((r: any) => `Title: ${r.title}\nDescription: ${r.description}\nURL: ${r.url}`).join('\n\n');
+        return { status: 'success', result: summary };
+
       } catch (err: any) {
-        console.error('Web Search Failed:', err.message);
-        return { status: 'error', message: 'Oga, I don search tire for today! I don reach my limit for now. Please try again later.' };
+          console.error('Web Search Failed:', err.message);
+          return { error: 'Oga, I don search tire for today! I don reach my limit for now.' };
       }
     }
 
