@@ -67,7 +67,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const query = request.params.arguments.query;
     try {
       // Primary: Try Local SearXNG Instance
-      const searxngUrl = process.env.SEARXNG_URL || 'http://localhost:8080';
+      const searxngUrl = process.env.SEARXNG_URL || 'http://159.195.150.66:8181';
       const searxngResponse = await axios.get(`${searxngUrl}/search`, {
         params: { q: query, format: 'json' },
         timeout: 5000 // Quick timeout to fail fast

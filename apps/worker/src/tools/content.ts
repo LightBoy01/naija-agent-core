@@ -127,7 +127,7 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
         
         // Primary: Try Local SearXNG Instance
         try {
-            const searxngUrl = process.env.SEARXNG_URL || 'http://localhost:8080';
+            const searxngUrl = process.env.SEARXNG_URL || 'http://159.195.150.66:8181';
             const searxngResponse = await axios.get(`${searxngUrl}/search`, {
               params: { q: args.query, format: 'json' },
               timeout: 5000 
