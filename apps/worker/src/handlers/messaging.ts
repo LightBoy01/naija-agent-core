@@ -7,7 +7,7 @@ import {
 } from '@naija-agent/database';
 // TODO: Replace getAllKnowledge and getProducts with Postgres equivalents once Knowledge table is migrated
 import { getAllKnowledge, getProducts } from '@naija-agent/firebase'; 
-import { Type } from '@google/genai';
+
 import { PaymentProvider } from '@naija-agent/payments';
 import { Redis } from 'ioredis';
 import { handleToolCall } from '../tool-handlers.js';
@@ -125,17 +125,8 @@ ${activeDemoNiche ? 'Empty - Sandbox Mode. Make up fake items.' : (knowledgeCont
 
 ${globalProtocol}
 
-CRITICAL: You must strictly return your response as a valid JSON object. Do not wrap the JSON in markdown backticks or block quotes.
+CRITICAL: Reply directly to the user with your final message. Do NOT include your internal thoughts or reasoning in the final text. Do not wrap your message in JSON or markdown code blocks.
 `;
-
-  const responseSchema = {
-    type: Type.OBJECT,
-    properties: {
-      internal_thoughts: { type: Type.STRING },
-      whatsapp_message: { type: Type.STRING }
-    },
-    required: ["internal_thoughts", "whatsapp_message"]
-  };
 
   const history = await getChatHistory(chatId, 10);
   
@@ -172,17 +163,13 @@ CRITICAL: You must strictly return your response as a valid JSON object. Do not 
       aiResponse = await ai.analyzeImage(mediaBuffer, mediaMime, content.caption || "Analyze this", {
           model: tenantModelName,
           systemInstruction: systemPrompt,
-          tools: finalTools,
-          responseMimeType: "application/json",
-          responseSchema
+          tools: finalTools
       });
   } else {
       aiResponse = await ai.chat(normalizedHistory, content.text || "[Media]", {
           model: tenantModelName,
           systemInstruction: systemPrompt,
-          tools: finalTools,
-          responseMimeType: "application/json",
-          responseSchema
+          tools: finalTools
       });
   }
 
@@ -224,31 +211,17 @@ CRITICAL: You must strictly return your response as a valid JSON object. Do not 
           const followUp = await ai.chat(toolHistory, "Continue processing based on tool results.", {
               model: tenantModelName,
               systemInstruction: systemPrompt,
-              tools: finalTools,
-              responseMimeType: "application/json",
-              responseSchema
+              tools: finalTools
           });
           responseText = followUp.text;
-          
           if (followUp.thinking) {
-              try {
-                  const parsed = JSON.parse(responseText);
-                  parsed.internal_thoughts = `[AI REASONING]: ${followUp.thinking}\n\n${parsed.internal_thoughts}`;
-                  responseText = JSON.stringify(parsed);
-              } catch (e: any) {
-                  logger.warn({ error: e.message, responseText }, "Failed to parse JSON for internal_thoughts injection.");
-              }
+              logger.info({ userPhone: from, thinking: followUp.thinking }, '🧠 [Agentic Thought - FollowUp]');
           }
       }
   }
 
-  try {
-      // Strip markdown code block wrappers if the model hallucinated them
-      let cleanText = responseText.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-      const parsed = JSON.parse(cleanText);
-      responseText = parsed.whatsapp_message || cleanText;
-  } catch (e) {
-      logger.warn({ responseText }, "JSON Parse failed in Zynux");
+  if (aiResponse?.thinking) {
+      logger.info({ userPhone: from, thinking: aiResponse.thinking }, '🧠 [Agentic Thought]');
   }
 
   let finalMessage = responseText.trim() || "Oga, try talk again.";
@@ -262,18 +235,15 @@ CRITICAL: You must strictly return your response as a valid JSON object. Do not 
           logger.error({ reason: guardResult.mismatchReason }, "🛑 [PRICE GUARD] Hallucination Blocked!");
           
           // Re-try once with correction instruction
-          const correctionPrompt = `The previous response contained a price hallucination: ${guardResult.mismatchReason}\n\n${guardResult.suggestedCorrection}\n\nRegenerate the response with the CORRECT prices. Output JSON.`;
+          const correctionPrompt = `The previous response contained a price hallucination: ${guardResult.mismatchReason}\n\n${guardResult.suggestedCorrection}\n\nRegenerate the response with the CORRECT prices. Reply directly with the final message.`;
           try {
               const recovery = await ai.chat(normalizedHistory, correctionPrompt, {
                   model: tenantModelName,
                   systemInstruction: systemPrompt,
-                  tools: tenantTools,
-                  responseMimeType: "application/json",
-                  responseSchema
+                  tools: tenantTools
               });
               
-              const parsed = JSON.parse(recovery.text);
-              const recoveryMessage = parsed.whatsapp_message || recovery.text;
+              const recoveryMessage = recovery.text;
 
               // Double-check the recovery response (The "Hard-Fail" check)
               const secondGuardCheck = await priceGuard.validateResponse(recoveryMessage, businessKnowledge, currency);
