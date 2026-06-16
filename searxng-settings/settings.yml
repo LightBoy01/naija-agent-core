@@ -1,0 +1,19 @@
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "NaijaAgent SearXNG"
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: ""
+  formats:
+    - html
+    - json
+
+server:
+  port: 8080
+  bind_address: "0.0.0.0"
+  secret_key: "naija-agent-super-secret-key"
+  image_proxy: true

@@ -123,18 +123,34 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
 
     case 'web_search': {
       try {
-        const apiKey = process.env.BRAVE_API_KEY;
-        if (!apiKey) {
-           return { error: "I no fit search right now, my access key dey missing." };
+        const axios = (await import('axios')).default;
+        
+        // Primary: Try Local SearXNG Instance
+        try {
+            const searxngUrl = process.env.SEARXNG_URL || 'http://localhost:8080';
+            const searxngResponse = await axios.get(`${searxngUrl}/search`, {
+              params: { q: args.query, format: 'json' },
+              timeout: 5000 
+            });
+            
+            const results = searxngResponse.data.results || [];
+            if (results.length > 0) {
+              const summary = results.slice(0, 5).map((r: any) => `Title: ${r.title}\nDescription: ${r.content || r.snippet}\nURL: ${r.url}`).join('\n\n');
+              return { status: 'success', result: `[Source: SearXNG]\n\n${summary}` };
+            }
+        } catch (searxngErr) {
+            console.warn('SearXNG failed or is offline. Falling back to Brave Search...');
         }
         
-        const axios = (await import('axios')).default;
+        // Fallback: Try Brave Search API
+        const apiKey = process.env.BRAVE_API_KEY;
+        if (!apiKey) {
+           return { error: "SearXNG is offline and BRAVE_API_KEY is not set." };
+        }
+        
         const response = await axios.get('https://api.search.brave.com/res/v1/web/search', {
           params: { q: args.query, count: 5 },
-          headers: {
-            'Accept': 'application/json',
-            'X-Subscription-Token': apiKey
-          },
+          headers: { 'Accept': 'application/json', 'X-Subscription-Token': apiKey },
           timeout: 10000
         });
         
@@ -144,11 +160,11 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
         }
         
         const summary = results.map((r: any) => `Title: ${r.title}\nDescription: ${r.description}\nURL: ${r.url}`).join('\n\n');
-        return { status: 'success', result: summary };
+        return { status: 'success', result: `[Source: Brave]\n\n${summary}` };
 
       } catch (err: any) {
           console.error('Web Search Failed:', err.message);
-          return { error: 'Oga, I don search tire for today! I don reach my limit for now.' };
+          return { error: 'Oga, I don search tire for today! Both engines failed.' };
       }
     }
 

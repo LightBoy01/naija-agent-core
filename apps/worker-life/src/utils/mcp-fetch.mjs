@@ -29,8 +29,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
-        name: 'brave_web_search',
-        description: 'Performs a web search using Brave Search API to fetch live information, news, and facts.',
+        name: 'web_search',
+        description: 'Performs a web search using a local privacy-first search aggregator (or falls back to Brave Search API) to fetch live information, news, and facts.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -63,33 +63,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
-  if (request.params.name === 'brave_web_search') {
+  if (request.params.name === 'web_search') {
+    const query = request.params.arguments.query;
     try {
-      const apiKey = process.env.BRAVE_API_KEY;
-      if (!apiKey) {
-         return { content: [{ type: 'text', text: 'Error: BRAVE_API_KEY environment variable is not set.' }], isError: true };
-      }
-      
-      const query = request.params.arguments.query;
-      const response = await axios.get('https://api.search.brave.com/res/v1/web/search', {
-        params: { q: query, count: 5 },
-        headers: {
-          'Accept': 'application/json',
-          'X-Subscription-Token': apiKey
-        },
-        timeout: 10000
+      // Primary: Try Local SearXNG Instance
+      const searxngUrl = process.env.SEARXNG_URL || 'http://localhost:8080';
+      const searxngResponse = await axios.get(`${searxngUrl}/search`, {
+        params: { q: query, format: 'json' },
+        timeout: 5000 // Quick timeout to fail fast
       });
       
-      const results = response.data.web?.results || [];
-      if (results.length === 0) {
-         return { content: [{ type: 'text', text: 'No results found.' }] };
+      const results = searxngResponse.data.results || [];
+      if (results.length > 0) {
+        const formattedResults = results.slice(0, 5).map(r => `Title: ${r.title}\nDescription: ${r.content || r.snippet}\nURL: ${r.url}`).join('\n\n');
+        return { content: [{ type: 'text', text: `[Source: SearXNG]\n\n${formattedResults}` }] };
       }
-      
-      const formattedResults = results.map(r => `Title: ${r.title}\nDescription: ${r.description}\nURL: ${r.url}`).join('\n\n');
-      return { content: [{ type: 'text', text: formattedResults }] };
-      
-    } catch (e) {
-      return { content: [{ type: 'text', text: `Brave Search Error: ${e.message}` }], isError: true };
+    } catch (searxngErr) {
+      // Fallback to Brave
+      try {
+        const apiKey = process.env.BRAVE_API_KEY;
+        if (!apiKey) {
+           return { content: [{ type: 'text', text: `SearXNG is offline and BRAVE_API_KEY is not set. Search failed.` }], isError: true };
+        }
+        
+        const response = await axios.get('https://api.search.brave.com/res/v1/web/search', {
+          params: { q: query, count: 5 },
+          headers: { 'Accept': 'application/json', 'X-Subscription-Token': apiKey },
+          timeout: 10000
+        });
+        
+        const results = response.data.web?.results || [];
+        if (results.length === 0) {
+           return { content: [{ type: 'text', text: 'No results found.' }] };
+        }
+        
+        const formattedResults = results.map(r => `Title: ${r.title}\nDescription: ${r.description}\nURL: ${r.url}`).join('\n\n');
+        return { content: [{ type: 'text', text: `[Source: Brave]\n\n${formattedResults}` }] };
+      } catch (braveErr) {
+        return { content: [{ type: 'text', text: `Search Error: ${braveErr.message}` }], isError: true };
+      }
     }
   }
   throw new Error(`Tool not found: ${request.params.name}`);

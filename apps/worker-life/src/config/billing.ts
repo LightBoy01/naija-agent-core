@@ -11,8 +11,7 @@ export const TOOL_COSTS: Record<string, number> = {
     'save_note': 0,            // Vault Storage
     'delete_from_vault': 0,    // Vault Management
     'fetch_webpage': 1000,     // Single Page Fetch (1 Credit)
-    'web_search': 3000,        // Live Google Search (3 Credits)
-    'brave_web_search': 3000,  // Brave Search MCP (3 Credits)
+    'web_search': 3000,        // Live Web Search (3 Credits)
     
     // Orchestrator Specific Tools
     'delegate_task': 5000,      // Agentic Handoff (5 Credits)

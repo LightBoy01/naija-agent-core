@@ -43,7 +43,6 @@ export async function getOrchestratorTools(): Promise<Tool[]> {
     'delegate_task', 
     'delegate_to_hermes',
     'web_search',
-    'brave_web_search',
     'save_note', 
     'create_reminder',
     'log_feedback', 

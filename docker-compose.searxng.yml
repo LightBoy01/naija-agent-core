@@ -1,0 +1,27 @@
+version: '3'
+
+services:
+  redis:
+    container_name: redis
+    image: redis:alpine
+    command: redis-server --save 30 1 --loglevel warning
+    restart: unless-stopped
+    volumes:
+      - searxng-redis:/data
+
+  searxng:
+    container_name: searxng
+    image: searxng/searxng:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./searxng-settings:/etc/searxng:rw
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+      - SEARXNG_REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+
+volumes:
+  searxng-redis:
