@@ -251,7 +251,7 @@ CRITICAL: You must strictly return your response as a valid JSON object. Do not 
       logger.warn({ responseText }, "JSON Parse failed in Zynux");
   }
 
-  let finalMessage = responseText || "Oga, try talk again.";
+  let finalMessage = responseText.trim() || "Oga, try talk again.";
   
   if (!isAdmin && !isStaff) {
       // --- DETERMINISTIC PRICE GUARD (PHASE 9.3) ---
