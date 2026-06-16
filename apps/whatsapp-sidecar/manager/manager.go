@@ -385,7 +385,12 @@ func (m *Manager) SendTyping(orgID, to string) error {
 		return err
 	}
 
-	jid, err := types.ParseJID(to)
+	jidStr := to
+	if !contains(to, "@") {
+		jidStr = fmt.Sprintf("%s@s.whatsapp.net", to)
+	}
+
+	jid, err := types.ParseJID(jidStr)
 	if err != nil {
 		return fmt.Errorf("invalid JID: %v", err)
 	}

@@ -121,15 +121,15 @@ export class OpenAIProvider implements AIProvider {
     // Convert history to OpenAI format
     for (const msg of history) {
       if (msg.role === 'function') {
-        // Find the function result part
-        const part = msg.parts.find(p => p.functionResponse);
-        if (part) {
+        // Handle ALL function response parts (for multi-tool calls)
+        const responseParts = msg.parts.filter(p => p.functionResponse);
+        responseParts.forEach((part, idx) => {
           messages.push({
             role: 'tool',
-            tool_call_id: part.functionResponse!.name, // Note: OpenAI expects a real ID, but name works for simple mocks
+            tool_call_id: `${part.functionResponse!.name}_${idx}`,
             content: JSON.stringify(part.functionResponse!.response)
           });
-        }
+        });
         continue;
       }
 
@@ -144,11 +144,11 @@ export class OpenAIProvider implements AIProvider {
 
       const openAIRole = (msg.role === 'model' || (msg.role as string) === 'assistant') ? 'assistant' : 'user';
       
-      // Handle tool calls from the assistant
+      // Handle tool calls from the assistant — ensure unique IDs via index
       const toolCalls = msg.parts
         .filter(p => p.functionCall)
-        .map(p => ({
-          id: p.functionCall!.name,
+        .map((p, idx) => ({
+          id: `${p.functionCall!.name}_${idx}`,
           type: 'function',
           function: {
             name: p.functionCall!.name,
