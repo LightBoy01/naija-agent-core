@@ -54,7 +54,8 @@ export async function handleLifeChat(job: Job, deps: ChatDependencies) {
     }
     const rawMessage = job.data.message !== undefined ? job.data.message : job.data.content?.text;
     let orgId = job.data.orgId;
-    const type = job.data.type;
+    // Normalize type — Go sidecar sends 'life-chat' but we treat it as text
+    const type = (job.data.type === 'life-chat') ? 'text' : job.data.type;
     const fileName = job.data.content?.fileName;
     
     // Map 'aelixxr' to the correct organization ID in the database
@@ -215,7 +216,7 @@ ${ctx.ingestionSummary}
                     });
                     const replyMsg = `I'm consulting my ${call.args.sector} expert... ⏳`;
                     await whatsappService.sendText(userPhone, replyMsg, ctx.phoneId);
-                    const safeUserMessage = ctx.message ? redactPII(ctx.message) : (ctx.type === 'text' ? '[Empty Message]' : `[${ctx.type.toUpperCase()}]`);
+                    const safeUserMessage = ctx.message ? redactPII(ctx.message) : (ctx.type === 'text' ? '[Empty Message]' : (isImage ? '[Image]' : isDoc ? '[Document]' : isAudio ? '[Audio]' : `[${ctx.type.toUpperCase()}]`));
                     await saveMessage(chatId, { role: 'user', content: safeUserMessage, type: ctx.type as any });
                     await saveMessage(chatId, { role: 'assistant', content: replyMsg, type: 'text' });
 
@@ -255,7 +256,7 @@ ${ctx.ingestionSummary}
         if (text) {
                 await billingService.billForMessage(userPhone);
                 await whatsappService.sendText(userPhone, Formatter.format(text), ctx.phoneId);
-                const safeUserMessage = ctx.message ? redactPII(ctx.message) : (ctx.type === 'text' ? '[Empty Message]' : `[${ctx.type.toUpperCase()}]`);
+                const safeUserMessage = ctx.message ? redactPII(ctx.message) : (ctx.type === 'text' ? '[Empty Message]' : (isImage ? '[Image]' : isDoc ? '[Document]' : isAudio ? '[Audio]' : `[${ctx.type.toUpperCase()}]`));
                 await saveMessage(chatId, { role: 'user', content: safeUserMessage, type: ctx.type as any });
 
                 // Save the message, optionally including the reasoning if it exists
@@ -275,7 +276,13 @@ ${ctx.ingestionSummary}
 
 export async function handleLifeChatResume(job: Job, deps: ChatDependencies) {
     const { ai, getDynamicModels } = deps;
-    const { userPhone, slmReport, chatId, sector, orgId, phoneId } = job.data;
+    const { userPhone, slmReport, chatId: resumeChatId, sector, orgId, phoneId } = job.data;
+    
+    // Guard against missing chatId (e.g. from legacy SLM jobs queued before fix)
+    if (!resumeChatId) {
+        logger.error({ userPhone, sector }, '❌ Life Chat Resume missing chatId — skipping save');
+        return { success: false, error: 'MISSING_CHAT_ID' };
+    }
     
     const org = await getOrgById(orgId || 'naija-agent-master');
     const { lifeMemory } = await import('../services/lifeMemory.js');
@@ -286,7 +293,7 @@ export async function handleLifeChatResume(job: Job, deps: ChatDependencies) {
     const systemPrompt = `${soulPrompt}\n\n[CONTEXT]: Resuming task from ${sector}.\n- Energy: ${energyCredits}`;
 
     const { primaryModel } = await getDynamicModels(systemPrompt);
-    const history = await getChatHistory(chatId, 10);
+    const history = await getChatHistory(resumeChatId, 10);
     const normalizedHistory: AIMessage[] = history.map((m: any) => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.content }]
@@ -312,7 +319,7 @@ DO NOT just repeat the report; provide the 'So What?' for the user's life.`;
 
     if (result.text) {
         await whatsappService.sendText(userPhone, Formatter.format(result.text), phoneId);
-        await saveMessage(chatId, { role: 'assistant', content: result.text, type: 'text' });
+        await saveMessage(resumeChatId, { role: 'assistant', content: result.text, type: 'text' });
     }
 
     return { success: true };

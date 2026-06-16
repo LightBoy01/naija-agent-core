@@ -12,8 +12,13 @@ export class LifeMemoryService {
    */
   async getContext(phone: string): Promise<LifeContext> {
     try {
+      if (!phone || phone.trim() === '') {
+        logger.warn('getContext called with empty phone, returning empty context');
+        return {};
+      }
       const sqlDb = getDb();
-      const userResult = await sqlDb.select().from(users).where(sql`${users.phone} = ${phone}` as any).limit(1);
+      const safePhone = parseAndFormatPhone(phone) || phone;
+      const userResult = await sqlDb.select().from(users).where(sql`${users.phone} = ${safePhone}` as any).limit(1);
       
       let user = userResult[0];
       
