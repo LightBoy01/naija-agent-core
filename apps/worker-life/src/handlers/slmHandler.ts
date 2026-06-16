@@ -1,5 +1,4 @@
 import { Job } from 'bullmq';
-import { Type } from '@google/genai';
 import path from 'path';
 import { SystemConfig } from '@naija-agent/types';
 import { logger } from '../utils/logger.js';
@@ -173,15 +172,12 @@ export async function handleSLMTask(job: Job, deps: SLMDependencies) {
     // --- STATEFUL CONTEXT INJECTION ---
     const trajectoryStr = initialTrajectory ? `\n\n[PREVIOUS STEPS TAKEN]:\n${JSON.stringify(initialTrajectory)}` : '';
 
-    agentPrompt += `\n\nCRITICAL INSTRUCTION: Output a FINAL REPORT in strictly valid JSON format matching this schema:
-{
-  "status": "success" | "error" | "in_progress",
-  "tool_used": "The name of the tool you used",
-  "report": "A comprehensive summary of your research findings or actions.",
-  "trajectory_update": "A single sentence describing what you just did to be added to the history.",
-  "data": [ { "title": "Section Title", "content": "Raw Details", "metadata": {} } ] 
-}
-[FULL DETAILS MANDATE]: Provide the absolute most detailed raw data possible. Do not summarize aggressively.
+    agentPrompt += `\n\nCRITICAL INSTRUCTION: After completing your research, output a FINAL REPORT directly. Do NOT wrap it in JSON or markdown blocks. Provide the absolute most detailed raw data possible. Do not summarize aggressively. Use this structure:
+--- REPORT STATUS: (success / error / in_progress)
+--- TOOL USED: (name of tool)
+--- TRAJECTORY: (single sentence describing what you just did)
+--- FINDINGS: (comprehensive summary)
+
 ${trajectoryStr}`;
 
     const rawParamsStr = rawParameters ? `\n[RAW_PARAMETERS_FROM_SUPERVISOR]: ${JSON.stringify(rawParameters)}` : '';
@@ -199,28 +195,6 @@ ${trajectoryStr}`;
         slmTools = [{ functionDeclarations: filteredDecls }];
     }
 
-    const slmResponseSchema = {
-        type: Type.OBJECT,
-        properties: {
-            status: { type: Type.STRING },
-            tool_used: { type: Type.STRING },
-            report: { type: Type.STRING },
-            trajectory_update: { type: Type.STRING },
-            data: {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT,
-                    properties: {
-                        title: { type: Type.STRING },
-                        content: { type: Type.STRING },
-                        metadata: { type: Type.OBJECT }
-                    }
-                }
-            }
-        },
-        required: ["status", "report"]
-    };
-
     const fallbackModel = SystemConfig.MODELS.AELIXXR_FALLBACK || 'gemini-2.5-flash';
     let slmUsedModel = SystemConfig.MODELS.AELIXXR_WORKER;
 
@@ -236,34 +210,39 @@ ${trajectoryStr}`;
         const slmCalls = result.functionCalls;
         
         if (slmCalls && slmCalls.length > 0) {
-            const call = slmCalls[0]; // SLMs typically do one thing well
-            const billResult = await billingService.billForTool(slmPhone, call.name, currentEnergy);
-            
-            if (!billResult.success) {
-                return JSON.stringify({
-                    status: "error",
-                    report: billResult.errorText || "Insufficient energy to continue research."
-                });
+            history.push({ role: 'model', parts: slmCalls.map(fc => ({ functionCall: fc })) });
+
+            const functionResponseParts: any[] = [];
+            for (const call of slmCalls) {
+                const billResult = await billingService.billForTool(slmPhone, call.name, currentEnergy);
+                
+                if (!billResult.success) {
+                    return JSON.stringify({
+                        status: "error",
+                        report: billResult.errorText || "Insufficient energy to continue research."
+                    });
+                }
+                currentEnergy = billResult.newBalance ?? currentEnergy;
+
+                const toolResult = await executeLifeTool(call.name, { ...call.args, userId: slmPhone }, job.id);
+                const safeResponse = (typeof toolResult === 'object' && toolResult !== null && !Array.isArray(toolResult)) 
+                    ? toolResult 
+                    : { result: toolResult };
+                
+                functionResponseParts.push({ functionResponse: { name: call.name, response: safeResponse } });
             }
-            currentEnergy = billResult.newBalance ?? currentEnergy;
 
-            const toolResult = await executeLifeTool(call.name, { ...call.args, userId: slmPhone }, job.id);
-            const safeResponse = (typeof toolResult === 'object' && toolResult !== null && !Array.isArray(toolResult)) 
-                ? toolResult 
-                : { result: toolResult };
-            
-            history.push({ role: 'model', parts: [{ functionCall: call }] });
-            history.push({ role: 'function', parts: [{ functionResponse: { name: call.name, response: safeResponse } }] });
+            if (functionResponseParts.length > 0) {
+                history.push({ role: 'function', parts: functionResponseParts });
 
-            const followUp = await ai.chat(history, "Analyze the tool result and generate the final report.", {
-                 model,
-                 systemInstruction: agentPrompt,
-                 tools: slmTools,
-                 responseMimeType: 'application/json',
-                 responseSchema: slmResponseSchema as any
-            });
+                const followUp = await ai.chat(history, "Analyze the tool results and generate the final report.", {
+                     model,
+                     systemInstruction: agentPrompt,
+                     tools: slmTools
+                });
 
-            return followUp.text;
+                return followUp.text;
+            }
         }
 
         return result.text;
@@ -289,6 +268,7 @@ ${trajectoryStr}`;
     }
 
     cleanedReport = slmReport;
+    // Try JSON first (legacy support), then plain-text extraction
     const jsonMatch = slmReport.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
         try {
@@ -298,11 +278,20 @@ ${trajectoryStr}`;
                 updatedTrajectory = [...updatedTrajectory, parsed.trajectory_update];
             }
         } catch(e) {
-            cleanedReport = JSON.stringify({ status: "success", report: slmReport });
+            // JSON parsing failed, fall through to plain text
         }
-    } else {
-        cleanedReport = JSON.stringify({ status: "success", report: slmReport || "Completed." });
     }
+    
+    // Plain-text trajectory extraction (new format)
+    if (!jsonMatch || updatedTrajectory.length === 0) {
+        const trajMatch = slmReport.match(/TRAJECTORY:\s*(.+)/i);
+        if (trajMatch) updatedTrajectory = [...updatedTrajectory, trajMatch[1].trim()];
+    }
+    
+    // Clean up report for resume handler
+    const statusMatch = slmReport.match(/REPORT STATUS:\s*(success|error|in_progress)/i);
+    const status = statusMatch ? statusMatch[1].toLowerCase() : 'success';
+    cleanedReport = JSON.stringify({ status, report: slmReport || "Completed." });
 
     const finalStepCount = currentStepCount + 1;
 

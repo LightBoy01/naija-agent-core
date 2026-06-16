@@ -210,6 +210,7 @@ ${ctx.ingestionSummary}
                         sector: call.args.sector, 
                         instruction: call.args.instruction,
                         rawParameters: call.args.raw_parameters,
+                        energyCredits: ctx.energyCredits,
                         hops: (job.data.hops || 0) + 1
                     });
                     const replyMsg = `I'm consulting my ${call.args.sector} expert... ⏳`;
