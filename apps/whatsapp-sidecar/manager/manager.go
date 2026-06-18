@@ -108,7 +108,8 @@ func (m *Manager) ConnectClientWithDevice(orgID string, device *store.Device) er
 	}
 
 	client := whatsmeow.NewClient(device, waLog.Stdout("Client-"+orgID, "ERROR", true))
-	
+	client.EnableAutoReconnect = true
+
 	// --- IP ROTATION: Set Proxy if assigned ---
 	proxyAddr := m.getProxyForOrg(orgID)
 	if proxyAddr != "" {
@@ -146,7 +147,8 @@ func (m *Manager) ConnectClient(orgID string) (<-chan whatsmeow.QRChannelItem, e
 	deviceStore := m.container.NewDevice() 
 
 	client := whatsmeow.NewClient(deviceStore, waLog.Stdout("Client-"+orgID, "INFO", true))
-	
+	client.EnableAutoReconnect = true
+
 	// --- IP ROTATION: Set Proxy if assigned ---
 	proxyAddr := m.getProxyForOrg(orgID)
 	if proxyAddr != "" {
@@ -184,6 +186,7 @@ func (m *Manager) PairPhone(orgID, phone string) (string, error) {
 	deviceStore := m.container.NewDevice()
 
 	client := whatsmeow.NewClient(deviceStore, waLog.Stdout("Client-"+orgID, "INFO", true))
+	client.EnableAutoReconnect = true
 
 	// --- IP ROTATION: Set Proxy if assigned ---
 	proxyAddr := m.getProxyForOrg(orgID)

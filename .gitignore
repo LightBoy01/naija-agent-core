@@ -29,3 +29,5 @@ test-*.mjs
 .gemini/
 .commandcode/
 sidecar-binary
+sshs.md
+*ssh*.md
