@@ -84,7 +84,22 @@ export async function handleOnboarding(
                 await tenantWhatsAppService.sendText(from, reply);
 
                 try {
-                   // 1. Create Tenant (Firebase + PostgreSQL dual-write)
+                   // 1. Pre-check: validate phone is not already linked
+                   const { parseAndFormatPhone } = await import('@naija-agent/types');
+                   const normalizedBotPhone = parseAndFormatPhone(botPhone);
+                   if (normalizedBotPhone) {
+                       const rawPhone = normalizedBotPhone.replace('+', '');
+                       const jid = `${rawPhone}@s.whatsapp.net`;
+                       const existingOrg = await redisClient.get(`sidecar_map:${jid}`);
+                       if (existingOrg) {
+                          reply = `⚠️ *Phone Already Registered:* The number ${botPhone} is already linked to another account. Please use a different SIM card.\n\nStart over by typing the referral link again.`;
+                          await redisClient.del(prospectKey);
+                          await tenantWhatsAppService.sendText(from, reply);
+                          return { success: true };
+                       }
+                   }
+
+                   // 2. Create Tenant (Firebase + PostgreSQL dual-write)
                    const newOrgId = `org_${crypto.randomBytes(4).toString('hex')}`;
                    await createTenant({
                       id: newOrgId,
@@ -109,20 +124,6 @@ export async function handleOnboarding(
                      });
                    } catch (e: any) {
                      logger.warn({ orgId: newOrgId, error: e.message }, '⚠️ [PROSPECT] PG dual-write failed, continuing');
-                   }
-
-                   // 2. Pre-check: validate phone is not already linked
-                   const { parseAndFormatPhone } = await import('@naija-agent/types');
-                   const normalizedBotPhone = parseAndFormatPhone(botPhone);
-                   if (normalizedBotPhone) {
-                       const rawPhone = normalizedBotPhone.replace('+', '');
-                       const jid = `${rawPhone}@s.whatsapp.net`;
-                       const existingOrg = await redisClient.get(`sidecar_map:${jid}`);
-                       if (existingOrg) {
-                          reply = `⚠️ *Phone Already Registered:* The number ${botPhone} is already linked to another account. Please use a different SIM card.\n\nStart over by typing the referral link again.`;
-                          await redisClient.del(prospectKey);
-                          return { success: true };
-                       }
                    }
 
                    // 3. Request Pairing Code from Sidecar
