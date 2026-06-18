@@ -10,10 +10,16 @@ export class UserService {
         return {};
       }
       const sqlDb = getDb();
-      const safePhone = parseAndFormatPhone(phone) || phone;
-      const userResult = await sqlDb.select().from(users).where(sql`${users.phone} = ${safePhone}` as any).limit(1);
-      
+      let safePhone = parseAndFormatPhone(phone) || phone;
+      let userResult = await sqlDb.select().from(users).where(sql`${users.phone} = ${safePhone}` as any).limit(1);
       let user = userResult[0];
+      
+      // Fallback: try raw phone if safePhone normalizes differently (e.g. old non-E.164 rows)
+      if (!user && safePhone !== phone) {
+        userResult = await sqlDb.select().from(users).where(sql`${users.phone} = ${phone}` as any).limit(1);
+        user = userResult[0];
+        if (user) safePhone = phone; // use the format found in DB
+      }
       
       if (!user) {
         await sqlDb.insert(users).values({
@@ -54,8 +60,11 @@ export class UserService {
   async checkExists(phone: string): Promise<boolean> {
     try {
       const sqlDb = getDb();
-      const safePhone = parseAndFormatPhone(phone) || phone;
-      const userResult = await sqlDb.select({ phone: users.phone }).from(users).where(sql`${users.phone} = ${safePhone}` as any).limit(1);
+      let safePhone = parseAndFormatPhone(phone) || phone;
+      let userResult = await sqlDb.select({ phone: users.phone }).from(users).where(sql`${users.phone} = ${safePhone}` as any).limit(1);
+      if (userResult.length === 0 && safePhone !== phone) {
+        userResult = await sqlDb.select({ phone: users.phone }).from(users).where(sql`${users.phone} = ${phone}` as any).limit(1);
+      }
       return userResult.length > 0;
     } catch {
       return false;
@@ -65,8 +74,12 @@ export class UserService {
   async updateContext(phone: string, updates: Partial<LifeContext>): Promise<void> {
     try {
       const sqlDb = getDb();
-      const safePhone = parseAndFormatPhone(phone) || phone;
-      const userResult = await sqlDb.select({ context: users.context }).from(users).where(sql`${users.phone} = ${safePhone}` as any).limit(1);
+      let safePhone = parseAndFormatPhone(phone) || phone;
+      let userResult = await sqlDb.select({ context: users.context }).from(users).where(sql`${users.phone} = ${safePhone}` as any).limit(1);
+      if (userResult.length === 0 && safePhone !== phone) {
+        userResult = await sqlDb.select({ context: users.context }).from(users).where(sql`${users.phone} = ${phone}` as any).limit(1);
+        if (userResult[0]) safePhone = phone;
+      }
       if (userResult[0]) {
         const currentContext = userResult[0].context as Record<string, any> || {};
         const sqlUpdates: any = { 
@@ -88,16 +101,27 @@ export class UserService {
     const { randomUUID } = await import('crypto');
     const { referrals } = await import('@naija-agent/database');
     const referralId = randomUUID();
+    let safeReferrer = parseAndFormatPhone(referrerPhone) || referrerPhone;
     const referredPhone = parseAndFormatPhone(referredPhoneRaw) || referredPhoneRaw.replace(/\D/g, '');
 
     try {
-      const existingUser = await sqlDb.select().from(users).where(sql`${users.phone} = ${referredPhone}` as any).limit(1);
+      // Fallback lookup for referrer (DB may have non-E.164 rows)
+      let referrerResult = await sqlDb.select().from(users).where(sql`${users.phone} = ${safeReferrer}` as any).limit(1);
+      if (referrerResult.length === 0 && safeReferrer !== referrerPhone) {
+        referrerResult = await sqlDb.select().from(users).where(sql`${users.phone} = ${referrerPhone}` as any).limit(1);
+        if (referrerResult[0]) safeReferrer = referrerPhone;
+      }
+
+      let existingUser = await sqlDb.select().from(users).where(sql`${users.phone} = ${referredPhone}` as any).limit(1);
+      if (existingUser.length === 0 && referredPhone !== referredPhoneRaw) {
+        existingUser = await sqlDb.select().from(users).where(sql`${users.phone} = ${referredPhoneRaw}` as any).limit(1);
+      }
       if (existingUser.length > 0) {
         logger.info({ referrerPhone, referredPhone }, '🚫 Referral failed: User already exists');
         return null;
       }
       await sqlDb.insert(referrals).values({
-        id: referralId, referrerPhone, referredPhone,
+        id: referralId, referrerPhone: safeReferrer, referredPhone,
         status: 'pending', rewardAmount: 50
       });
       logger.info({ referrerPhone, referredPhone }, '🔗 Referral created');
@@ -115,10 +139,18 @@ export class UserService {
     const newUserId = parseAndFormatPhone(newUserIdRaw) || newUserIdRaw;
 
     try {
-      const pendingResult = await sqlDb.select()
+      let pendingResult = await sqlDb.select()
         .from(referrals)
         .where(sql`${referrals.referredPhone} = ${newUserId} AND ${referrals.status} = 'pending'` as any)
         .limit(1);
+
+      // Fallback: try raw phone for referrals created before normalization fix
+      if (pendingResult.length === 0 && newUserId !== newUserIdRaw) {
+        pendingResult = await sqlDb.select()
+          .from(referrals)
+          .where(sql`${referrals.referredPhone} = ${newUserIdRaw} AND ${referrals.status} = 'pending'` as any)
+          .limit(1);
+      }
 
       const pending = pendingResult[0];
       if (pending) {
@@ -127,9 +159,16 @@ export class UserService {
             .set({ status: 'rewarded', completedAt: new Date() })
             .where(sql`${referrals.id} = ${pending.id}` as any);
 
-          const referrerResult = await tx.select({ currentEnergy: users.energyCredits })
+          let referrerResult = await tx.select({ currentEnergy: users.energyCredits })
             .from(users)
             .where(sql`${users.phone} = ${pending.referrerPhone}` as any);
+          
+          // Fallback: if referrer stored without E.164 prefix, strip the +
+          if (referrerResult.length === 0 && pending.referrerPhone.startsWith('+')) {
+            referrerResult = await tx.select({ currentEnergy: users.energyCredits })
+              .from(users)
+              .where(sql`${users.phone} = ${pending.referrerPhone.slice(1)}` as any);
+          }
           
           if (referrerResult[0]) {
             const newEnergy = referrerResult[0].currentEnergy + pending.rewardAmount;

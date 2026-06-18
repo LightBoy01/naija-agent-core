@@ -7,12 +7,19 @@ export class EnergyService {
   async deductEnergy(phone: string, amount: number, reason?: string, jobId?: string): Promise<number | null> {
     try {
       const sqlDb = getDb();
-      const safePhone = parseAndFormatPhone(phone) || phone;
+      let safePhone = parseAndFormatPhone(phone) || phone;
       let newBalance: number | null = null;
 
       await sqlDb.transaction(async (tx) => {
-        const userResult = await tx.select().from(users).where(sql`${users.phone} = ${safePhone}` as any);
-        const user = userResult[0];
+        let userResult = await tx.select().from(users).where(sql`${users.phone} = ${safePhone}` as any);
+        let user = userResult[0];
+        
+        // Fallback: try raw phone if safePhone normalizes differently (e.g. old non-E.164 rows)
+        if (!user && safePhone !== phone) {
+          userResult = await tx.select().from(users).where(sql`${users.phone} = ${phone}` as any);
+          user = userResult[0];
+          if (user) safePhone = phone;
+        }
         
         if (!user) throw new Error('User profile not found in Database');
 
@@ -48,7 +55,7 @@ export class EnergyService {
   async addEnergy(phone: string, amount: number, reference?: string, reason?: string): Promise<number | null> {
     try {
       const sqlDb = getDb();
-      const safePhone = parseAndFormatPhone(phone) || phone;
+      let safePhone = parseAndFormatPhone(phone) || phone;
       let newBalance: number | null = null;
 
       await sqlDb.transaction(async (tx) => {
@@ -57,8 +64,15 @@ export class EnergyService {
           if (txExists.length > 0) throw new Error('DUPLICATE_REFERENCE');
         }
 
-        const userResult = await tx.select().from(users).where(sql`${users.phone} = ${safePhone}` as any);
+        let userResult = await tx.select().from(users).where(sql`${users.phone} = ${safePhone}` as any);
         let user = userResult[0];
+
+        // Fallback: try raw phone if safePhone normalizes differently
+        if (!user && safePhone !== phone) {
+          userResult = await tx.select().from(users).where(sql`${users.phone} = ${phone}` as any);
+          user = userResult[0];
+          if (user) safePhone = phone;
+        }
 
         if (!user) {
           await tx.insert(users).values({ phone: safePhone, energyCredits: amount });
