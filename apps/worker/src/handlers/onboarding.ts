@@ -228,7 +228,7 @@ export async function handleOnboarding(
         `🔋 *Service:* ${org.isActive ? '✅ ACTIVE' : '💤 MAINTENANCE'}\n` +
         `💳 *Balance:* ${formatCurrency(balanceMajor, currency.locale, currency.code)}\n` +
         `📲 *SMS Bridge:* ${bridgeStatus}\n` +
-        `🧠 *Model:* ${org.config?.model || 'gemma-4-26b-a4b-it'}\n\n` +
+        `🧠 *Model:* ${org.config?.model || SystemConfig.MODELS.ZYNUX_PRIMARY}\n\n` +
         `Oga, I am at your service!`;
       
       await tenantWhatsAppService.sendText(from, statusMsg);
@@ -260,13 +260,11 @@ export async function handleOnboarding(
             
             const extractionPrompt = `${ONBOARDING_PROMPTS.GREEDY_EXTRACTION}: "${text}"`;
             
-            const result = await aiOrchestrator.generateText(
-               SystemConfig.MODELS.ZYNUX_FALLBACK,
-               SystemConfig.MODELS.ZYNUX_FALLBACK, // no fallback model needed here, just retry same
-               "You are an expert entity extraction system. Return ONLY strict JSON.",
-               [{ role: 'user', content: extractionPrompt }],
-               []
-            );
+            const result = await aiOrchestrator.generateText(extractionPrompt, {
+               model: SystemConfig.MODELS.ZYNUX_FALLBACK,
+               systemInstruction: "You are an expert entity extraction system. Return ONLY strict JSON.",
+               responseMimeType: 'application/json',
+            });
             
             const extracted = JSON.parse((result.text || "").replace(/```json|```/g, '').trim());
             

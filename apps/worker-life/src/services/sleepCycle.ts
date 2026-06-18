@@ -3,6 +3,7 @@ import { SystemConfig } from '@naija-agent/types';
 import { getChatHistory, findOrCreateChat } from '@naija-agent/database';
 import { lifeMemory } from './lifeMemory.js';
 import { logger } from '../utils/logger.js';
+import { geminiBreaker } from './circuitBreaker.js';
 import 'dotenv/config';
 
 export class SleepCycleService {
@@ -110,7 +111,7 @@ export class SleepCycleService {
                 }
             });
 
-            const modelName = SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-2.5-flash';
+            const modelName = SystemConfig.MODELS.AELIXXR_WORKER || 'gemini-3.1-flash-lite';
             logger.info({ role: 'Background', model: modelName }, '💤 Sleep Cycle extracting memory & summary');
 
             const model = genAI.models.generateContent({
@@ -153,15 +154,18 @@ export class SleepCycleService {
             if (summary) {
                 logger.info({ userId, summary }, '📖 [SLEEP CYCLE] Saving episodic summary...');
                 const embedKey = process.env.GEMINI_API_KEY_EMBEDDING || apiKey;
-                const embedUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key=${embedKey}`;
+                const embedModel = SystemConfig.MODELS.NANO_EMBEDDING || 'gemini-embedding-2';
+                const embedUrl = `https://generativelanguage.googleapis.com/v1beta/models/${embedModel}:embedContent?key=${embedKey}`;
                 
-                const response = await fetch(embedUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        content: { parts: [{ text: summary }] }
+                const response = await geminiBreaker.execute(() =>
+                    fetch(embedUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            content: { parts: [{ text: summary }] }
+                        })
                     })
-                });
+                );
                 
                 const result = await response.json() as any;
                 const embedding = (result.embedding?.values || []).slice(0, 768);

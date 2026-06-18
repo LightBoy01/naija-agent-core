@@ -14,11 +14,11 @@ export class BillingService {
      * Checks balance and deducts energy for a specific tool.
      * Returns a BillingResult indicating if the operation can proceed.
      */
-    async billForTool(userId: string, toolName: string, currentBalance: number): Promise<BillingResult> {
-        const cost = toolName in TOOL_COSTS ? TOOL_COSTS[toolName] : DEFAULT_TOOL_COST;
-        const costInCredits = cost / 1000;
+    async billForTool(userId: string, toolName: string, currentBalance: number, explicitCostKobo?: number, jobId?: string): Promise<BillingResult> {
+        const rawCost = explicitCostKobo !== undefined ? explicitCostKobo : (toolName in TOOL_COSTS ? TOOL_COSTS[toolName] : DEFAULT_TOOL_COST);
+        const costInCredits = rawCost / 1000;
 
-        if (cost <= 0) {
+        if (rawCost <= 0) {
             return { success: true, costInCredits: 0, newBalance: currentBalance };
         }
 
@@ -34,7 +34,7 @@ export class BillingService {
             };
         }
 
-        const newBalance = await lifeMemory.deductEnergy(userId, costInCredits);
+        const newBalance = await lifeMemory.deductEnergy(userId, costInCredits, toolName, jobId);
 
         if (newBalance === null) {
             return {
@@ -52,7 +52,7 @@ export class BillingService {
      * Deducts base energy for a standard message response.
      */
     async billForMessage(userId: string): Promise<void> {
-        await lifeMemory.deductEnergy(userId, 1);
+        await lifeMemory.deductEnergy(userId, 1, 'message_response');
     }
 
     /**
@@ -61,7 +61,7 @@ export class BillingService {
     async refundCredits(userId: string, credits: number): Promise<void> {
         if (credits <= 0) return;
         logger.info({ userId, credits }, '🔄 Refunding energy credits due to tool failure');
-        await lifeMemory.addEnergy(userId, credits, 'REFUND_' + Date.now());
+        await lifeMemory.addEnergy(userId, credits, 'REFUND_' + Date.now(), 'refund');
     }
 }
 

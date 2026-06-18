@@ -31,25 +31,30 @@ export const SystemConfig = {
         // --- ZYNUX (Business OS) ---
         ZYNUX_PRIMARY: 'deepseek-v4-flash',
         ZYNUX_WORKER: 'deepseek-v4-flash',
-        ZYNUX_FALLBACK: 'models/gemini-3.1-flash-lite-preview',
+        ZYNUX_FALLBACK: 'models/gemini-3.1-flash-lite',
 
         // --- AELIXXR (Life OS) ---
         AELIXXR_PRIMARY: 'deepseek-v4-pro',
         AELIXXR_WORKER: 'deepseek-v4-flash',
-        AELIXXR_FALLBACK: 'models/gemini-3.1-flash-lite-preview',
+        AELIXXR_FALLBACK: 'models/gemini-3.1-flash-lite',
 
         // --- ROUTER (Gateway) ---
         ROUTER_PRIMARY: 'models/gemini-3-flash-preview',
-        ROUTER_FALLBACK: 'models/gemini-3.1-flash-lite-preview',
+        ROUTER_FALLBACK: 'models/gemini-3.1-flash-lite',
 
         // --- DEEPSEEK (V4) ---
         DEEPSEEK_PRO: 'deepseek-v4-pro',
         DEEPSEEK_FLASH: 'deepseek-v4-flash',
 
-        // Legacy keys to prevent immediate breakage (deprecated)
-        DEFAULT: 'models/gemini-3-flash-preview',
-        FALLBACK_L2: 'models/gemini-3.1-flash-lite-preview',
-        FALLBACK_L3: 'models/gemini-3.1-flash-lite-preview',
+        // --- MEDIA / SPECIALIZED (unprefixed — used in direct REST calls) ---
+        IMAGE_GEN: 'models/gemini-3.1-flash-image-preview',
+        EMBEDDING: 'gemini-embedding-2',
+        NANO_EMBEDDING: 'gemini-embedding-2',
+        VAULT_EXTRACTION: 'gemini-3.1-flash-lite',
+        AELIXXR_WEB_CHAT: 'models/gemini-3.1-flash-lite',
+
+        // Default fallback (used by GeminiProvider when no model specified)
+        DEFAULT: 'models/gemini-3.1-flash-lite',
     },    // Defaults
     DEFAULTS: {
         TIMEZONE: 'Africa/Lagos',
@@ -60,5 +65,20 @@ export const SystemConfig = {
     CONTACTS: {
         MASTER_ADMIN_PHONE: '2347042310893', // Sovereign Boss / Developer
         AELIXXR_PHONE_ID_DISPLAY: '2347042310893', // Used for invite generation
-    }
+    },
+
+    // Sovereign Bot IDs (used for sidecar routing across workers)
+    SOVEREIGN_IDS: [
+        'aelixxr',
+        'zynux',
+        'naija-agent-master',
+        '2349015772541',
+        '2347011925076',
+        '1034379023092936'
+    ] as readonly string[],
+    SOVEREIGN_ID_MAP: {
+        '2349015772541': 'aelixxr',
+        '2347011925076': 'zynux',
+        '1034379023092936': 'naija-agent-master',
+    } as const,
 } as const;

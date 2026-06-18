@@ -27,4 +27,5 @@ test-*.js
 test-*.mjs
 
 .gemini/
+.commandcode/
 sidecar-binary

@@ -39,9 +39,9 @@ if (!process.env.WHATSAPP_API_TOKEN || !process.env.GEMINI_API_KEY) {
 }
 
 // --- Termux/Android Environment Fix ---
-if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === undefined && process.platform === 'android') {
+if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === undefined && process.platform === 'android' && process.env.NODE_ENV !== 'production') {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-    logger.info('🛡️ [TERMUX FIX]: TLS Verification disabled.');
+    logger.warn('🛡️ [TERMUX FIX]: TLS Verification disabled (dev only).');
 }
 
 // --- Redis Configuration ---
@@ -245,3 +245,27 @@ worker.on('failed', async (job, err) => {
      } catch (snitchErr: any) {}
   }
 });
+
+// --- Graceful Shutdown ---
+async function gracefulShutdown(signal: string) {
+  logger.info({ signal }, 'Received shutdown signal');
+  const timeout = setTimeout(() => {
+    logger.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 30000);
+
+  try {
+    await worker.close();
+    await redisClient.quit();
+    clearTimeout(timeout);
+    logger.info('Worker shut down gracefully');
+    process.exit(0);
+  } catch (err: any) {
+    logger.error({ error: err.message }, 'Error during graceful shutdown');
+    clearTimeout(timeout);
+    process.exit(1);
+  }
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

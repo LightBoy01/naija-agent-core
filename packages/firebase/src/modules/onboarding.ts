@@ -43,7 +43,7 @@ export async function registerTrialInterest(data: {
       adminPhone,
       botPhone,
       tools: ['web_search'],
-      model: 'gemma-4-26b-a4b-it'
+      model: 'deepseek-v4-flash'
     },
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
@@ -226,7 +226,7 @@ export async function createTenant(data: {
     costPerReply: 3300, 
     config: {
       tools: ['web_search'],
-      model: 'gemma-4-26b-a4b-it',
+      model: 'deepseek-v4-flash',
       adminPin: hashedPin,
       bridgeSecret, 
       useSmsBridge: true

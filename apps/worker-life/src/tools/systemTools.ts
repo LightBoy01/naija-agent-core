@@ -35,19 +35,6 @@ export const SYSTEM_TOOLS = [
       }
     },
     {
-      name: 'delegate_task',
-      description: 'Delegate a specialized task to a sub-agent. Choose the sector carefully: \n- "EducationPack": For quizzes, study plans, and educational research.\n- "LifePack": For searching the user\'s Vault (receipts, notes, alerts) or deleting data.\n- "ResearchPack": For browsing the live internet, fetching webpages, and general news.\n- "CommercePack": For shopping, pricing, and market comparisons.\n- "PropertyPack": For real estate searches, tenancy laws, and property management.\n- "LegalPack": For Nigerian law research, bureaucracy defense, and contract analysis.',
-      parameters: {
-        type: Type.OBJECT,
-        properties: {
-          sector: { type: Type.STRING, enum: ["EducationPack", "LifePack", "ResearchPack", "CommercePack", "PropertyPack", "LegalPack"], description: 'The specialized sector pack required.' },
-          instruction: { type: Type.STRING, description: 'Clear, detailed instructions for the sub-agent. Include all context needed to execute the task.' },
-          raw_parameters: { type: Type.OBJECT, description: 'MANDATORY: Pass exact, unadulterated user data (Amounts, Dates, Transaction IDs, Phone Numbers) here to prevent data loss during delegation.' }
-        },
-        required: ['sector', 'instruction', 'raw_parameters']
-      }
-    },
-    {
       name: 'log_feedback',
       description: 'Use this tool when the user provides explicit feedback (e.g., "Good job", "I hate this", "Make it shorter next time") or when you detect strong frustration in their message.',
       parameters: {
@@ -136,9 +123,6 @@ export async function executeSystemTool(name: string, args: Record<string, any>,
             logger.info({ userId: args.userId, delay: delay + 2000 }, '⚡ High-reliability nudge queued directly with buffer');
         }
         return toolResult;
-
-      case 'delegate_task':
-        return { status: 'success', message: 'Delegation handled by Orchestrator.' };
 
       case 'log_feedback':
           const { userId, sessionId, originalMessage, sentiment, feedbackType, learnedRule, internalNote } = args;

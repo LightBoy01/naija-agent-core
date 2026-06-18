@@ -165,6 +165,15 @@ CRITICAL: Reply directly to the user with your final message. Do NOT include you
           systemInstruction: systemPrompt,
           tools: finalTools
       });
+  } else if (type === 'audio' && mediaBuffer && mediaMime) {
+      aiResponse = await ai.chat(normalizedHistory, [
+          { text: content.text || content.caption || "Transcribe this audio" },
+          { inlineData: { data: mediaBuffer.toString('base64'), mimeType: mediaMime } }
+      ], {
+          model: tenantModelName,
+          systemInstruction: systemPrompt,
+          tools: finalTools
+      });
   } else {
       aiResponse = await ai.chat(normalizedHistory, content.text || "[Media]", {
           model: tenantModelName,

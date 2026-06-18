@@ -111,6 +111,18 @@ export const memories = pgTable('memories', {
   };
 });
 
+// --- Energy Ledger (Immutable Audit Trail for Credits) ---
+export const energyLedger = pgTable('energy_ledger', {
+  id: varchar('id', { length: 128 }).primaryKey(),
+  userId: varchar('user_id', { length: 64 }).references(() => users.phone).notNull(),
+  amount: integer('amount').notNull(), // positive = credit, negative = debit
+  reason: varchar('reason', { length: 100 }).notNull(), // 'web_search', 'msg_reply', 'refund', 'topup', etc.
+  balanceAfter: integer('balance_after').notNull(),
+  reference: varchar('reference', { length: 255 }), // links to transactions.reference for topups
+  jobId: varchar('job_id', { length: 128 }), // BullMQ job ID for traceability
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 // --- Referrals (Growth Loop) ---
 export const referrals = pgTable('referrals', {
   id: varchar('id', { length: 128 }).primaryKey(),

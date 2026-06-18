@@ -132,7 +132,15 @@ export type OnboardingData = z.infer<typeof OnboardingDataSchema>;
 // ConfigSchema needs to be defined BEFORE OrganizationSchema to be used inside it
 export const ConfigSchema = z.object({
   systemPrompt: z.string().optional(),
-  model: z.enum(['gemini-2.5-flash', 'gemini-flash-lite-latest', 'gemma-4-26b-a4b-it', 'gemini-2.0-flash']).default('gemma-4-26b-a4b-it'),
+  model: z.enum([
+    'models/gemini-3-flash-preview',
+    'models/gemini-3.1-pro-preview',
+    'models/gemini-3.1-flash-lite',
+    'models/gemini-2.5-flash',
+    'deepseek-v4-pro',
+    'deepseek-v4-flash',
+    'gemma-4-26b-a4b-it',
+  ]).default('deepseek-v4-flash'),
   tools: z.array(z.string()).default([]), // List of enabled tool names
   payment: PaymentConfigSchema.optional(), // Per-tenant payment config
   bankDetails: BankDetailsSchema.optional(), // The Boss's bank details for customer payments

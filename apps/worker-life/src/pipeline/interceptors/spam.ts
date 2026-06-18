@@ -17,7 +17,7 @@ export const SpamInterceptor: LifeInterceptor = {
     const textHash = crypto.createHash('md5').update(textPayload).digest('hex');
     
     // Redis key structure: spam_history:<userPhone>:<textHash>
-    const spamKey = `spam_history:${ctx.userPhone}:${textHash}`;
+    const spamKey = `life:spam:${ctx.userPhone}:${textHash}`;
     
     // Increment the counter for this specific exact text payload
     const count = await redisClient.incr(spamKey);

@@ -26,7 +26,7 @@ export const GlobalModelRegistry: ModelCapability[] = [
         provider: 'gemini',
         baseURL: 'https://generativelanguage.googleapis.com',
         apiKeyEnv: 'GEMINI_API_KEY_STUDIO',
-        skills: ['reasoning', 'tool-calling', 'vision-in', 'summarization'],
+        skills: ['reasoning', 'tool-calling', 'vision-in', 'audio-in', 'summarization'],
         costProfile: 'low',
         maxContext: 1000000
     },
@@ -35,7 +35,7 @@ export const GlobalModelRegistry: ModelCapability[] = [
         provider: 'gemini',
         baseURL: 'https://generativelanguage.googleapis.com',
         apiKeyEnv: 'GEMINI_API_KEY_STUDIO',
-        skills: ['reasoning', 'tool-calling', 'summarization'],
+        skills: ['reasoning', 'tool-calling', 'audio-in', 'summarization'],
         costProfile: 'medium',
         maxContext: 1000000
     },
@@ -44,17 +44,8 @@ export const GlobalModelRegistry: ModelCapability[] = [
         provider: 'gemini',
         baseURL: 'https://generativelanguage.googleapis.com',
         apiKeyEnv: 'GEMINI_API_KEY_STUDIO',
-        skills: ['reasoning', 'summarization'],
+        skills: ['reasoning', 'tool-calling', 'vision-in', 'audio-in', 'summarization'],
         costProfile: 'ultra-low',
-        maxContext: 1000000
-    },
-    {
-        id: 'models/gemini-2.5-flash',
-        provider: 'gemini',
-        baseURL: 'https://generativelanguage.googleapis.com',
-        apiKeyEnv: 'GEMINI_API_KEY_STUDIO',
-        skills: ['reasoning', 'tool-calling', 'vision-in', 'summarization'],
-        costProfile: 'low',
         maxContext: 1000000
     },
     {

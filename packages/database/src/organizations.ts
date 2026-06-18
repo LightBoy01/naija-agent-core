@@ -34,7 +34,7 @@ export async function createTenant(data: {
         adminPin: hashedPin,
         bridgeSecret,
         useSmsBridge: true,
-        model: 'gemma-4-26b-a4b-it',
+        model: 'deepseek-v4-flash',
         tools: ['web_search']
       }
     });
@@ -77,7 +77,7 @@ export async function registerTrialInterest(data: {
         status: 'TRIAL',
         adminPhone: data.adminPhone,
         botPhone: data.botPhone,
-        model: 'gemma-4-26b-a4b-it',
+        model: 'deepseek-v4-flash',
         tools: ['web_search']
       }
     });

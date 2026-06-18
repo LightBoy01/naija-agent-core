@@ -36,22 +36,7 @@ export async function getLifeTools(): Promise<Tool[]> {
 }
 
 export async function getOrchestratorTools(): Promise<Tool[]> {
-  const allTools = await getLifeTools();
-  const decls = allTools[0]?.functionDeclarations || [];
-  
-  const allowedNames = [
-    'delegate_task', 
-    'delegate_to_hermes',
-    'web_search',
-    'save_note', 
-    'create_reminder',
-    'log_feedback', 
-    'get_recharge_details', 
-    'generate_invite'
-  ];
-
-  const filtered = decls.filter(d => d.name && allowedNames.includes(d.name));
-  return [{ functionDeclarations: filtered }];
+  return await getLifeTools();
 }
 
 const TOOL_HANDLERS: Record<string, (name: string, args: any, jobId?: string) => Promise<any>> = {};

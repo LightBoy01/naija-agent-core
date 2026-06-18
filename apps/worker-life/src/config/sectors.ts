@@ -1,6 +1,7 @@
 /**
  * Sector Pack Configuration
- * Defines which tools are accessible to specialized SLM workers.
+ * Used by Hermes (Docker-on-Demand) for autonomous task capability scoping.
+ * SLM workers no longer read this.
  */
 
 export interface SectorConfig {

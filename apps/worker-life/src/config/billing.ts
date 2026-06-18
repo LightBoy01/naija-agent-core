@@ -14,8 +14,9 @@ export const TOOL_COSTS: Record<string, number> = {
     'web_search': 3000,        // Live Web Search (3 Credits)
     
     // Orchestrator Specific Tools
-    'delegate_task': 5000,      // Agentic Handoff (5 Credits)
     'delegate_to_hermes': 10000,// High-Power Body Delegation (10 Credits)
+    'hermes_manual_delegation': 5000, // Manual Hermes delegation via Docker (5 Credits)
+    'sovereign_cron_run': 3000, // Cron job dispatch (3 Credits)
     'create_reminder': 0,      // Scheduling
     'generate_invite': 0,      // Viral Growth
     'get_recharge_details': 0, // Revenue Path

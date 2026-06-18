@@ -2,6 +2,7 @@ import { Job } from 'bullmq';
 import { logger } from '../utils/logger.js';
 import { getDueCronJobs, advanceCronJob, updateCronJobStatus } from '@naija-agent/database';
 import { billingService } from '../services/billingService.js';
+import { lifeMemory } from '../services/lifeMemory.js';
 
 export interface SovereignCronDependencies {
     lifeQueue: any;
@@ -21,8 +22,12 @@ export async function handleSovereignCronTick(job: Job, deps: SovereignCronDepen
         logger.info({ count: dueJobs.length }, '⏰ [SOVEREIGN CRON] Found due jobs. Dispatching...');
 
         for (const cronJob of dueJobs) {
-            // Bill up-front for the energy budget
-            const billResult = await billingService.billForTool(cronJob.userId, 'sovereign_cron_run', cronJob.energyBudget);
+            // Fetch user's actual energy balance — NOT the cron budget
+            const context = await lifeMemory.getContext(cronJob.userId);
+            const actualBalance = context.energyCredits ?? 0;
+
+            // Check if user has enough energy for a cron run (billed at DEFAULT tool cost = 3 credits)
+            const billResult = await billingService.billForTool(cronJob.userId, 'sovereign_cron_run', actualBalance, undefined, job.id);
             
             if (!billResult.success) {
                 logger.warn({ jobId: cronJob.id, userId: cronJob.userId }, '⏰ [SOVEREIGN CRON] Insufficient energy. Pausing job.');
@@ -37,8 +42,9 @@ export async function handleSovereignCronTick(job: Job, deps: SovereignCronDepen
                 chatId: `${cronJob.orgId}_${cronJob.userId}`,
                 sector: cronJob.sectorPack || 'ResearchPack',
                 instruction: cronJob.instruction,
-                energyCredits: billResult.newBalance, // Pass remaining balance
+                energyCredits: billResult.newBalance,
                 isCron: true,
+                isHermesDelegation: true,
                 cronJobId: cronJob.id,
                 trajectory: cronJob.trajectory,
                 stepCount: cronJob.stepCount || 0

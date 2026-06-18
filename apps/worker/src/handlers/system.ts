@@ -5,8 +5,6 @@ import {
   getOrgById, 
   getOrgByPhoneId,
   logSystemEvent, 
-  getUpcomingBookingsForReminders,
-  markReminderSent,
   getActiveOrganizations,
   releaseExpiredReservations
 } from '@naija-agent/firebase';
@@ -80,55 +78,6 @@ export async function handleBridgeHealth(
        }
     }
   }
-  return { success: true };
-}
-
-export async function handleReminderScan(
-  job: Job<JobData>
-): Promise<{ success: boolean }> {
-  const { orgId } = job.data;
-  if (!orgId) throw new Error('Missing orgId for reminder-scan job');
-  
-  const org = await getOrgById(orgId);
-  if (!org || !org.isActive) return { success: true };
-
-  const windows = [
-    { type: '24h', min: 23 * 60, max: 25 * 60, msg: (time: string, org: string) => `🔔 *Appointment Reminder*\n\nHello! Just a friendly reminder for your appointment with *${org}* tomorrow at *${time}*.\n\nSee you then!` },
-    { type: '2h', min: 110, max: 150, msg: (time: string, org: string) => `🏃‍♂️ *See You Soon!*\n\nHello! Just reminding you of your booking with *${org}* today at *${time}* (in about 2 hours).\n\nSafe travels!` }
-  ];
-
-  for (const window of windows) {
-    const upcoming = await getUpcomingBookingsForReminders(orgId, window.min, window.max, window.type);
-    if (upcoming.length > 0) {
-      logger.info({ orgId, count: upcoming.length, type: window.type }, `[NUDGE] Found upcoming bookings.`);
-
-      const tenantWhatsAppService = new WhatsAppService(
-        org.config?.whatsappToken || process.env.WHATSAPP_API_TOKEN || '',
-        org.whatsappPhoneId || process.env.WHATSAPP_PHONE_ID || '',
-        org.config?.appSecret || process.env.WHATSAPP_APP_SECRET
-      );
-
-      for (const booking of upcoming) {
-        if (!booking.customerPhone) continue;
-
-        try {
-          const startTime = new Date(booking.metadata.startTime);
-          const timeStr = startTime.toLocaleTimeString(SystemConfig.DEFAULTS.LOCALE, { hour: '2-digit', minute: '2-digit', hour12: true });
-          
-          const reminderMsg = window.msg(timeStr, org.name);
-
-          await tenantWhatsAppService.sendText(booking.customerPhone, reminderMsg);
-          await markReminderSent(orgId, booking.id, window.type);
-          await logSystemEvent(orgId, 'APPOINTMENT_REMINDER', `Sent ${window.type} nudge to ${booking.customerPhone} for slot ${booking.id}`);
-          
-          await new Promise(r => setTimeout(r, 2000)); 
-        } catch (e: any) {
-          logger.error({ bookingId: booking.id, error: e.message }, `❌ [NUDGE] Failed.`);
-        }
-      }
-    }
-  }
-
   return { success: true };
 }
 

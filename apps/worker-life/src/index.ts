@@ -23,6 +23,7 @@ import {
 import { handleSLMTask, SLMDependencies } from './handlers/slmHandler.js';
 import { handleConsolidateMemory, handleMarketScrape } from './handlers/maintenanceHandler.js';
 import { handleSovereignCronTick, SovereignCronDependencies } from './handlers/cronHandler.js';
+import { handleVaultDeposit, VaultWebhookDependencies } from './handlers/vaultWebhookHandler.js';
 
 // --- Redis & AI Configuration ---
 const redisUrl = process.env.REDIS_URL_LOS || process.env.REDIS_URL; 
@@ -72,7 +73,7 @@ const worker: Worker = new Worker(
   async (job: Job): Promise<any> => {
     logger.info({ jobId: job.id, name: job.name }, 'Processing Life Task');
 
-    const deps: ChatDependencies & HeartbeatDependencies & SLMDependencies & SovereignCronDependencies = {
+    const deps: ChatDependencies & HeartbeatDependencies & SLMDependencies & SovereignCronDependencies & VaultWebhookDependencies = {
         ai: aiOrchestrator, // Use the abstracted orchestrator
         getDynamicModels,
         lifeQueue,
@@ -117,6 +118,9 @@ const worker: Worker = new Worker(
 
             case 'consolidate-memory':
                 return await handleConsolidateMemory(job);
+
+            case 'life-vault-deposit':
+                return await handleVaultDeposit(job, deps);
 
             default:
                 logger.warn({ jobName: job.name }, 'Unknown job name');

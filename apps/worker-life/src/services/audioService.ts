@@ -1,6 +1,7 @@
 import { logger } from '../utils/logger.js';
 import FormData from 'form-data';
 import axios from 'axios';
+import { groqBreaker } from './circuitBreaker.js';
 
 export class AudioService {
     private groqApiKey: string;
@@ -21,11 +22,13 @@ export class AudioService {
             formData.append('model', 'whisper-large-v3-turbo');
             formData.append('response_format', 'text');
 
-            const response = await axios.post('https://api.groq.com/openai/v1/audio/transcriptions', formData, {
-                headers: {
-                    ...formData.getHeaders(),
-                    'Authorization': `Bearer ${this.groqApiKey}`
-                }
+            const response = await groqBreaker.execute(async () => {
+                return axios.post('https://api.groq.com/openai/v1/audio/transcriptions', formData, {
+                    headers: {
+                        ...formData.getHeaders(),
+                        'Authorization': `Bearer ${this.groqApiKey}`
+                    }
+                });
             });
 
             // The response format is text, so the data is directly the transcribed string

@@ -405,3 +405,43 @@ func (m *Manager) Shutdown() {
 		client.Disconnect()
 	}
 }
+
+func (m *Manager) SendMedia(orgID, to string, data []byte, mimeType, caption string) error {
+	client, err := m.GetClient(orgID)
+	if err != nil {
+		return err
+	}
+
+	jidStr := to
+	if !contains(to, "@") {
+		jidStr = fmt.Sprintf("%s@s.whatsapp.net", to)
+	}
+
+	jid, err := types.ParseJID(jidStr)
+	if err != nil {
+		return fmt.Errorf("invalid JID: %v", err)
+	}
+
+	uploadResp, err := client.Upload(context.Background(), data, whatsmeow.MediaImage)
+	if err != nil {
+		return fmt.Errorf("upload failed: %v", err)
+	}
+
+	fileLen := uploadResp.FileLength
+
+	msg := &waProto.Message{
+		ImageMessage: &waProto.ImageMessage{
+			Caption:       &caption,
+			Mimetype:      &mimeType,
+			URL:           &uploadResp.URL,
+			DirectPath:    &uploadResp.DirectPath,
+			MediaKey:      uploadResp.MediaKey,
+			FileEncSHA256: uploadResp.FileEncSHA256,
+			FileSHA256:    uploadResp.FileSHA256,
+			FileLength:    &fileLen,
+		},
+	}
+
+	_, err = client.SendMessage(context.Background(), jid, msg)
+	return err
+}

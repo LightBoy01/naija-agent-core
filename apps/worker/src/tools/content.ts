@@ -193,7 +193,7 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
           console.log(`🎨 [IMAGE GEN] Generating image for ${orgId}: ${args.prompt}`);
           
           const imageResult = await imageGenAI.models.generateContent({
-             model: "gemini-3.1-flash-image-preview",
+             model: SystemConfig.MODELS.IMAGE_GEN,
              contents: `Generate a high-quality image based on this description: ${args.prompt}. Make it look professional and vibrant.`
           });
 

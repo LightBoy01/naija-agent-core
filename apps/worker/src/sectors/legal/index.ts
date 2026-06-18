@@ -70,22 +70,12 @@ export function getLegalPack(currency: { code: string, symbol: string }, region:
     systemPrompt: prompt,
     tools: legalTools,
     execute: async (toolName: string, args: Record<string, unknown>, deps: any) => {
-      console.log(`⚖️ [LegalPack] Executing ${toolName}`, args);
-      
-      switch (toolName) {
-        case 'research_nigerian_law':
-          return { 
-            status: 'success', 
-            message: `I have started researching ${args.query} in the Nigerian Law Database. (SCAFFOLDED)` 
-          };
-        case 'analyze_contract_clause':
-          return {
-            status: 'success',
-            message: 'Clause analysis initialized. Checking for standard consumer protection violations. (SCAFFOLDED)'
-          };
-        default:
-          return null;
-      }
+      // LegalPack is gated — not yet production-ready.
+      // Returning a clear message instead of scaffolded fake data.
+      return {
+        status: 'coming_soon',
+        message: '⚖️ The Legal Assistant is still in development. I cannot research laws or analyze contracts yet — this feature will be available in a future update. Is there anything else I can help with?'
+      };
     }
   };
 }

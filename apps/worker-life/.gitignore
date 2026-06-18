@@ -1,0 +1,11 @@
+# Build output (tsc compiles src/ → dist/)
+dist/
+
+# Prevent stale compiled artifacts inside src/ (must never happen again)
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+src/**/*.d.ts.map
+
+# Dependencies
+node_modules/

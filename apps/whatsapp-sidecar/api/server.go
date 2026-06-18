@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 
@@ -39,6 +41,7 @@ func (s *Server) Start(port string) {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/send", s.handleSend)
+	mux.HandleFunc("/send-media", s.handleSendMedia)
 	mux.HandleFunc("/connect", s.handleConnect)
 	mux.HandleFunc("/pair", s.handlePair)
 	mux.HandleFunc("/typing", s.handleTyping)
@@ -145,6 +148,51 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 	
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "sent"})
+}
+
+func (s *Server) handleSendMedia(w http.ResponseWriter, r *http.Request) {
+	if !s.checkAuth(w, r) {
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	orgID := r.FormValue("orgId")
+	to := r.FormValue("to")
+	caption := r.FormValue("caption")
+
+	if orgID == "" || to == "" {
+		http.Error(w, "orgId and to are required", http.StatusBadRequest)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to read file: %v", err), http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to read file data: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	mimeType := header.Header.Get("Content-Type")
+	if mimeType == "" {
+		mimeType = "image/jpeg"
+	}
+
+	if err := s.mgr.SendMedia(orgID, to, data, mimeType, caption); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "media_sent"})
 }
 
 func (s *Server) handleTyping(w http.ResponseWriter, r *http.Request) {

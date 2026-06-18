@@ -2,6 +2,7 @@ import axios from 'axios';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { parsePhoneNumber } from 'libphonenumber-js';
+import { SystemConfig } from '@naija-agent/types';
 
 const WhatsAppSendResponseSchema = z.object({
   messaging_product: z.literal('whatsapp'),
@@ -44,12 +45,11 @@ export class WhatsAppService {
     const finalBody = body || "I'm sorry, I couldn't generate a response. Please try again.";
 
     // --- SOVEREIGN ROUTING ---
-    const sovereignIds = ['aelixxr', 'zynux', 'naija-agent-master', '2349015772541', '2347011925076', '1034379023092936'];
+    const sovereignIds = SystemConfig.SOVEREIGN_IDS as readonly string[];
     if (this.phoneId.startsWith('baileys-') || sovereignIds.includes(this.phoneId) || !/^\d+$/.test(this.phoneId)) {
        let orgId = this.phoneId.replace('baileys-', '');
-       if (orgId === '2349015772541') orgId = 'aelixxr';
-       if (orgId === '2347011925076') orgId = 'zynux';
-       if (orgId === '1034379023092936') orgId = 'naija-agent-master';
+       const mapped = (SystemConfig.SOVEREIGN_ID_MAP as Record<string, string>)[orgId];
+       if (mapped) orgId = mapped;
        
        await this.sendToSovereign(orgId, to, finalBody);
        return `SOV-${Date.now()}`;
@@ -92,34 +92,74 @@ export class WhatsAppService {
     }
   }
 
+  /**
+   * Uploads a raw image buffer to the Meta Cloud API media endpoint.
+   * Returns a media ID that can be used to send the image by reference.
+   */
+  private async uploadBuffer(buffer: Buffer, mimeType: string): Promise<string> {
+    const FormData = (await import('form-data')).default;
+    const form = new FormData();
+    form.append('file', buffer, { filename: 'image.jpg', contentType: mimeType });
+    form.append('messaging_product', 'whatsapp');
+    form.append('type', mimeType);
+
+    const response = await axios.post(
+      `${this.baseUrl}/${this.phoneId}/media`,
+      form,
+      {
+        headers: {
+          Authorization: `Bearer ${this.apiToken}`,
+          ...form.getHeaders(),
+        },
+        params: this.getAuthParams(),
+      }
+    );
+
+    return response.data.id;
+  }
+
   // Send Image Message
   async sendImage(to: string, imageUrl: string | Buffer, caption?: string): Promise<string> {
     // --- SOVEREIGN ROUTING ---
-    if (this.phoneId.startsWith('baileys-') || this.phoneId === 'aelixxr' || this.phoneId === 'zynux' || !/^\d+$/.test(this.phoneId)) {
-       const orgId = this.phoneId.replace('baileys-', '');
+    const sovereignIds = SystemConfig.SOVEREIGN_IDS as readonly string[];
+    if (this.phoneId.startsWith('baileys-') || sovereignIds.includes(this.phoneId) || !/^\d+$/.test(this.phoneId)) {
+       let orgId = this.phoneId.replace('baileys-', '');
+       const buffer = Buffer.isBuffer(imageUrl) ? imageUrl : null;
+       
+       if (buffer) {
+         // New path: send actual image via sidecar /send-media
+         await this.sendMediaToSovereign(orgId, to, buffer, 'image/jpeg', caption || '');
+         return `SOV-IMG-${Date.now()}`;
+       }
+       
+       // Fallback: URL-only — send as text (sidecar /send-media not yet available for URLs)
        const text = caption ? `${caption}\n\n${imageUrl}` : `${imageUrl}`;
        await this.sendToSovereign(orgId, to, text);
        return `SOV-IMG-${Date.now()}`;
     }
 
+    let mediaId: string;
+
     if (Buffer.isBuffer(imageUrl)) {
-       // --- UPLOAD TO META (PHASE 7.10) ---
-       // For now, we log and throw as we primarily use URLs
-       console.error('❌ [WHATSAPP_SERVICE] Buffer uploads not implemented yet. Use a persistent URL.');
-       throw new Error('Image Buffer uploads are not yet supported in this version of the service.');
+      mediaId = await this.uploadBuffer(imageUrl, 'image/jpeg');
     }
 
     try {
+      const imagePayload: Record<string, string | undefined> = {};
+      if (Buffer.isBuffer(imageUrl)) {
+        imagePayload.id = mediaId!;
+      } else {
+        imagePayload.link = imageUrl;
+      }
+      if (caption) imagePayload.caption = caption;
+
       const response = await axios.post(
         `${this.baseUrl}/${this.phoneId}/messages`,
         {
           messaging_product: 'whatsapp',
           to: to,
           type: 'image',
-          image: { 
-            link: imageUrl,
-            caption: caption 
-          },
+          image: imagePayload,
         },
         {
           headers: {
@@ -140,9 +180,9 @@ export class WhatsAppService {
 
   // Download Media (Audio/Image)
   async downloadMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
-    // If it's a whatsmeow ID (usually starts with a prefix or doesn't look like a Meta ID)
-    // If it's a whatsmeow ID (usually starts with a prefix or doesn't look like a Meta ID)
-    if (this.phoneId.startsWith('baileys-') || this.phoneId === 'aelixxr' || this.phoneId === 'zynux' || !/^\d+$/.test(this.phoneId)) {
+    // Sovereign routing: sidecar-managed phone IDs
+    const sovereignIds = SystemConfig.SOVEREIGN_IDS as readonly string[];
+    if (this.phoneId.startsWith('baileys-') || sovereignIds.includes(this.phoneId) || !/^\d+$/.test(this.phoneId)) {
        return this.downloadMediaFromSovereign(mediaId);
     }
 
@@ -210,7 +250,35 @@ export class WhatsAppService {
   }
 
   /**
-   * Fetches media from the Sovereign Go Sidecar instead of Meta.
+   * Dispatches media (image buffer) to the Sovereign Go Sidecar's /send-media endpoint.
+   */
+  private async sendMediaToSovereign(orgId: string, to: string, buffer: Buffer, mimeType: string, caption: string): Promise<void> {
+    const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
+    const apiKey = process.env.ADMIN_API_KEY;
+    const FormData = (await import('form-data')).default;
+    const form = new FormData();
+    form.append('orgId', orgId);
+    form.append('to', to);
+    form.append('caption', caption);
+    form.append('file', buffer, { filename: 'image.jpg', contentType: mimeType });
+
+    try {
+      await axios.post(`${sidecarUrl}/send-media`, form, {
+        headers: {
+          'X-API-Key': apiKey || '',
+          ...form.getHeaders(),
+        },
+      });
+    } catch (e: any) {
+      console.error('❌ [SOVEREIGN SEND MEDIA] Failed:', e.response?.data || e.message);
+      throw new Error(`Failed to dispatch media via Sovereign engine: ${e.message}`);
+    }
+  }
+
+  /**
+   * Fetches media from the Sovereign Go Sidecar.
+   * Only supports local filesystem path (/tmp/sidecar-media/) from the Go sidecar.
+   * Direct HTTP download (/download/ endpoint) is not implemented on the sidecar.
    */
   private async downloadMediaFromSovereign(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
     if (mediaId.startsWith('/tmp/')) {
@@ -230,35 +298,18 @@ export class WhatsAppService {
         }
     }
 
-    const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
-    const apiKey = process.env.ADMIN_API_KEY;
-    
-    try {
-      const response = await axios.get(`${sidecarUrl}/download/${mediaId}`, {
-        responseType: 'arraybuffer',
-        headers: apiKey ? { 'X-API-Key': apiKey } : {}
-      });
-      
-      return {
-        buffer: Buffer.from(response.data),
-        mimeType: (response.headers['content-type'] as string) || 'image/jpeg'
-      };
-    } catch (e: any) {
-      console.error('❌ [SOVEREIGN DOWNLOAD] Failed:', e.message);
-      throw new Error('Failed to download media from Sovereign gateway');
-    }
+    throw new Error('Sovereign download only supports local filesystem paths (/tmp/sidecar-media/). Direct HTTP download is not available.');
   }
 
   /**
    * Dispatches a Typing Indicator (ChatStateComposing) to the Sovereign Go Sidecar.
    */
   async sendTypingIndicator(to: string): Promise<boolean> {
-    const sovereignIds = ['aelixxr', 'zynux', 'naija-agent-master', '2349015772541', '2347011925076', '1034379023092936'];
+    const sovereignIds = SystemConfig.SOVEREIGN_IDS as readonly string[];
     if (this.phoneId.startsWith('baileys-') || sovereignIds.includes(this.phoneId) || !/^\d+$/.test(this.phoneId)) {
        let orgId = this.phoneId.replace('baileys-', '');
-       if (orgId === '2349015772541') orgId = 'aelixxr';
-       if (orgId === '2347011925076') orgId = 'zynux';
-       if (orgId === '1034379023092936') orgId = 'naija-agent-master';
+       const mapped = (SystemConfig.SOVEREIGN_ID_MAP as Record<string, string>)[orgId];
+       if (mapped) orgId = mapped;
 
        const sidecarUrl = process.env.SIDECAR_URL || 'http://localhost:8080';
        const apiKey = process.env.ADMIN_API_KEY;

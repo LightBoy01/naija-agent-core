@@ -1,5 +1,5 @@
 import { Job, Queue } from 'bullmq';
-import { JobData } from '@naija-agent/types';
+import { JobData, SystemConfig } from '@naija-agent/types';
 import { WhatsAppService } from '../services/whatsapp.js';
 import { 
   getOrgById, 
@@ -85,7 +85,7 @@ export async function handleSmsBridge(
      logger.info({ orgId }, '🔍 Regex failed. Calling AI Abstraction...');
      try {
        const prompt = `Extract the transaction amount as a number only from this Nigerian bank SMS. If no amount is found, return "NULL". SMS: "${body}"`;
-       const aiResult = await ai.generateText(prompt, { model: "gemini-3.1-flash-lite-preview" });
+       const aiResult = await ai.generateText(prompt, { model: SystemConfig.MODELS.ZYNUX_FALLBACK });
        
        const aiText = (aiResult.text || "").trim();
        if (aiText !== "NULL") {

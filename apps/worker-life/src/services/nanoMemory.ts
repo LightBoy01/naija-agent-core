@@ -1,5 +1,7 @@
 import { lifeMemory } from './lifeMemory.js';
+import { SystemConfig } from '@naija-agent/types';
 import { logger } from '../utils/logger.js';
+import { geminiBreaker } from './circuitBreaker.js';
 // @ts-ignore
 import * as pdfParseModule from 'pdf-parse';
 const pdfParse = (pdfParseModule as any).default || pdfParseModule;
@@ -7,7 +9,7 @@ const pdfParse = (pdfParseModule as any).default || pdfParseModule;
 export class NanoMemoryService {
     async generateEmbedding(text: string): Promise<number[]> {
         const apiKey = process.env.GEMINI_API_KEY_STUDIO || process.env.GEMINI_API_KEY_EMBEDDING || process.env.GEMINI_API_KEY;
-        const modelName = 'text-embedding-004'; // or gemini-embedding-2, but text-embedding-004 is recommended for text
+        const modelName = SystemConfig.MODELS.NANO_EMBEDDING;
         
         try {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:embedContent?key=${apiKey}`;
@@ -20,11 +22,13 @@ export class NanoMemoryService {
               }
             };
         
-            const response = await fetch(url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(body)
-            });
+            const response = await geminiBreaker.execute(() =>
+                fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                })
+            );
         
             const result = await response.json() as any;
             return result.embedding?.values || [];

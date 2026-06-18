@@ -1,6 +1,7 @@
 import { Storage } from '@google-cloud/storage';
 import { v2 as cloudinary } from 'cloudinary';
 import { getDb } from '@naija-agent/firebase';
+import { SystemConfig } from '@naija-agent/types';
 import { GoogleGenAI } from '@google/genai';
 import crypto from 'crypto';
 import { z } from 'zod';
@@ -83,7 +84,7 @@ async function extractMultimodalMetadata(
     apiKey: string
 ): Promise<any> {
   const finalApiKey = process.env.GEMINI_API_KEY_STUDIO || process.env.GEMINI_API_KEY || apiKey;
-  const modelName = 'gemini-2.5-flash';
+  const modelName = SystemConfig.MODELS.VAULT_EXTRACTION;
 
   const prompt = `
   You are an elite Forensic Analyst and Document Classification AI for the "Aelixxr Sovereign Vault".
@@ -170,7 +171,7 @@ async function getMultimodalEmbedding(
     apiKey: string
 ): Promise<number[]> {
   const embeddingKey = process.env.GEMINI_API_KEY_STUDIO || process.env.GEMINI_API_KEY_EMBEDDING || apiKey;
-  const modelName = 'gemini-embedding-2';
+  const modelName = SystemConfig.MODELS.EMBEDDING;
   
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:embedContent?key=${embeddingKey}`;
@@ -268,7 +269,7 @@ export async function ingestNote(
 
   // 1. Extract Metadata (The "Intelligence")
   const finalApiKey = process.env.GEMINI_API_KEY_STUDIO || apiKey;
-  const modelName = 'gemini-2.5-flash';
+  const modelName = SystemConfig.MODELS.VAULT_EXTRACTION;
 
   const prompt = `
   Analyze this text note for a Life OS Vault.

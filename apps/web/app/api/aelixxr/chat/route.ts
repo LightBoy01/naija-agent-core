@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     const lastMessage = messages[messages.length - 1].content;
 
     const chat = genAI.chats.create({
-      model: 'gemini-2.0-flash-exp', // Use a fast streaming model
+      model: 'models/gemini-3.1-flash-lite', // Matches SystemConfig.MODELS.AELIXXR_WEB_CHAT
       history,
       config: {
         systemInstruction: "You are Aelixxr, the Life Companion. You provide deep, empathetic, and professional advice. Use LaTeX (enclosed in $ or $$) for any mathematical formulas or tables. Provide references and links where relevant.",

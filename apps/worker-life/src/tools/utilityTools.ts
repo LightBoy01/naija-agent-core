@@ -2,16 +2,9 @@ import { Type } from '@google/genai';
 import { logger } from '../utils/logger.js';
 import { getDb, verifyUserPin, setUserPin } from '@naija-agent/firebase';
 import { lifeMemory } from '../services/lifeMemory.js';
-import { MonnifyProvider } from '@naija-agent/payments';
+import { monnify } from '../services/monnifyClient.js';
+import { monnifyBreaker } from '../services/circuitBreaker.js';
 import { auditService } from '../services/auditService.js';
-
-const MONNIFY_KEYS = process.env.MONNIFY_API_KEY_LOS || process.env.MONNIFY_API_KEY || '';
-const MONNIFY_SECRET = process.env.MONNIFY_SECRET_KEY_LOS || process.env.MONNIFY_SECRET_KEY || '';
-const MONNIFY_CONTRACT = process.env.MONNIFY_CONTRACT_CODE_LOS || process.env.MONNIFY_CONTRACT_CODE || '';
-
-const monnify = (MONNIFY_KEYS && MONNIFY_SECRET) 
-    ? new MonnifyProvider(MONNIFY_KEYS + ':' + MONNIFY_SECRET + ':' + MONNIFY_CONTRACT) 
-    : null;
 
 const handlePinFailure = async (userId: string, context: any): Promise<string> => {
     const attempts = (context.pinAttempts || 0) + 1;
@@ -151,13 +144,13 @@ export async function executeUtilityTool(name: string, args: Record<string, any>
                 return { error: 'Oga, you no get enough money for your Vault for this ₦' + vendAmountNaira + ' purchase + ₦100 fee.' };
             }
 
-            const vendRes = await monnify.vendUtility({
+            const vendRes = await monnifyBreaker.execute(() => monnify!.vendUtility({
                 productCode: args.productCode,
                 customerId: args.customerId,
                 amount: vendAmountNaira,
                 reference: 'vend_' + args.userId + '_' + Date.now(),
                 validationReference: args.validationReference
-            });
+            }));
 
             if (vendRes.success) {
                 if (auditLogId) await auditService.updateLogStatus(auditLogId, 'success', { vendReference: vendRes.responseBody?.reference, newBalanceKobo });

@@ -5,11 +5,11 @@ export const SpamInterceptor: Interceptor = {
   name: 'Spam',
   execute: async (ctx: PipelineContext) => {
     // Only apply spam check to text messages
-    if (ctx.type !== 'text' || !ctx.job.data.text) {
+    if (ctx.type !== 'text' || !ctx.job.data.content?.text) {
       return ctx;
     }
 
-    const textPayload = ctx.job.data.text.trim();
+    const textPayload = ctx.job.data.content.text.trim();
     if (!textPayload) return ctx;
 
     // Create a short hash of the text

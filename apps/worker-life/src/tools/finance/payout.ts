@@ -3,16 +3,9 @@ import { logger } from '../../utils/logger.js';
 import { lifeMemory } from '../../services/lifeMemory.js';
 import { verifyUserPin, setUserPin } from '@naija-agent/firebase';
 import { auditService } from '../../services/auditService.js';
-import { MonnifyProvider } from '@naija-agent/payments';
+import { monnify } from '../../services/monnifyClient.js';
+import { monnifyBreaker } from '../../services/circuitBreaker.js';
 import { handlePinFailure } from './vault.js';
-
-const MONNIFY_KEYS = process.env.MONNIFY_API_KEY_LOS || process.env.MONNIFY_API_KEY || '';
-const MONNIFY_SECRET = process.env.MONNIFY_SECRET_KEY_LOS || process.env.MONNIFY_SECRET_KEY || '';
-const MONNIFY_CONTRACT = process.env.MONNIFY_CONTRACT_CODE_LOS || process.env.MONNIFY_CONTRACT_CODE || '';
-
-const monnify = (MONNIFY_KEYS && MONNIFY_SECRET) 
-    ? new MonnifyProvider(MONNIFY_KEYS + ':' + MONNIFY_SECRET + ':' + MONNIFY_CONTRACT) 
-    : null;
 
 export const PAYOUT_TOOL_DEFINITIONS = [
     {
@@ -118,13 +111,13 @@ export async function executePayoutTool(name: string, args: Record<string, any>,
                 return { error: 'Oga, you no get enough money for your Vault for this ₦' + withdrawAmountNaira + ' withdrawal + ₦50 fee.' };
             }
 
-            const payoutRes = await monnify.payout({
+            const payoutRes = await monnifyBreaker.execute(() => monnify!.payout({
                 amount: withdrawAmountNaira,
                 bankCode: args.bankCode,
                 accountNumber: args.accountNumber,
                 reference: 'withdraw_' + args.userId + '_' + Date.now(),
                 narration: 'Aelixxr Withdrawal: ' + args.userId
-            });
+            }));
 
             if (payoutRes.success) {
                 if (auditLogIdW) await auditService.updateLogStatus(auditLogIdW, 'success', { payoutReference: payoutRes.reference, newBalanceKobo });

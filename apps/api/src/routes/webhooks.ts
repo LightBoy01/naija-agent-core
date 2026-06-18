@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { z } from 'zod';
-import { WhatsAppWebhookSchema, JobData, parseAndFormatPhone } from '@naija-agent/types';
+import { WhatsAppWebhookSchema, JobData, parseAndFormatPhone, SystemConfig } from '@naija-agent/types';
 import { 
   getOrgById, 
   topupOrg as topupOrgSql, 
@@ -23,14 +23,15 @@ export interface WebhookRouteOptions {
 // Send Typing Indicator and Mark as Read
 async function sendTypingIndicator(phoneId: string, messageId: string, token: string, logger: any, from?: string) {
   try {
-    const sovereignIds = ['aelixxr', 'zynux', 'naija-agent-master', '2349015772541', '2347011925076', '1034379023092936'];
+    const sovereignIds = SystemConfig.SOVEREIGN_IDS as readonly string[];
     const isSovereign = phoneId.startsWith('baileys-') || sovereignIds.includes(phoneId) || !/^\d+$/.test(phoneId);
 
     if (isSovereign) {
        let orgId = phoneId.replace('baileys-', '');
-       if (orgId === '2349015772541') orgId = 'aelixxr-life-companion';
-       if (orgId === '2347011925076') orgId = 'zynux';
-       if (orgId === '1034379023092936') orgId = 'naija-agent-master';
+       const mapped = (SystemConfig.SOVEREIGN_ID_MAP as Record<string, string>)[orgId];
+       if (mapped) orgId = mapped;
+       // worker-life uses 'aelixxr-life-companion' for the life queue
+       if (orgId === 'aelixxr') orgId = 'aelixxr-life-companion';
 
        const sidecarUrl = process.env.SIDECAR_URL || 'http://localhost:8080';
        const apiKey = process.env.ADMIN_API_KEY;
@@ -155,7 +156,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
           const notificationJob: JobData = {
             type: 'text',
             orgId: 'system',
-            phoneId: org.whatsappPhoneId,
+            phoneId: org.whatsappPhoneId ?? '',
             from: (org.config as any).adminPhone,
             messageId: `BR-${Date.now()}`,
             timestamp: Date.now(),
@@ -195,22 +196,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
                 userPhone,
                 amountPaid,
                 reference: reference || payload.eventData?.transactionReference
-            }, { removeOnComplete: true });
-            
-            const newBalance = "Pending";
-            
-            if (newBalance !== null) {
-                const notificationJob: JobData = {
-                    type: 'text',
-                    orgId: 'system',
-                    phoneId: process.env.AELIXXR_PHONE_ID || '',
-                    from: userPhone,
-                    messageId: `BR-${Date.now()}`,
-                    timestamp: Date.now(),
-                    content: { text: `✅ *Vault Deposit Successful!*\n\nOga, your Monnify transfer of ₦${amountPaid} was received.\n\nYour new Vault balance is *₦${newBalance}*. Send me a message to convert it to Energy!` }
-                };
-                await whatsappQueue.add('process-message', notificationJob, { removeOnComplete: true });
-            }
+            }, { removeOnComplete: true, attempts: 5, backoff: { type: 'exponential', delay: 2000 } });
         } catch (err: any) {
             if (err.message === 'DUPLICATE_REFERENCE') {
                logger.info({ reference }, '⏭️ [MONNIFY] Duplicate vault deposit ignored.');
@@ -265,7 +251,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
           const notificationJob: JobData = {
             type: 'text',
             orgId: 'system',
-            phoneId: org.whatsappPhoneId,
+            phoneId: org.whatsappPhoneId ?? '',
             from: (org.config as any).adminPhone,
             messageId: `BR-${Date.now()}`,
             timestamp: Date.now(),
@@ -309,7 +295,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
        logger.warn('Could not parse raw body for dynamic secret lookup');
     }
 
-    if (!verifySignature(rawBody, signature, appSecret, logger)) {
+    if (!verifySignature(rawBody, signature, appSecret!, logger)) {
       logger.warn({ signature }, `❌ Invalid Webhook Signature!`);
       return reply.status(403).send('Invalid Signature');
     }
@@ -331,6 +317,17 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
     const message = value.messages[0];
     const businessPhoneId = value.metadata.phone_number_id;
     const from = message.from;
+
+    // Rate limit: max 10 messages per minute per phone number
+    if (from) {
+      const rateKey = `wl:rate:${from}`;
+      const rateCount = await redisConnection.incr(rateKey);
+      if (rateCount === 1) await redisConnection.expire(rateKey, 60);
+      if (rateCount > 10) {
+        logger.warn({ from, count: rateCount }, 'Rate limit exceeded');
+        return reply.status(429).send('OK');
+      }
+    }
 
     const fromNormalized = parseAndFormatPhone(from) || from;
     let org = await findOrgByAdminPhone(fromNormalized);
