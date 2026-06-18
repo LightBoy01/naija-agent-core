@@ -145,6 +145,19 @@ export class AIOrchestrator implements AIProvider {
   }
 
   async embedText(text: string): Promise<number[]> {
-    return this.executeWithFailover('reasoning', 'low', undefined, (p) => p.embedText(text));
+    // Embeddings bypass the router — always use Gemini embeddings directly
+    // to avoid confusing routing logs (gemini-3.1-flash-lite is NOT an embedding model)
+    const embedModel = process.env.GEMINI_API_KEY_EMBEDDING || process.env.GEMINI_API_KEY_STUDIO;
+    if (!this.providers.has('_embedding')) {
+      const apiKey = process.env.GEMINI_API_KEY_STUDIO || process.env.GEMINI_API_KEY || '';
+      this.providers.set('_embedding', AIFactory.createProvider({
+        type: 'gemini',
+        apiKey,
+        baseURL: 'https://generativelanguage.googleapis.com',
+        model: 'gemini-embedding-2'
+      }));
+    }
+    const provider = this.providers.get('_embedding')!;
+    return provider.embedText(text);
   }
 }

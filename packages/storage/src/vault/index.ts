@@ -340,15 +340,24 @@ export async function searchVault(userId: string, query: string): Promise<VaultD
     const results = snapshot.docs.map(d => d.data() as VaultDocument);
     const lowerQuery = query.toLowerCase();
     
-    // Filter results
-    const filtered = results.filter((d: VaultDocument) => 
-        (d.title && d.title.toLowerCase().includes(lowerQuery)) ||
-        d.summary.toLowerCase().includes(lowerQuery) || 
-        (d.content && d.content.toLowerCase().includes(lowerQuery)) || 
-        (d.type && d.type.toLowerCase().includes(lowerQuery)) ||
-        (d.extractedData?.issuer && d.extractedData.issuer.toLowerCase().includes(lowerQuery)) ||
-        d.tags.some((t: string) => t.toLowerCase().includes(lowerQuery))
-    );
+    // Tokenize query into individual words for substring matching
+    // "naira wallet password hunter2" → ["naira","wallet","password","hunter2"]
+    // This ensures partial matches work even when content has punctuation (e.g. "password: hunter2")
+    const tokens = lowerQuery.split(/\s+/).filter(t => t.length > 1);
+    
+    // Filter results — a document matches if ANY field contains ALL significant tokens
+    const filtered = results.filter((d: VaultDocument) => {
+        const fieldText = [
+            d.title || '',
+            d.summary || '',
+            d.content || '',
+            d.type || '',
+            d.extractedData?.issuer || '',
+            ...(d.tags || [])
+        ].map(f => f.toLowerCase()).join(' ');
+        
+        return tokens.every(token => fieldText.includes(token));
+    });
 
     // --- CONTEXT SAFETY: Limit final return to 5 most relevant items ---
     const finalResults = filtered.slice(0, 5);
