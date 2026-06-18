@@ -17,7 +17,7 @@ export class UserService {
       
       if (!user) {
         await sqlDb.insert(users).values({
-          phone,
+          phone: safePhone,
           name: 'User',
           energyCredits: 100,
           vaultBalanceKobo: 0,
@@ -54,7 +54,8 @@ export class UserService {
   async checkExists(phone: string): Promise<boolean> {
     try {
       const sqlDb = getDb();
-      const userResult = await sqlDb.select({ phone: users.phone }).from(users).where(sql`${users.phone} = ${phone}` as any).limit(1);
+      const safePhone = parseAndFormatPhone(phone) || phone;
+      const userResult = await sqlDb.select({ phone: users.phone }).from(users).where(sql`${users.phone} = ${safePhone}` as any).limit(1);
       return userResult.length > 0;
     } catch {
       return false;
@@ -64,7 +65,8 @@ export class UserService {
   async updateContext(phone: string, updates: Partial<LifeContext>): Promise<void> {
     try {
       const sqlDb = getDb();
-      const userResult = await sqlDb.select({ context: users.context }).from(users).where(sql`${users.phone} = ${phone}` as any).limit(1);
+      const safePhone = parseAndFormatPhone(phone) || phone;
+      const userResult = await sqlDb.select({ context: users.context }).from(users).where(sql`${users.phone} = ${safePhone}` as any).limit(1);
       if (userResult[0]) {
         const currentContext = userResult[0].context as Record<string, any> || {};
         const sqlUpdates: any = { 
@@ -73,7 +75,7 @@ export class UserService {
         };
         if (updates.pinAttempts !== undefined) sqlUpdates.pinAttempts = updates.pinAttempts;
         if (updates.pinLockUntil !== undefined) sqlUpdates.pinLockUntil = updates.pinLockUntil;
-        await sqlDb.update(users).set(sqlUpdates).where(sql`${users.phone} = ${phone}` as any);
+        await sqlDb.update(users).set(sqlUpdates).where(sql`${users.phone} = ${safePhone}` as any);
       }
       logger.info({ phone, updates }, '💾 Updated Life Memory (PostgreSQL)');
     } catch (error: any) {

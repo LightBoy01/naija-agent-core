@@ -1,4 +1,5 @@
 import { getDb, users, energyLedger, transactions, eq, sql } from '@naija-agent/database';
+import { parseAndFormatPhone } from '@naija-agent/types';
 import { logger } from '../utils/logger.js';
 import { randomUUID } from 'crypto';
 
@@ -6,10 +7,11 @@ export class EnergyService {
   async deductEnergy(phone: string, amount: number, reason?: string, jobId?: string): Promise<number | null> {
     try {
       const sqlDb = getDb();
+      const safePhone = parseAndFormatPhone(phone) || phone;
       let newBalance: number | null = null;
 
       await sqlDb.transaction(async (tx) => {
-        const userResult = await tx.select().from(users).where(sql`${users.phone} = ${phone}` as any);
+        const userResult = await tx.select().from(users).where(sql`${users.phone} = ${safePhone}` as any);
         const user = userResult[0];
         
         if (!user) throw new Error('User profile not found in Database');
@@ -23,12 +25,12 @@ export class EnergyService {
         
         await tx.update(users)
           .set({ energyCredits: newBalance, updatedAt: new Date() })
-          .where(sql`${users.phone} = ${phone}` as any);
+          .where(sql`${users.phone} = ${safePhone}` as any);
 
         // Write immutable audit entry
         await tx.insert(energyLedger).values({
           id: randomUUID(),
-          userId: phone,
+          userId: safePhone,
           amount: -amount,
           reason: reason || 'deduction',
           balanceAfter: newBalance,
@@ -46,6 +48,7 @@ export class EnergyService {
   async addEnergy(phone: string, amount: number, reference?: string, reason?: string): Promise<number | null> {
     try {
       const sqlDb = getDb();
+      const safePhone = parseAndFormatPhone(phone) || phone;
       let newBalance: number | null = null;
 
       await sqlDb.transaction(async (tx) => {
@@ -54,21 +57,21 @@ export class EnergyService {
           if (txExists.length > 0) throw new Error('DUPLICATE_REFERENCE');
         }
 
-        const userResult = await tx.select().from(users).where(sql`${users.phone} = ${phone}` as any);
+        const userResult = await tx.select().from(users).where(sql`${users.phone} = ${safePhone}` as any);
         let user = userResult[0];
 
         if (!user) {
-          await tx.insert(users).values({ phone, energyCredits: amount });
+          await tx.insert(users).values({ phone: safePhone, energyCredits: amount });
           newBalance = amount;
         } else {
           newBalance = user.energyCredits + amount;
-          await tx.update(users).set({ energyCredits: newBalance, updatedAt: new Date() }).where(sql`${users.phone} = ${phone}` as any);
+          await tx.update(users).set({ energyCredits: newBalance, updatedAt: new Date() }).where(sql`${users.phone} = ${safePhone}` as any);
         }
 
         // Write immutable audit entry
         await tx.insert(energyLedger).values({
           id: randomUUID(),
-          userId: phone,
+          userId: safePhone,
           amount: amount,
           reason: reason || 'topup',
           balanceAfter: newBalance,
@@ -78,7 +81,7 @@ export class EnergyService {
         if (reference && reference.toLowerCase() !== 'unknown') {
           await tx.insert(transactions).values({
             id: randomUUID(),
-            userId: phone,
+            userId: safePhone,
             type: 'energy_topup',
             amount: amount.toString(),
             currency: 'CREDITS',
