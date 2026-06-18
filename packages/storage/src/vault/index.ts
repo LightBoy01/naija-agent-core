@@ -258,7 +258,34 @@ export async function ingestDocument(
   });
   logger.info({ userId, docId }, '✅ Saved to PostgreSQL Vault (vault_documents)');
 
-  return doc;
+  return {
+    id: docId,
+    userId,
+    orgId: options?.orgId,
+    type: analysis.category || 'Other',
+    title: analysis.title || 'Untitled File',
+    summary: analysis.summary || 'Uploaded File',
+    content: analysis.content || undefined,
+    extractedData: {
+      amount: analysis.amount ?? null,
+      currency: analysis.currency ?? null,
+      date: analysis.date ?? null,
+      issuer: analysis.issuer ?? null,
+      receiver: analysis.receiver ?? null,
+      reference: analysis.reference ?? null,
+      duration: analysis.duration ?? null,
+      forensicAnalysis: analysis.forensicAnalysis ?? null,
+    },
+    storageUrl: url,
+    gcsUri: gcsUri || undefined,
+    provider: provider || 'local',
+    originalMediaId: options?.originalMediaId || undefined,
+    mimeType,
+    caption: options?.caption || undefined,
+    createdAt: now.toISOString(),
+    tags: analysis.tags || [],
+    embedding: embedding.length > 0 ? embedding : undefined,
+  } as VaultDocument;
 }
 
 // --- Main: Ingest Note (Text) ---
@@ -411,7 +438,7 @@ export async function getVaultFile(userId: string, docId: string): Promise<any> 
             .where(sql`${vaultDocuments.userId} = ${userId} AND ${vaultDocuments.id} = ${docId}`)
             .limit(1);
         if (!docs.length) return null;
-        return { id: docs[0].id, ...rowToVaultDoc(docs[0]) };
+        return rowToVaultDoc(docs[0]);
     } catch (e) {
         return null;
     }
