@@ -1,6 +1,8 @@
 import { Storage } from '@google-cloud/storage';
 import { v2 as cloudinary } from 'cloudinary';
-import { getDb } from '@naija-agent/firebase';
+import { getDb } from '@naija-agent/database';
+import { vaultDocuments } from '@naija-agent/database';
+import { eq, sql, desc, like, or } from 'drizzle-orm';
 import { SystemConfig } from '@naija-agent/types';
 import { GoogleGenAI } from '@google/genai';
 import crypto from 'crypto';
@@ -220,40 +222,41 @@ export async function ingestDocument(
   // 3. Generate Embedding
   const embedding = await getMultimodalEmbedding(buffer, mimeType, gcsUri, analysis.summary, apiKey);
 
-  // 4. Save to Database (The "Index")
+  // 4. Save to Database (PostgreSQL via Drizzle)
   const docId = crypto.randomUUID();
-  const doc: VaultDocument = {
+  const now = new Date();
+  
+  const db = getDb();
+  await db.insert(vaultDocuments).values({
     id: docId,
     userId,
-    orgId: options?.orgId,
+    orgId: options?.orgId || null,
     type: analysis.category || 'Other',
     title: analysis.title || 'Untitled File',
     summary: analysis.summary || 'Uploaded File',
-    content: analysis.content,
+    content: analysis.content || null,
     extractedData: {
-      amount: analysis.amount,
-      currency: analysis.currency,
-      date: analysis.date,
-      issuer: analysis.issuer,
-      receiver: analysis.receiver,
-      reference: analysis.reference,
-      duration: analysis.duration,
-      forensicAnalysis: analysis.forensicAnalysis
+      amount: analysis.amount ?? null,
+      currency: analysis.currency ?? null,
+      date: analysis.date ?? null,
+      issuer: analysis.issuer ?? null,
+      receiver: analysis.receiver ?? null,
+      reference: analysis.reference ?? null,
+      duration: analysis.duration ?? null,
+      forensicAnalysis: analysis.forensicAnalysis ?? null,
     },
     storageUrl: url,
-    gcsUri,
-    provider,
-    originalMediaId: options?.originalMediaId,
+    gcsUri: gcsUri || null,
+    provider: provider || 'local',
+    originalMediaId: options?.originalMediaId || null,
     mimeType,
-    caption: options?.caption,
-    createdAt: new Date().toISOString(),
+    caption: options?.caption || null,
     tags: analysis.tags || [],
-    embedding
-  };
-
-  const cleanDoc = JSON.parse(JSON.stringify(doc));
-  await getDb().collection('vault').doc(userId).collection('docs').doc(docId).set(cleanDoc);
-  logger.info({ userId, docId }, '✅ Saved to Multi-Tenant Vault Index');
+    embedding: embedding.length > 0 ? { data: embedding } as any : null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  logger.info({ userId, docId }, '✅ Saved to PostgreSQL Vault (vault_documents)');
 
   return doc;
 }
@@ -292,60 +295,72 @@ export async function ingestNote(
     analysis = safeParseJSON(text) || analysis;
   } catch (e) {}
 
-  // 2. Save to Database
+  // 2. Save to Database (PostgreSQL)
   const docId = crypto.randomUUID();
-  const doc: VaultDocument = {
+  const now = new Date();
+  
+  const db = getDb();
+  await db.insert(vaultDocuments).values({
     id: docId,
     userId,
+    orgId: options?.orgId || null,
     type: 'Note',
     title: analysis.title,
     summary: analysis.summary,
-    content: content,
+    content,
     mimeType: 'text/plain',
     extractedData: {},
-    createdAt: new Date().toISOString(),
     tags: analysis.tags || [],
-    provider: 'local'
-  };
+    provider: 'local',
+    createdAt: now,
+    updatedAt: now,
+  });
+  logger.info({ userId, docId }, '✅ Note Saved to PostgreSQL Vault');
 
-  if (options?.orgId) doc.orgId = options.orgId;
-
-  const cleanDoc = JSON.parse(JSON.stringify(doc));
-  await getDb().collection('vault').doc(userId).collection('docs').doc(docId).set(cleanDoc);
-  logger.info({ userId, docId }, '✅ Note Saved to Index');
-
-  return doc;
+  return {
+    id: docId,
+    userId,
+    orgId: options?.orgId,
+    type: 'Note',
+    title: analysis.title,
+    summary: analysis.summary,
+    content,
+    mimeType: 'text/plain',
+    extractedData: {},
+    createdAt: now.toISOString(),
+    tags: analysis.tags || [],
+    provider: 'local',
+  } as VaultDocument;
 }
 
 // --- Main: Search Vault ---
 export async function searchVault(userId: string, query: string): Promise<VaultDocument[]> {
-    logger.info({ userId, query }, '🔍 Searching Vault...');
+    logger.info({ userId, query }, '🔍 Searching PostgreSQL Vault...');
 
-    // --- ID SEARCH OPTIMIZATION (Security Patch: UUID Detection) ---
-    // If the query looks like a UUID, try to fetch it directly first
+    const db = getDb();
+    const lowerQuery = query.toLowerCase();
+    const tokens = lowerQuery.split(/\s+/).filter(t => t.length > 1);
+
+    // --- ID SEARCH OPTIMIZATION: UUID Detection ---
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (uuidRegex.test(query.trim())) {
-        const doc = await getDb().collection('vault').doc(userId).collection('docs').doc(query.trim()).get();
-        if (doc.exists) {
+        const docs = await db.select().from(vaultDocuments)
+            .where(sql`${vaultDocuments.userId} = ${userId} AND ${vaultDocuments.id} = ${query.trim()}`)
+            .limit(1);
+        if (docs.length > 0) {
             logger.info({ userId, docId: query }, '✅ Found specific document via ID search');
-            return [doc.data() as VaultDocument];
+            return docs.map(rowToVaultDoc);
         }
     }
 
-    const snapshot = await getDb().collection('vault').doc(userId).collection('docs')
-        .orderBy('createdAt', 'desc')
-        .limit(100) // Fetch up to 100 for filtering
-        .get();
+    // Full-text search: fetch all user docs and filter in-memory (tokens across fields)
+    const allDocs = await db.select().from(vaultDocuments)
+        .where(sql`${vaultDocuments.userId} = ${userId}`)
+        .orderBy(desc(vaultDocuments.createdAt))
+        .limit(200);
 
-    const results = snapshot.docs.map(d => d.data() as VaultDocument);
-    const lowerQuery = query.toLowerCase();
+    const results = allDocs.map(rowToVaultDoc);
     
-    // Tokenize query into individual words for substring matching
-    // "naira wallet password hunter2" → ["naira","wallet","password","hunter2"]
-    // This ensures partial matches work even when content has punctuation (e.g. "password: hunter2")
-    const tokens = lowerQuery.split(/\s+/).filter(t => t.length > 1);
-    
-    // Filter results — a document matches if ANY field contains ALL significant tokens
     const filtered = results.filter((d: VaultDocument) => {
         const fieldText = [
             d.title || '',
@@ -359,10 +374,31 @@ export async function searchVault(userId: string, query: string): Promise<VaultD
         return tokens.every(token => fieldText.includes(token));
     });
 
-    // --- CONTEXT SAFETY: Limit final return to 5 most relevant items ---
     const finalResults = filtered.slice(0, 5);
-    logger.info({ userId, query, count: finalResults.length }, '✅ Search completed');
+    logger.info({ userId, query, count: finalResults.length }, '✅ PostgreSQL vault search completed');
     return finalResults;
+}
+
+function rowToVaultDoc(row: typeof vaultDocuments.$inferSelect): VaultDocument {
+  return {
+    id: row.id,
+    userId: row.userId,
+    orgId: row.orgId ?? undefined,
+    type: row.type as VaultDocument['type'],
+    title: row.title ?? 'Untitled',
+    summary: row.summary,
+    content: row.content ?? undefined,
+    extractedData: (row.extractedData as any) ?? {},
+    storageUrl: row.storageUrl ?? undefined,
+    gcsUri: row.gcsUri ?? undefined,
+    provider: (row.provider as VaultDocument['provider']) ?? 'local',
+    originalMediaId: row.originalMediaId ?? undefined,
+    mimeType: row.mimeType,
+    caption: row.caption ?? undefined,
+    createdAt: row.createdAt.toISOString(),
+    tags: (row.tags as string[]) ?? [],
+    embedding: (row.embedding as any)?.data,
+  };
 }
 
 /**
@@ -370,9 +406,12 @@ export async function searchVault(userId: string, query: string): Promise<VaultD
  */
 export async function getVaultFile(userId: string, docId: string): Promise<any> {
     try {
-        const doc = await getDb().collection('vault').doc(userId).collection('docs').doc(docId).get();
-        if (!doc.exists) return null;
-        return { id: doc.id, ...doc.data() };
+        const db = getDb();
+        const docs = await db.select().from(vaultDocuments)
+            .where(sql`${vaultDocuments.userId} = ${userId} AND ${vaultDocuments.id} = ${docId}`)
+            .limit(1);
+        if (!docs.length) return null;
+        return { id: docs[0].id, ...rowToVaultDoc(docs[0]) };
     } catch (e) {
         return null;
     }
@@ -381,11 +420,14 @@ export async function getVaultFile(userId: string, docId: string): Promise<any> 
 // --- Main: Delete from Vault ---
 export async function deleteFromVault(userId: string, docId: string): Promise<boolean> {
   try {
-    await getDb().collection('vault').doc(userId).collection('docs').doc(docId).delete();
-    logger.info({ userId, docId }, '🗑️ Deleted from Vault');
+    const db = getDb();
+    await db.delete(vaultDocuments).where(
+      sql`${vaultDocuments.userId} = ${userId} AND ${vaultDocuments.id} = ${docId}`
+    );
+    logger.info({ userId, docId }, '🗑️ Deleted from PostgreSQL Vault');
     return true;
   } catch (error: any) {
-    logger.error({ userId, docId, error: error.message }, '❌ Failed to delete from Vault');
+    logger.error({ userId, docId, error: error.message }, '❌ Failed to delete from PostgreSQL Vault');
     return false;
   }
 }
