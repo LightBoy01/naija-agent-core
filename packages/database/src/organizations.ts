@@ -130,6 +130,59 @@ export async function getPendingSetups() {
   return await db.select().from(organizations).where(eq(organizations.whatsappPhoneId, 'PENDING'));
 }
 
+export async function setOrgOnboarding(orgId: string, step: string, data: Record<string, any> = {}) {
+  const db = getDb();
+  await db.update(organizations).set({
+    onboardingStep: step,
+    onboardingData: data,
+    updatedAt: new Date(),
+  }).where(eq(organizations.id, orgId));
+}
+
+export async function completeOnboarding(orgId: string, finalConfig: {
+  name?: string;
+  adminPin: string;
+  bankName?: string;
+  accountNumber?: string;
+  accountName?: string;
+  systemPrompt?: string;
+  timezone?: string;
+  botPhone?: string;
+}) {
+  const db = getDb();
+  const org = await getOrgById(orgId);
+  if (!org) throw new Error(`Organization ${orgId} not found`);
+
+  let hashedPin = finalConfig.adminPin;
+  const isBcrypt = /^\$2[aby]\$.{56}$/.test(hashedPin);
+  if (!isBcrypt) {
+    hashedPin = await bcrypt.hash(hashedPin, 10);
+  }
+
+  const config = (org.config as any) || {};
+  config.adminPin = hashedPin;
+  if (finalConfig.bankName || finalConfig.accountNumber || finalConfig.accountName) {
+    config.bankDetails = {
+      bankName: finalConfig.bankName,
+      accountNumber: finalConfig.accountNumber,
+      accountName: finalConfig.accountName,
+    };
+  }
+  if (finalConfig.systemPrompt) {
+    config.systemPrompt = finalConfig.systemPrompt;
+  }
+
+  await db.update(organizations).set({
+    name: finalConfig.name || org.name,
+    onboardingStep: 'COMPLETE',
+    onboardingData: null,
+    systemPrompt: finalConfig.systemPrompt || org.systemPrompt,
+    config,
+    isActive: true,
+    updatedAt: new Date(),
+  }).where(eq(organizations.id, orgId));
+}
+
 export async function activateTenant(orgId: string, phoneId: string, accessToken: string) {
   const db = getDb();
   const org = await getOrgById(orgId);

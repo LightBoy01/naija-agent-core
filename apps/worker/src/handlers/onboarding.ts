@@ -10,10 +10,17 @@ import {
   createTenant,
   Organization
 } from '@naija-agent/firebase';
+import {
+  setOrgOnboarding as pgSetOrgOnboarding,
+  completeOnboarding as pgCompleteOnboarding,
+  createTenant as pgCreateTenant,
+  activateTenant as pgActivateTenant,
+} from '@naija-agent/database';
 import { Redis } from 'ioredis';
 import { formatCurrency } from '../utils/currency.js';
 import { logger } from '../utils/logger.js';
 import crypto from 'crypto';
+import bcrypt from 'bcrypt';
 import axios from 'axios';
 
 export async function handleOnboarding(
@@ -56,8 +63,16 @@ export async function handleOnboarding(
                 reply = "Abeg, type a proper business name.";
              } else {
                 nextData.name = text;
+                nextStep = 'PIN';
+                reply = `Nice name! *${nextData.name}* is going to be big! 🌟\n\nNow, create a *4-digit Admin PIN* to secure your account.\n\n(e.g. 4321)`;
+             }
+          } else if (nextStep === 'PIN') {
+             if (text.length !== 4 || isNaN(parseInt(text))) {
+                reply = "Use exactly 4 numbers for your PIN.";
+             } else {
+                nextData.adminPin = await bcrypt.hash(text, 10);
                 nextStep = 'BOT_PHONE';
-                reply = `Nice name! *${nextData.name}* is going to be big! 🌟\n\nNow, tell me the *Phone Number* of the SIM card you put inside your bot phone.\n\n(e.g. 08012345678)`;
+                reply = `PIN secured! 🔐\n\nNow, tell me the *Phone Number* of the SIM card you put inside your bot phone.\n\n(e.g. 08012345678)`;
              }
           } else if (nextStep === 'BOT_PHONE') {
              const botPhone = text.replace(/\s+/g, '');
@@ -69,19 +84,48 @@ export async function handleOnboarding(
                 await tenantWhatsAppService.sendText(from, reply);
 
                 try {
-                   // 1. Create Tenant Document
+                   // 1. Create Tenant (Firebase + PostgreSQL dual-write)
                    const newOrgId = `org_${crypto.randomBytes(4).toString('hex')}`;
                    await createTenant({
                       id: newOrgId,
                       name: nextData.name,
                       whatsappPhoneId: 'PENDING',
                       adminPhone: from,
-                      adminPin: '0000', // Default hash placeholder for setup
+                      adminPin: nextData.adminPin,
                       systemPrompt: `You are the AI Assistant for ${nextData.name}.`,
                       timezone: 'Africa/Lagos'
                    });
+                   
+                   // Drizzle write
+                   try {
+                     await pgCreateTenant({
+                       id: newOrgId,
+                       name: nextData.name,
+                       whatsappPhoneId: 'PENDING',
+                       adminPhone: from,
+                       adminPin: nextData.adminPin,
+                       systemPrompt: `You are the AI Assistant for ${nextData.name}.`,
+                       timezone: 'Africa/Lagos'
+                     });
+                   } catch (e: any) {
+                     logger.warn({ orgId: newOrgId, error: e.message }, '⚠️ [PROSPECT] PG dual-write failed, continuing');
+                   }
 
-                   // 2. Request Pairing Code from Sidecar
+                   // 2. Pre-check: validate phone is not already linked
+                   const { parseAndFormatPhone } = await import('@naija-agent/types');
+                   const normalizedBotPhone = parseAndFormatPhone(botPhone);
+                   if (normalizedBotPhone) {
+                       const rawPhone = normalizedBotPhone.replace('+', '');
+                       const jid = `${rawPhone}@s.whatsapp.net`;
+                       const existingOrg = await redisClient.get(`sidecar_map:${jid}`);
+                       if (existingOrg) {
+                          reply = `⚠️ *Phone Already Registered:* The number ${botPhone} is already linked to another account. Please use a different SIM card.\n\nStart over by typing the referral link again.`;
+                          await redisClient.del(prospectKey);
+                          return { success: true };
+                       }
+                   }
+
+                   // 3. Request Pairing Code from Sidecar
                    const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
                    const apiKey = process.env.ADMIN_API_KEY;
 
@@ -99,9 +143,7 @@ export async function handleOnboarding(
                    const pairingCode = response.data.code;
                    if (!pairingCode) throw new Error('Sidecar failed to generate pairing code.');
 
-                   // 3. Set Redis Mapping (for Sidecar routing)
-                   const { parseAndFormatPhone } = await import('@naija-agent/types');
-                   const normalizedBotPhone = parseAndFormatPhone(botPhone);
+                   // 4. Set Redis Mapping (for Sidecar routing)
                    if (normalizedBotPhone) {
                        const rawPhone = normalizedBotPhone.replace('+', '');
                        const jid = `${rawPhone}@s.whatsapp.net`;
@@ -110,7 +152,7 @@ export async function handleOnboarding(
                        logger.info({ orgId: newOrgId, jid }, '🔗 [AUTO-ONBOARDING] Hydrated sidecar mapping in Redis');
                    }
 
-                   // 4. Update Tenant with Pending Setup
+                   // 5. Update Tenant with Pending Setup (Firebase)
                    const { getDb } = await import('@naija-agent/firebase');
                    await (await getDb()).collection('organizations').doc(newOrgId).update({
                        status: 'AWAITING_SIDECAR',
@@ -121,14 +163,18 @@ export async function handleOnboarding(
                        }
                    });
 
-                   // 5. Cleanup Prospect State
+                   // 6. Cleanup Prospect State
                    await redisClient.del(prospectKey);
 
                    reply = `✅ *Account Created!* \n\n🔑 *YOUR PAIRING CODE:* ${pairingCode}\n\n👉 *To Activate:*\n1. Open WhatsApp on your *Bot Phone* (${botPhone}).\n2. Go to **Settings > Linked Devices**.\n3. Tap **Link a Device**.\n4. Tap **Link with phone number instead**.\n5. Enter the code above.\n\nOnce done, your Digital Apprentice will wake up! 🚀`;
 
                 } catch (e: any) {
                    logger.error({ error: e.message }, '❌ [PROSPECT FLOW] Sidecar Pairing Failed');
-                   reply = `❌ *Setup Failed:* ${e.message}\n\nPlease check the number and try again.`;
+                   if (e.response?.status === 409 || (e.message && e.message.includes('already'))) {
+                      reply = `⚠️ *Phone Already Registered:* The number ${botPhone} is already linked to WhatsApp. Please use a fresh SIM card that hasn't been used with WhatsApp Web before.\n\nStart over by typing the referral link again.`;
+                   } else {
+                      reply = `❌ *Setup Failed:* ${e.message}\n\nPlease check that the phone number is correct and has an active SIM card, then try again.`;
+                   }
                 }
              }
           }
@@ -175,6 +221,11 @@ export async function handleOnboarding(
              // 4. Update Firestore status
              const { activateTenant: activate } = await import('@naija-agent/firebase');
              await activate(target.id, setup.phoneId, setup.accessToken);
+             try {
+               await pgActivateTenant(target.id, setup.phoneId, setup.accessToken);
+             } catch (e: any) {
+               logger.warn({ orgId: target.id, error: e.message }, '⚠️ [AUTO-IGNITION] PG dual-write failed, continuing');
+             }
 
              // 5. Cleanup pending data
              const { getDb } = await import('@naija-agent/firebase');
@@ -450,10 +501,29 @@ export async function handleOnboarding(
           await tenantWhatsAppService.sendText(from, reply);
 
           try {
-             // 1. Save Preliminary Data
-             await completeOnboarding(orgId, { ...nextData, botPhone: botPhone }); 
+             // 1. Save Preliminary Data (Firebase + PostgreSQL)
+             await completeOnboarding(orgId, { ...nextData, botPhone: botPhone });
+             try {
+               await pgCompleteOnboarding(orgId, { ...nextData, adminPin: nextData.adminPin!, botPhone: botPhone });
+             } catch (e: any) {
+               logger.warn({ orgId, error: e.message }, '⚠️ [ONBOARDING] PG completeOnboarding dual-write failed, continuing');
+             }
              
-             // 2. Request Pairing Code from Sidecar
+             // 2. Pre-check: validate phone is not already linked
+             const { parseAndFormatPhone } = await import('@naija-agent/types');
+             const normalizedBotPhone = parseAndFormatPhone(botPhone);
+             if (normalizedBotPhone) {
+                 const rawPhone = normalizedBotPhone.replace('+', '');
+                 const jid = `${rawPhone}@s.whatsapp.net`;
+                 const existingOrg = await redisClient.get(`sidecar_map:${jid}`);
+                 if (existingOrg && existingOrg !== orgId) {
+                    reply = `⚠️ *Phone Already Registered:* The number ${botPhone} is already linked to another account. Please use a different SIM card.\n\nType *#reset* to start over.`;
+                    await tenantWhatsAppService.sendText(from, reply);
+                    return { success: true };
+                 }
+             } 
+             
+             // 3. Request Pairing Code from Sidecar
              const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
              const apiKey = process.env.ADMIN_API_KEY;
 
@@ -471,9 +541,7 @@ export async function handleOnboarding(
              const pairingCode = response.data.code;
              if (!pairingCode) throw new Error('Sidecar failed to generate pairing code.');
 
-             // 3. Set Redis Mapping (for Sidecar routing)
-             const { parseAndFormatPhone } = await import('@naija-agent/types');
-             const normalizedBotPhone = parseAndFormatPhone(botPhone);
+             // 4. Set Redis Mapping (for Sidecar routing)
              if (normalizedBotPhone) {
                  const rawPhone = normalizedBotPhone.replace('+', '');
                  const jid = `${rawPhone}@s.whatsapp.net`;
@@ -482,9 +550,9 @@ export async function handleOnboarding(
                  logger.info({ orgId, jid }, '🔗 [AUTO-ONBOARDING] Hydrated sidecar mapping in Redis');
              }
 
-             // 4. Update Org with Pending Setup
-             const { getDb } = await import('@naija-agent/firebase');
-             await (await getDb()).collection('organizations').doc(orgId).update({
+             // 5. Update Org with Pending Setup
+             const { getDb: getFbDb } = await import('@naija-agent/firebase');
+             await (await getFbDb()).collection('organizations').doc(orgId).update({
                  whatsappPhoneId: 'PENDING',
                  status: 'AWAITING_SIDECAR',
                  pendingSetup: {
@@ -499,7 +567,11 @@ export async function handleOnboarding(
 
           } catch (e: any) {
              logger.error({ orgId, error: e.message }, '❌ [AUTO-ONBOARDING] Sidecar Pairing Failed');
-             reply = `❌ *Setup Failed:* ${e.message}\n\nPlease check if the SIM is active and try again.`;
+             if (e.response?.status === 409 || (e.message && e.message.includes('already'))) {
+                reply = `⚠️ *Phone Already Linked:* The number ${botPhone} is already linked to WhatsApp. Please use a fresh SIM card.\n\nType *#reset* to start over.`;
+             } else {
+                reply = `❌ *Setup Failed:* ${e.message}\n\nPlease check if the SIM is active and try again.`;
+             }
           }
       } else if (nextStep === 'OTP_WAIT') {
           // --- SIDECAR ACTIVATION MONITOR ---
@@ -511,6 +583,11 @@ export async function handleOnboarding(
 
       if (reply) {
           await setOrgOnboarding(orgId, nextStep, nextData);
+          try {
+            await pgSetOrgOnboarding(orgId, nextStep, nextData);
+          } catch (e: any) {
+            logger.warn({ orgId, error: e.message }, '⚠️ [ONBOARDING] PG setOrgOnboarding dual-write failed, continuing');
+          }
           await tenantWhatsAppService.sendText(from, reply);
           return { success: true };
       }
