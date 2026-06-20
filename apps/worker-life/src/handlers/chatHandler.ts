@@ -5,7 +5,6 @@ import { getChatHistory, saveMessage } from '@naija-agent/database';
 import { logger } from '../utils/logger.js';
 import { whatsappService } from '../services/whatsapp.js';
 import { promptService } from '../services/promptService.js';
-import { Formatter } from '../utils/formatter.js';
 import { AIProvider, AIMessage } from '@naija-agent/ai';
 
 import { LifePipeline } from '../pipeline/index.js';
@@ -172,7 +171,7 @@ DO NOT just repeat the report; provide the 'So What?' for the user's life.`;
     });
 
     if (result.text) {
-        await whatsappService.sendText(userPhone, Formatter.format(result.text), phoneId);
+        await whatsappService.sendText(userPhone, result.text, phoneId);
         await saveMessage(resumeChatId, { role: 'assistant', content: result.text, type: 'text' });
     }
 

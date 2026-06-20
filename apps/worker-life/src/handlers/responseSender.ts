@@ -1,7 +1,6 @@
 import { saveMessage } from '@naija-agent/database';
 import { whatsappService } from '../services/whatsapp.js';
 import { billingService } from '../services/billingService.js';
-import { Formatter } from '../utils/formatter.js';
 import { logger } from '../utils/logger.js';
 
 export interface ResponseSenderInput {
@@ -19,7 +18,7 @@ export async function sendResponse(input: ResponseSenderInput): Promise<void> {
   const { userPhone, phoneId, text, chatId, ctxType, safeUserMessage, thinking, resultThinking } = input;
 
   await billingService.billForMessage(userPhone);
-  await whatsappService.sendText(userPhone, Formatter.format(text), phoneId);
+  await whatsappService.sendText(userPhone, text, phoneId);
 
   await saveMessage(chatId, { role: 'user', content: safeUserMessage, type: ctxType as any });
 

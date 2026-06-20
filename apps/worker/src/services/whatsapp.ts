@@ -3,6 +3,7 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { parsePhoneNumber } from 'libphonenumber-js';
 import { SystemConfig } from '@naija-agent/types';
+import { Formatter } from '../utils/formatter.js';
 
 const WhatsAppSendResponseSchema = z.object({
   messaging_product: z.literal('whatsapp'),
@@ -42,7 +43,10 @@ export class WhatsAppService {
     if (!body) {
       console.warn('⚠️ [WHATSAPP_SERVICE] Attempted to send empty text. Using fallback.');
     }
-    const finalBody = body || "I'm sorry, I couldn't generate a response. Please try again.";
+    let finalBody = body || "I'm sorry, I couldn't generate a response. Please try again.";
+
+    // Format text for WhatsApp (markdown conversion, tables, LaTeX, links, code protection)
+    finalBody = Formatter.format(finalBody);
 
     // --- SOVEREIGN ROUTING ---
     const sovereignIds = SystemConfig.SOVEREIGN_IDS as readonly string[];
@@ -64,7 +68,13 @@ export class WhatsAppService {
     let lastMessageId = '';
 
     try {
-      for (const chunk of chunks) {
+      for (let i = 0; i < chunks.length; i++) {
+        let chunk = chunks[i];
+        // Append chunk indicator for multi-part messages
+        if (chunks.length > 1) {
+          chunk += ` (${i + 1}/${chunks.length})`;
+        }
+
         const response = await axios.post(
           `${this.baseUrl}/${this.phoneId}/messages`,
           {

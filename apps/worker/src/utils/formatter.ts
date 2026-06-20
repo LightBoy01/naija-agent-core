@@ -182,16 +182,6 @@ export class Formatter {
 
   // ─── Markdown → WhatsApp conversion ──────────────────────────────
 
-  /**
-   * WhatsApp formatting syntax:
-   *   *bold*       (not **bold**)
-   *   _italic_     (not *italic* single-asterisk — actually WhatsApp
-   *                 accepts both * and _ for italic, so single-asterisk
-   *                 is left alone)
-   *   ~strikethrough~
-   *   `inline code`
-   *   ```fenced code```
-   */
   private static convertMarkdown(text: string): string {
     let result = text;
 
@@ -209,7 +199,6 @@ export class Formatter {
 
     // 5. Headers: ### Header → *HEADER*
     result = result.replace(/^#{1,6}\s+(.*)$/gm, (_, p1: string) => {
-      // Strip any remaining markdown from the header text
       const clean = p1.replace(/\*\*|__|~~/g, '').trim();
       return `*${clean.toUpperCase()}*`;
     });

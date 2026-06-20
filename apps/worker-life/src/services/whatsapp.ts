@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import { logger } from '../utils/logger.js';
 import { SystemConfig } from '@naija-agent/types';
+import { Formatter } from '../utils/formatter.js';
 
 function isRetryableError(error: AxiosError): boolean {
     const code = error.code;
@@ -38,6 +39,9 @@ export class WhatsAppService {
 
   async sendText(to: string, text: string, optionalPhoneId?: string) {
     const targetPhoneId = optionalPhoneId || this.phoneNumberId;
+
+    // Format text for WhatsApp (markdown conversion, tables, LaTeX, links)
+    text = Formatter.format(text);
 
     // 1. Logic: Group paragraphs into coarser "Coarse Bubbles" (Approx 800 chars)
     // This prevents notification fatigue while still chunking long answers.
@@ -93,12 +97,18 @@ export class WhatsAppService {
       for (const bubble of bubbles) {
         // Handle ultra-long bubbles (sanity check for 4096 limit)
         const maxLen = 4096;
-        const subChunks = [];
+        const subChunks: string[] = [];
         for (let i = 0; i < bubble.length; i += maxLen) {
             subChunks.push(bubble.slice(i, i + maxLen));
         }
 
-        for (const chunk of subChunks) {
+        for (let i = 0; i < subChunks.length; i++) {
+            let chunk = subChunks[i];
+            // Append chunk indicator for multi-part messages
+            if (subChunks.length > 1) {
+                chunk += ` (${i + 1}/${subChunks.length})`;
+            }
+
             await sendWithRetry(async () => {
                 await axios.post(
                   `${this.apiUrl}/${targetPhoneId}/messages`,

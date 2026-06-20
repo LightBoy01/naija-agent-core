@@ -5,7 +5,6 @@ import { lifeMemory } from '../services/lifeMemory.js';
 import { whatsappService } from '../services/whatsapp.js';
 import { proactiveService } from '../services/proactive.js';
 import { searchVault } from '@naija-agent/storage';
-import { Formatter } from '../utils/formatter.js';
 import { AIProvider } from '@naija-agent/ai';
 import { SystemConfig } from '@naija-agent/types';
 
@@ -109,8 +108,7 @@ export async function handleEvaluateHeartbeat(job: Job, deps: HeartbeatDependenc
             
             if (text !== 'SKIP' && text !== '') {
                 logger.info({ userId }, 'Proactive heartbeat message generated');
-                const formattedText = Formatter.format(text);
-                await whatsappService.sendText(userId, formattedText);
+                await whatsappService.sendText(userId, text);
                 if (config.type === 'reminder') {
                     await heartbeatService.deactivateConfig(userId, config.id, 'completed');
                 }
