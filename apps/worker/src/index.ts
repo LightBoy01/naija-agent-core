@@ -157,7 +157,7 @@ const worker = new Worker<JobData>(
       throw e; 
     }
 
-    if (orgId === 'system') return await handleSystemOutbound(job);
+    if (orgId === 'system') return await handleSystemOutbound(job, defaultWhatsAppService);
     if (!orgId) return { success: false, reason: 'Missing orgId' };
 
     // --- PIPELINE EXECUTION ---

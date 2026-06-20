@@ -32,6 +32,11 @@ export interface PipelineContext {
   globalPaymentProvider: PaymentProvider | null;
   defaultWhatsAppService: WhatsAppService;
   
+  // Media archival — populated by MediaInterceptor for downstream handlers
+  archivedMediaUrl?: string;
+  mediaBuffer?: Buffer;
+  mediaMime?: string;
+  
   // State Management
   billing: {
     deducted: boolean;

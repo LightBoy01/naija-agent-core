@@ -163,16 +163,13 @@ export async function handleRequestOtp(
 }
 
 export async function handleSystemOutbound(
-  job: Job<JobData>
+  job: Job<JobData>,
+  defaultWhatsAppService: WhatsAppService
 ): Promise<{ success: boolean }> {
   const { from, content, phoneId } = job.data;
   logger.info({ to: from, phoneId }, `📡 [SYSTEM OUTBOUND] Sending message`);
   
-  const masterWhatsAppService = new WhatsAppService(
-    process.env.WHATSAPP_API_TOKEN || '',
-    process.env.WHATSAPP_PHONE_ID || '',
-    process.env.WHATSAPP_APP_SECRET
-  );
+  const masterWhatsAppService = defaultWhatsAppService;
 
   if (content.text) {
     await masterWhatsAppService.sendText(from, content.text);

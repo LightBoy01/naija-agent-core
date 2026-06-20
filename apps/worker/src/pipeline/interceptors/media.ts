@@ -51,9 +51,9 @@ export const MediaInterceptor: Interceptor = {
                 logger.info({ orgId, safeMediaId, archivalUrl }, '🎞️ [MEDIA SOVEREIGNTY] Media archived permanently.');
 
                 // Attach to context for subsequent interceptors/handlers
-                (ctx as any).archivedMediaUrl = archivalUrl;
-                (ctx as any).mediaBuffer = buffer;
-                (ctx as any).mediaMime = mimeType;
+                ctx.archivedMediaUrl = archivalUrl;
+                ctx.mediaBuffer = buffer;
+                ctx.mediaMime = mimeType;
 
                 // Clean up Sidecar temp file
                 if (content.fileName && fs.existsSync(content.fileName)) {
