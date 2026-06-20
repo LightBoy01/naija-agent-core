@@ -22,6 +22,7 @@ describe('Worker-Life WhatsAppService - sendText', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.ADMIN_API_KEY = 'test-key';
     svc = new WhatsAppService('fake-token', '1234567890', 'fake-secret');
   });
 
@@ -67,6 +68,7 @@ describe('Worker-Life WhatsAppService - sendImage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.ADMIN_API_KEY = 'test-key';
     svc = new WhatsAppService('fake-token', '1234567890', 'fake-secret');
   });
 

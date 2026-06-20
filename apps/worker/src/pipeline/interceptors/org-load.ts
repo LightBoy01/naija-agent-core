@@ -1,5 +1,5 @@
 import { PipelineContext, Interceptor } from '../types.js';
-import { getOrgById, getStaff, getOrgOnboarding } from '@naija-agent/firebase';
+import { getOrgById, getStaff, getOrgOnboarding, getDb } from '@naija-agent/firebase';
 import { parseAndFormatPhone } from '@naija-agent/types';
 import { WhatsAppService } from '../../services/whatsapp.js';
 import { getProvider } from '@naija-agent/payments';
@@ -19,10 +19,17 @@ export const OrgLoadInterceptor: Interceptor = {
     if (!org) {
       const { getDb } = await import('@naija-agent/firebase');
       const db = getDb();
-      const fallbackQuery = await db.collection('organizations')
+      let fallbackQuery = await db.collection('organizations')
           .where('config.botPhone', '==', ctx.orgId)
           .limit(1)
           .get();
+      
+      if (fallbackQuery.empty) {
+          fallbackQuery = await db.collection('organizations')
+              .where('pendingSetup.botPhone', '==', ctx.orgId)
+              .limit(1)
+              .get();
+      }
       
       if (!fallbackQuery.empty) {
           org = fallbackQuery.docs[0].data() as any;
@@ -51,6 +58,17 @@ export const OrgLoadInterceptor: Interceptor = {
     }
 
     ctx.org = org;
+
+    // 🔄 [SIDECAR ACTIVATION]: First processing message triggers ACTIVE transition
+    if ((org as any).status === 'AWAITING_SIDECAR') {
+      const db = getDb();
+      await db.collection('organizations').doc(ctx.orgId).update({
+        status: 'ACTIVE',
+        updatedAt: new Date().toISOString()
+      });
+      (org as any).status = 'ACTIVE';
+      org.isActive = true;
+    }
 
     // 2. Normalize Phones and Determine Identity
     const fromNormalized = parseAndFormatPhone(ctx.from) || ctx.from;

@@ -69,7 +69,9 @@ export async function handleMessage(job: Job<JobData>, deps: MessagingDependenci
   const activeDemoNiche = await getChatDemoState(chatId);
 
   // --- HARDCODED DEMO ESCAPE HATCH ---
-  if (activeDemoNiche && (textTrimmed.toLowerCase() === '#exit' || textTrimmed.toLowerCase() === 'exit demo' || textTrimmed.toLowerCase() === 'exit')) {
+  // Support broader exit intents securely
+  const exitRegex = /^(#exit|exit demo|exit|quit|cancel|stop)$/i;
+  if (activeDemoNiche && exitRegex.test(textTrimmed)) {
       await setChatDemoState(chatId, null);
       await tenantWhatsAppService.sendText(from, "🛑 [SYSTEM: DEMO MODE ENDED. I am now Zynux again.]");
       return { success: true };
@@ -78,8 +80,9 @@ export async function handleMessage(job: Job<JobData>, deps: MessagingDependenci
   let finalTools = [...tenantTools];
   if (activeDemoNiche) {
       const { SYSTEM_TOOLS } = await import('../tools/system.js');
+      // Dynamic import for SYSTEM_TOOLS to avoid circular deps — only when entering demo mode
       finalTools = [{ 
-          functionDeclarations: SYSTEM_TOOLS.filter(t => t.name === 'toggle_demo_mode' || t.name === 'mock_checkout')
+          functionDeclarations: SYSTEM_TOOLS.filter(t => t.name === 'toggle_demo_mode' || t.name === 'mock_checkout' || t.name === 'mock_product_info')
       }];
   }
 
@@ -88,12 +91,8 @@ export async function handleMessage(job: Job<JobData>, deps: MessagingDependenci
   let personaPrompt = '';
 
   if (activeDemoNiche) {
-      personaPrompt = `You are currently in DEMO MODE. Your persona is a sales assistant for a ${activeDemoNiche} business.
-You are roleplaying to show the client how you can sell products in their niche.
-Do NOT reveal you are Zynux during the roleplay. Just act like the perfect assistant for a ${activeDemoNiche} shop.
-Make up a few fake items in your inventory to sell to them.
-If the client agrees to buy, use the mock_checkout tool.
-If the client says they are done or satisfied, use toggle_demo_mode with niche: 'null' to exit demo mode.`;
+      const demoPrompt = promptService.getPrompt('Demo.Agent.md') || '';
+      personaPrompt = demoPrompt.replace(/\{\{NICHE\}\}/g, activeDemoNiche);
   } else if (org.config?.isMaster) {
       personaPrompt = isAdmin 
         ? promptService.getPrompt('Master.Agent.md') 
@@ -109,7 +108,7 @@ If the client says they are done or satisfied, use toggle_demo_mode with niche: 
   }
 
   const isAuth = isAdmin ? await verifyAdminSession(orgId, from) : false;
-  const adminStatus = isAdmin ? (isAuth ? 'AUTHENTICATED' : 'LOCKED') : 'STAFF_AUTHORIZED';
+  const adminStatus = isAdmin ? (isAuth ? 'AUTHENTICATED' : 'LOCKED') : (isStaff ? 'STAFF_AUTHORIZED' : 'NOT_AUTHENTICATED');
 
   const systemPrompt = `
 ${personaPrompt}
@@ -119,6 +118,7 @@ ${personaPrompt}
 - Time: ${currentLocalTime} (${orgTimeZone})
 - Currency: ${currency.code} (${currency.symbol})
 - Admin Status: ${adminStatus}
+- Demo Mode: ${activeDemoNiche ? `ACTIVE (Niche: ${activeDemoNiche})` : 'INACTIVE'}
 
 [BUSINESS KNOWLEDGE]:
 ${activeDemoNiche ? 'Empty - Sandbox Mode. Make up fake items.' : (knowledgeContext || 'Empty - Please tell me your prices so I can start selling!')}
@@ -160,7 +160,11 @@ CRITICAL: Reply directly to the user with your final message. Do NOT include you
   );
 
   if (type === 'image' && mediaBuffer && mediaMime) {
-      aiResponse = await ai.analyzeImage(mediaBuffer, mediaMime, content.caption || "Analyze this", {
+      let analysisCaption = content.caption || "Analyze this image.";
+      if ((deps as any).archivedMediaUrl) {
+          analysisCaption += `\n\n[SYSTEM: The permanent URL for this uploaded image is: ${(deps as any).archivedMediaUrl}. If you need to save this product, use this exact URL.]`;
+      }
+      aiResponse = await ai.analyzeImage(mediaBuffer, mediaMime, analysisCaption, {
           model: tenantModelName,
           systemInstruction: systemPrompt,
           tools: finalTools
@@ -200,18 +204,24 @@ CRITICAL: Reply directly to the user with your final message. Do NOT include you
               toolResponseParts.push({ functionResponse: { name: call.name, response: { status: 'error', code: 'AUTH_REQUIRED' } } });
               continue;
           }
-          const response = await handleToolCall(call.name, call.args, { 
-            orgId, from, isStaff, isAdmin, isAuth,
-            whatsappService: tenantWhatsAppService,
-            paymentProvider: tenantPaymentProvider,
-            redisClient,
-            orgConfig: org.config as any,
-            currency: currency as any,
-            whatsappPhoneId: job.data.phoneId,
-            customerName: job.data.name,
-            isVisionContext: type === 'image',
-            sectorPack: deps.sectorPack
-          });
+          let response: any;
+          try {
+            response = await handleToolCall(call.name, call.args, { 
+              orgId, from, isStaff, isAdmin, isAuth,
+              whatsappService: tenantWhatsAppService,
+              paymentProvider: tenantPaymentProvider,
+              redisClient,
+              orgConfig: org.config as any,
+              currency: currency as any,
+              whatsappPhoneId: job.data.phoneId,
+              customerName: job.data.name,
+              isVisionContext: type === 'image',
+              sectorPack: deps.sectorPack
+            });
+          } catch (err: any) {
+            logger.error({ tool: call.name, error: err.message, orgId }, 'Tool execution threw an error');
+            response = { status: 'error', message: `Failed to execute ${call.name}: ${err.message}` };
+          }
           toolResponseParts.push({ functionResponse: { name: call.name, response } });
       }
 
@@ -235,7 +245,8 @@ CRITICAL: Reply directly to the user with your final message. Do NOT include you
 
   let finalMessage = responseText.trim() || "Oga, try talk again.";
   
-  if (!isAdmin && !isStaff) {
+  // 🛡️ Skip PriceGuard during demo mode — AI is intentionally making up fake prices
+  if (!isAdmin && !isStaff && !activeDemoNiche) {
       // --- DETERMINISTIC PRICE GUARD (PHASE 9.3) ---
       const priceGuard = new PriceGuard(ai);
       const guardResult = await priceGuard.validateResponse(finalMessage, businessKnowledge, currency);

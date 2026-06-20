@@ -32,11 +32,25 @@ export async function findOrCreateChat(orgId: string, userPhone: string, userNam
   }
 }
 
+const DEMO_TTL_MINUTES = 30;
+
 export async function getChatDemoState(chatId: string): Promise<string | null> {
   const sqlDb = getDb();
   try {
-    const res = await sqlDb.select({ activeDemoNiche: chats.activeDemoNiche }).from(chats).where(eq(chats.id, chatId)).limit(1);
-    return res[0]?.activeDemoNiche || null;
+    const res = await sqlDb.select({ activeDemoNiche: chats.activeDemoNiche, demoStartedAt: chats.demoStartedAt }).from(chats).where(eq(chats.id, chatId)).limit(1);
+    const niche = res[0]?.activeDemoNiche;
+    if (!niche) return null;
+
+    // Auto-expire demo sessions older than DEMO_TTL_MINUTES
+    if (res[0]?.demoStartedAt) {
+      const elapsed = Date.now() - new Date(res[0].demoStartedAt).getTime();
+      if (elapsed > DEMO_TTL_MINUTES * 60 * 1000) {
+        await setChatDemoState(chatId, null);
+        return null;
+      }
+    }
+
+    return niche;
   } catch (e) {
     return null;
   }
@@ -403,6 +417,10 @@ export async function syncCartState(chatId: string, isActive: boolean) {
 export async function setAdminAuth(orgId: string, adminPhone: string): Promise<void> {
   const db = getDb();
   const chatId = `${orgId}_${adminPhone}`;
+  // Ensure the chat row exists before updating — the SecurityInterceptor runs
+  // before handleMessage creates the chat, so a bare UPDATE would silently do
+  // nothing and leave the admin locked out of Sovereign tools.
+  await findOrCreateChat(orgId, adminPhone, 'Admin');
   await db.update(chats)
     .set({ lastAdminAuthAt: new Date() })
     .where(eq(chats.id, chatId));

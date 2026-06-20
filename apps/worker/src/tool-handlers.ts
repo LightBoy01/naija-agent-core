@@ -41,7 +41,7 @@ export async function handleToolCall(
   // Dispatch to specialized handlers
   
   // 1. Inventory & Products
-  if (['save_product', 'manage_stock', 'delete_product', 'search_products'].includes(name)) {
+  if (['save_product', 'bulk_save_products', 'manage_stock', 'delete_product', 'search_products', 'send_product_image'].includes(name)) {
     return await handleInventoryTools(name, args, ctx);
   }
 
@@ -50,7 +50,7 @@ export async function handleToolCall(
     'get_payment_instructions', 'generate_order_summary', 'check_order_status', 
     'generate_refill_link', 'verify_transaction', 'get_shipping_rates', 
     'track_shipment', 'add_to_cart', 'view_cart', 'remove_from_cart', 
-    'clear_cart', 'book_slot', 'generate_checkout_invoice'
+    'clear_cart', 'book_slot', 'generate_checkout_invoice', 'collect_customer_feedback'
   ].includes(name)) {
     return await handleCommerceTools(name, args, ctx);
   }
@@ -72,8 +72,10 @@ export async function handleToolCall(
 
   // 5. System & Multi-tenancy
   if ([
+    'toggle_demo_mode', 'mock_checkout', 'mock_product_info',
     'create_tenant', 'topup_tenant', 'broadcast_to_bosses', 'audit_tenant', 
     'report_fraud', 'register_trial_interest', 'request_otp_relay', 
+    'request_sidecar_pairing', 'send_direct_message', 'suspend_tenant',
     'activate_tenant', 'get_pending_setups', 'get_network_stats', 'generate_login_code'
   ].includes(name)) {
     return await handleSystemTools(name, args, ctx);

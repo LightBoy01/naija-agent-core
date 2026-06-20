@@ -3,6 +3,29 @@ import { HandlerContext } from './definitions.js';
 
 export const INVENTORY_TOOLS = [
   {
+    name: "bulk_save_products",
+    description: "Updates or adds multiple business facts or prices at once. (Requires Boss Auth)",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        products: {
+          type: Type.ARRAY,
+          description: "List of products to save",
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              key: { type: Type.STRING, description: "Key name" },
+              content: { type: Type.STRING, description: "Details/Price" },
+              imageUrl: { type: Type.STRING, description: "Product Image URL" }
+            },
+            required: ["key", "content"]
+          }
+        }
+      },
+      required: ["products"]
+    }
+  },
+  {
     name: "save_product",
     description: "Updates business facts or prices. (Requires Boss Auth)",
     parameters: {
@@ -73,6 +96,27 @@ export async function handleInventoryTools(name: string, args: any, ctx: Handler
   const { orgId, isVisionContext, from, whatsappService } = ctx;
 
   switch (name) {
+    case 'bulk_save_products': {
+      let savedCount = 0;
+      for (const prod of args.products) {
+          if (isVisionContext) {
+              await saveProduct(orgId, prod.key, {
+                  content: prod.content,
+                  imageUrl: prod.imageUrl || null,
+                  updatedAt: FieldValue.serverTimestamp()
+              });
+          } else {
+              await saveProduct(orgId, prod.key, {
+                  content: prod.content,
+                  imageUrl: prod.imageUrl || null,
+                  updatedAt: FieldValue.serverTimestamp()
+              });
+          }
+          savedCount++;
+      }
+      return { status: 'success', message: `${savedCount} products bulk saved.` };
+    }
+
     case 'save_product':
       if (isVisionContext) {
           // If in vision context, we are likely confirming a "detected" product

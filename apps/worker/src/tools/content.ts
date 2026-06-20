@@ -125,45 +125,41 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
       try {
         const axios = (await import('axios')).default;
         
-        // Primary: Try Local SearXNG Instance
-        try {
+        const searxngPromise = (async () => {
             const searxngUrl = process.env.SEARXNG_URL || 'http://159.195.150.66:8181';
-            const searxngResponse = await axios.get(`${searxngUrl}/search`, {
+            const res = await axios.get(`${searxngUrl}/search`, {
               params: { q: args.query, format: 'json' },
               timeout: 5000 
             });
-            
-            const results = searxngResponse.data.results || [];
-            if (results.length > 0) {
-              const summary = results.slice(0, 5).map((r: any) => `Title: ${r.title}\nDescription: ${r.content || r.snippet}\nURL: ${r.url}`).join('\n\n');
-              return { status: 'success', result: `[Source: SearXNG]\n\n${summary}` };
-            }
-        } catch (searxngErr) {
-            console.warn('SearXNG failed or is offline. Falling back to Brave Search...');
+            const results = res.data.results || [];
+            if (results.length === 0) throw new Error("No SearXNG results");
+            const summary = results.slice(0, 5).map((r: any) => `Title: ${r.title}\nDescription: ${r.content || r.snippet}\nURL: ${r.url}`).join('\n\n');
+            return { status: 'success', result: `[Source: SearXNG]\n\n${summary}` };
+        })();
+
+        const bravePromise = (async () => {
+            const apiKey = process.env.BRAVE_API_KEY;
+            if (!apiKey) throw new Error("BRAVE_API_KEY not set");
+            const res = await axios.get('https://api.search.brave.com/res/v1/web/search', {
+              params: { q: args.query, count: 5 },
+              headers: { 'Accept': 'application/json', 'X-Subscription-Token': apiKey },
+              timeout: 5000 // Reduced timeout to prevent cascading failure
+            });
+            const results = res.data.web?.results || [];
+            if (results.length === 0) throw new Error("No Brave results");
+            const summary = results.map((r: any) => `Title: ${r.title}\nDescription: ${r.description}\nURL: ${r.url}`).join('\n\n');
+            return { status: 'success', result: `[Source: Brave]\n\n${summary}` };
+        })();
+
+        try {
+            return await Promise.any([searxngPromise, bravePromise]);
+        } catch (e: any) {
+            console.error('Web Search Failed: Both engines failed or timed out.');
+            return { error: 'Oga, I don search tire for today! Both engines failed.' };
         }
-        
-        // Fallback: Try Brave Search API
-        const apiKey = process.env.BRAVE_API_KEY;
-        if (!apiKey) {
-           return { error: "SearXNG is offline and BRAVE_API_KEY is not set." };
-        }
-        
-        const response = await axios.get('https://api.search.brave.com/res/v1/web/search', {
-          params: { q: args.query, count: 5 },
-          headers: { 'Accept': 'application/json', 'X-Subscription-Token': apiKey },
-          timeout: 10000
-        });
-        
-        const results = response.data.web?.results || [];
-        if (results.length === 0) {
-           return { status: 'success', result: 'No results found.' };
-        }
-        
-        const summary = results.map((r: any) => `Title: ${r.title}\nDescription: ${r.description}\nURL: ${r.url}`).join('\n\n');
-        return { status: 'success', result: `[Source: Brave]\n\n${summary}` };
 
       } catch (err: any) {
-          console.error('Web Search Failed:', err.message);
+          console.error('Web Search Setup Failed:', err.message);
           return { error: 'Oga, I don search tire for today! Both engines failed.' };
       }
     }

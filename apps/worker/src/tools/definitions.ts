@@ -28,6 +28,7 @@ export const AUTH_REQUIRED_TOOLS = [
   'save_knowledge', 
   'delete_knowledge', 
   'save_product', 
+  'bulk_save_products',
   'delete_product', 
   'authorize_staff', 
   'deactivate_staff', 

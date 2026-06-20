@@ -112,10 +112,12 @@ export async function getOrgOnboarding(orgId: string): Promise<OnboardingConfig 
 /**
  * Completes onboarding and promotes temporary data to the final config.
  * Uses a transaction to ensure stat consistency and atomic deployment.
+ *
+ * NOTE: This does NOT grant the ₦1,000 bonus — that's applied once during
+ * initial tenant creation (createTenant / registerTrialInterest). Re-running
+ * setup must not overwrite the existing balance.
  */
 export async function completeOnboarding(orgId: string, finalConfig: OnboardingData): Promise<void> {
-  const bonusKobo = 100000; // 1,000.00 NGN Bonus
-  
   // 🛡️ [SECURITY]: Hash the PIN *before* the transaction to keep it lean
   let hashedPin = finalConfig.adminPin;
   if (!hashedPin) throw new Error('Security Error: Admin PIN is mandatory for onboarding completion');
@@ -135,7 +137,6 @@ export async function completeOnboarding(orgId: string, finalConfig: OnboardingD
       name: finalConfig.name,
       onboardingStep: 'COMPLETE',
       onboardingData: null, // 🔥 CLEAR PII
-      balance: bonusKobo,
       timezone: finalConfig.timezone || 'Africa/Lagos',
       'config.adminPin': hashedPin,
       'config.bankDetails': {
@@ -156,16 +157,15 @@ export async function completeOnboarding(orgId: string, finalConfig: OnboardingD
   if (adminPhone) {
     await setAdminAuth(orgId, adminPhone);
   }
-
-  await incrementNetworkStats({ clientDelta: 1, koboDelta: bonusKobo });
 }
 
 /**
  * Completes onboarding from the hybrid web flow.
+ *
+ * NOTE: This does NOT grant the ₦1,000 bonus — 'createTenant' handles that.
+ * Re-running setup must not overwrite the existing balance.
  */
 export async function completeHybridOnboarding(orgId: string, data: OnboardingData & { meta: { accessToken: string, phoneId: string, wabaId?: string } }): Promise<void> {
-  const bonusKobo = 100000;
-  
   let hashedPin = data.adminPin;
   if (!hashedPin) throw new Error('Security Error: Admin PIN is mandatory for hybrid onboarding');
 
@@ -174,7 +174,7 @@ export async function completeHybridOnboarding(orgId: string, data: OnboardingDa
     hashedPin = await bcrypt.hash(hashedPin, 10);
   }
 
-  await db.runTransaction(async (transaction) => {
+  const adminPhone = await db.runTransaction(async (transaction) => {
     const orgRef = orgsRef.doc(orgId);
     const doc = await transaction.get(orgRef);
 
@@ -183,9 +183,9 @@ export async function completeHybridOnboarding(orgId: string, data: OnboardingDa
     transaction.update(orgRef, {
       name: data.name,
       onboardingStep: 'COMPLETE',
+      onboardingData: null,
       status: 'ACTIVE',
       isActive: true,
-      balance: bonusKobo,
       whatsappPhoneId: data.meta.phoneId,
       'config.whatsappToken': data.meta.accessToken,
       'config.wabaId': data.meta.wabaId,
@@ -197,9 +197,14 @@ export async function completeHybridOnboarding(orgId: string, data: OnboardingDa
       },
       updatedAt: FieldValue.serverTimestamp()
     });
+
+    return doc.data()?.config?.adminPhone;
   });
 
-  await incrementNetworkStats({ clientDelta: 1, koboDelta: bonusKobo });
+  // 🛡️ [UX]: Auto-authenticate the Boss (Post-Transaction)
+  if (adminPhone) {
+    await setAdminAuth(orgId, adminPhone);
+  }
 }
 export async function createTenant(data: {
   id: string;
@@ -221,6 +226,7 @@ export async function createTenant(data: {
     adminPhone,
     timezone,
     isActive: true,
+    status: 'ACTIVE',
     balance: bonusKobo, 
     currency: 'NGN',
     costPerReply: 3300, 

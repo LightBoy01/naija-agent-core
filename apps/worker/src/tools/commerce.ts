@@ -40,6 +40,18 @@ export const COMMERCE_TOOLS = [
       },
       required: ["reference", "amount", "purpose"]
     }
+  },
+  {
+    name: "collect_customer_feedback",
+    description: "Collects a rating and feedback comment from a customer.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        rating: { type: Type.NUMBER, description: "Rating from 1 to 5" },
+        comment: { type: Type.STRING, description: "Customer's detailed feedback comment" }
+      },
+      required: ["rating", "comment"]
+    }
   }
 ];
 
@@ -516,6 +528,25 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
         }
         throw e;
       }
+    }
+
+    case 'collect_customer_feedback': {
+      const { rating, comment } = args;
+      if (rating < 1 || rating > 5) {
+        return { status: 'error', message: 'Rating must be between 1 and 5.' };
+      }
+      
+      await logSystemEvent(orgId, 'CUSTOMER_FEEDBACK', `Rating: ${rating}/5. Comment: ${comment}`, {
+        customerPhone: from,
+        rating,
+        comment
+      });
+      
+      const responseMsg = rating >= 4 
+        ? "Thank you so much for the excellent rating! We are glad you enjoyed our service. 🌟\n\n_P.S. Impressed by this chat? Get a smart AI assistant like me for your own business! Chat with my Masterbot here: wa.me/2347011925076_" 
+        : "Thank you for the feedback. We will use this to improve our service! 🙏";
+        
+      return { status: 'success', message: responseMsg };
     }
 
     default:

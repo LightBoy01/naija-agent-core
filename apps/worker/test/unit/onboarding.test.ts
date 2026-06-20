@@ -35,15 +35,6 @@ vi.mock('@naija-agent/database', () => ({
   getPendingSetups: vi.fn(),
 }));
 
-vi.mock('@naija-agent/ai', () => ({
-  AIOrchestrator: class {},
-  GeminiProvider: class {},
-  AIFactory: { createRouter: vi.fn(() => ({
-    generateText: vi.fn().mockResolvedValue({ text: '{}' }),
-  })) },
-  GlobalModelRegistry: {},
-}));
-
 vi.mock('ioredis', () => {
   const store = new Map<string, string>();
   return {
@@ -158,6 +149,40 @@ describe('Zynux Onboarding - End-to-End', () => {
     vi.clearAllMocks();
     redisClient = makeRedisClient();
     whatsappService = makeWhatsAppService();
+  });
+
+  // ============================================================
+  // AUTO OTP RELAY TESTS
+  // ============================================================
+  describe('Auto OTP Relay', () => {
+    const masterOrg = makeOrg({
+      id: 'naija-agent-master',
+      name: 'Sovereign Master',
+      config: {
+        isMaster: true,
+        adminPhone: '2349000000000',
+        adminPin: '$2b$10$hashed_0000',
+      },
+    });
+
+    it('gives feedback when no pending setup matches the code', async () => {
+      // Return no pending setups
+      vi.mocked(Firebase.getPendingSetups).mockResolvedValue([]);
+
+      const job = makeJob({
+        from: '2348055555555',
+        orgId: 'naija-agent-master',
+        content: { text: '123456' },
+      });
+
+      const result = await handleOnboarding(job, masterOrg, null, whatsappService, redisClient);
+
+      expect(result).toEqual({ success: true });
+      expect(whatsappService.sendText).toHaveBeenCalledWith(
+        '2348055555555',
+        expect.stringContaining('cannot find a pending activation')
+      );
+    });
   });
 
   afterEach(() => {
@@ -311,6 +336,11 @@ describe('Zynux Onboarding - End-to-End', () => {
         { orgId: expect.stringMatching(/^org_/), phone: '08012345678' },
         expect.any(Object)
       );
+
+      // Sidecar should be called BEFORE createTenant (no orphan on failure)
+      const sidecarCallOrder = (axios.default.post as any).mock.invocationCallOrder[0];
+      const createTenantOrder = (Firebase.createTenant as any).mock.invocationCallOrder[0];
+      expect(sidecarCallOrder).toBeLessThan(createTenantOrder);
 
       // Prospect state should be cleared
       const prospectState = await redisClient.get('prospect:2348055555555');
@@ -536,6 +566,11 @@ describe('Zynux Onboarding - End-to-End', () => {
         expect.any(Object)
       );
 
+      // Sidecar should be called BEFORE completeOnboarding (no orphan on failure)
+      const sidecarCallOrder = (axios.default.post as any).mock.invocationCallOrder[0];
+      const completeCallOrder = (Firebase.completeOnboarding as any).mock.invocationCallOrder[0];
+      expect(sidecarCallOrder).toBeLessThan(completeCallOrder);
+
       // Should show pairing code
       expect(whatsappService.sendText).toHaveBeenCalledWith(
         '2348012345678',
@@ -579,6 +614,44 @@ describe('Zynux Onboarding - End-to-End', () => {
         '2348012345678',
         expect.stringContaining('#setup')
       );
+    });
+
+    it('#back clears data for the rolled-back step', async () => {
+      // Simulate user at BANK_ACCOUNT with partial data
+      const onboarding = {
+        step: 'BANK_ACCOUNT',
+        data: {
+          name: 'Bims Gadgets',
+          adminPin: '$2b$10$hashed_4321',
+          bankName: 'GTBank',
+          accountNumber: '0123456789', // will be cleared
+        },
+      } as any;
+
+      const job = makeJob({
+        from: '2348012345678',
+        orgId: 'org_test123',
+        content: { text: '#back' },
+      });
+
+      const result = await handleOnboarding(job, tenantOrg, onboarding, whatsappService, redisClient);
+
+      expect(result).toEqual({ success: true });
+
+      // Should have gone back to BANK_NAME
+      expect(Firebase.setOrgOnboarding).toHaveBeenLastCalledWith(
+        'org_test123', 'BANK_NAME',
+        expect.objectContaining({
+          name: 'Bims Gadgets',
+          adminPin: '$2b$10$hashed_4321',
+          bankName: 'GTBank',
+          // accountNumber should be cleared
+        })
+      );
+
+      // accountNumber should NOT be present in the saved data
+      const savedData = (Firebase.setOrgOnboarding as any).mock.calls.at(-1)[2];
+      expect(savedData.accountNumber).toBeUndefined();
     });
   });
 

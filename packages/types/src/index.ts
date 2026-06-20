@@ -187,7 +187,7 @@ export const OrganizationSchema = z.object({
   costPerReply: z.number().default(2000), // Default 20 kobo
   costPerImage: z.number().optional(),
   costPerDocument: z.number().optional(),
-  status: z.enum(['PENDING_PAYMENT', 'PENDING_META', 'AWAITING_OTP', 'ACTIVE', 'SUSPENDED', 'TRIAL']).default('ACTIVE'),
+  status: z.enum(['PENDING_PAYMENT', 'PENDING_META', 'AWAITING_OTP', 'AWAITING_SIDECAR', 'ACTIVE', 'SUSPENDED', 'TRIAL']).default('ACTIVE'),
   deploymentModel: z.enum(['SHARED', 'INDEPENDENT']).default('SHARED'),
   currency: z.object({
     code: z.string(),
@@ -208,6 +208,8 @@ export const OrganizationSchema = z.object({
     phoneId: z.string(),
     accessToken: z.string(),
     wabaId: z.string().optional(),
+    botPhone: z.string().optional(),
+    pairingCode: z.string().optional(),
     initiatedAt: z.string()
   }).optional().nullable(),
   config: ConfigSchema.optional(),

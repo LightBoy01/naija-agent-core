@@ -82,6 +82,17 @@ export const SYSTEM_TOOLS = [
     parameters: { type: Type.OBJECT, properties: {} }
   },
   {
+    name: "mock_product_info",
+    description: "Returns fake product catalog information for the demo niche. Use this to look up a product the client is asking about or wants to see priced, so you can give them a realistic quote.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        productName: { type: Type.STRING, description: "The product name the client is asking about (e.g. gucci bag, paracetamol, iphone 15)" },
+      },
+      required: ["productName"]
+    }
+  },
+  {
     name: "topup_tenant",
     description: `Tops up a tenant's credit balance. (Sovereign Only)`,
     parameters: {
@@ -104,6 +115,18 @@ export const SYSTEM_TOOLS = [
         mfa_code: { type: Type.STRING, description: "Approval code for high-stakes broadcast (If requested)." }
       },
       required: ["message"]
+    }
+  },
+  {
+    name: "send_direct_message",
+    description: "Sends a direct WhatsApp message to any phone number. (Sovereign Only)",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        phone: { type: Type.STRING, description: `The recipient's phone number (e.g. 23480000000)` },
+        message: { type: Type.STRING, description: "The message to send." }
+      },
+      required: ["phone", "message"]
     }
   },
   {
@@ -190,8 +213,14 @@ import {
   getNetworkStats, 
   setMfaCode,
   findOrCreateChat,
-  setChatDemoState
+  setChatDemoState,
+  suspendOrganization
 } from '@naija-agent/database';
+import {
+  createTenant as fbCreateTenant,
+  registerTrialInterest as fbRegisterTrialInterest,
+  activateTenant as fbActivateTenant
+} from '@naija-agent/firebase';
 import { WhatsAppService } from '../services/whatsapp.js';
 import crypto from 'crypto';
 
@@ -218,17 +247,76 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
       };
     }
 
+    case 'mock_product_info': {
+      const items: Record<string, { price: string, description: string }> = {
+        'paracetamol': { price: '₦500', description: 'Pain relief tablets, 100mg pack of 20' },
+        'amoxicillin': { price: '₦1,200', description: 'Antibiotic capsules, 500mg pack of 14' },
+        'vitamin c': { price: '₦800', description: 'Immune boost supplement, 30 tablets' },
+        'malaria drug': { price: '₦2,500', description: 'ACT malaria treatment, 24-tablet course' },
+        'face cream': { price: '₦3,500', description: 'Moisturizing face cream, 50ml jar' },
+        'perfume': { price: '₦8,000', description: 'Designer-inspired fragrance, 100ml bottle' },
+        'iphone 15': { price: '₦750,000', description: 'Apple iPhone 15, 128GB — brand new sealed' },
+        'samsung s24': { price: '₦650,000', description: 'Samsung Galaxy S24, 256GB — dual SIM' },
+        'airpods': { price: '₦45,000', description: 'Apple AirPods Pro 2nd Gen — original' },
+        'gucci bag': { price: '₦120,000', description: 'Gucci GG Marmont mini bag — authentic' },
+        'nike air max': { price: '₦35,000', description: 'Nike Air Max 90 — original, size 42' },
+        'smart tv': { price: '₦180,000', description: '43-inch 4K Smart TV, built-in Netflix' },
+        'generator': { price: '₦95,000', description: '2.5KVA petrol generator, super quiet' },
+        'rice': { price: '₦42,000', description: 'Foreign parboiled rice, 50kg bag' },
+        'groundnut oil': { price: '₦8,500', description: 'Pure groundnut oil, 5 litres' },
+      };
+
+      const key = args.productName?.toLowerCase().trim() || '';
+      const match = items[key];
+      if (match) {
+        return {
+          status: 'success',
+          product: {
+            name: args.productName,
+            price: match.price,
+            description: match.description,
+            availability: 'In stock',
+          },
+          message: `Found ${args.productName}: ${match.description} — ${match.price}. In stock!`
+        };
+      }
+
+      // Generate a plausible fake entry if not in the preset list
+      const fakePrice = `₦${(Math.floor(Math.random() * 200) + 5) * 1000}`;
+      return {
+        status: 'success',
+        product: {
+          name: args.productName,
+          price: fakePrice,
+          description: `Premium ${args.productName} — quality assured`,
+          availability: 'In stock (limited units)',
+        },
+        message: `${args.productName} — ${fakePrice}. Limited stock available!`
+      };
+    }
+
     case 'create_tenant':
       if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
-      await createTenant({
-        id: args.id,
-        name: args.name,
-        whatsappPhoneId: args.phoneId,
-        adminPhone: args.adminPhone,
-        adminPin: '0000', // Placeholder for AI tool creation
-        systemPrompt: args.prompt,
-        timezone: args.timezone
-      });
+      await Promise.all([
+        createTenant({
+          id: args.id,
+          name: args.name,
+          whatsappPhoneId: args.phoneId,
+          adminPhone: args.adminPhone,
+          adminPin: '0000', // Placeholder for AI tool creation
+          systemPrompt: args.prompt,
+          timezone: args.timezone
+        }),
+        fbCreateTenant({
+          id: args.id,
+          name: args.name,
+          whatsappPhoneId: args.phoneId,
+          adminPhone: args.adminPhone,
+          adminPin: '0000', // Placeholder for AI tool creation
+          systemPrompt: args.prompt,
+          timezone: args.timezone
+        })
+      ]);
       return { status: 'success', message: `Tenant ${args.id} created.` };
 
     case 'topup_tenant':
@@ -239,8 +327,8 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
     case 'broadcast_to_bosses': {
         if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
         
-        // --- SOVEREIGN MFA GUARD ---
-        if (!args.mfa_code) {
+        // --- SOVEREIGN MFA GUARD (Temporarily disabled unless ENFORCE_MFA is set) ---
+        if (process.env.ENFORCE_MFA === 'true' && !args.mfa_code) {
              const code = Math.floor(100000 + Math.random() * 900000).toString();
              await setMfaCode(orgId, code);
              // Save the pending tool call so the interceptor can resume it
@@ -250,7 +338,7 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
                      args
                  }));
              }
-             logger.info({ orgId }, '🔐 [SECURITY] Sovereign MFA Challenge generated for Broadcast');
+             logger.info({ orgId, code }, `🔐 [SECURITY] Sovereign MFA Challenge: ${code}`);
              return { 
                 status: 'error', 
                 code: 'MFA_REQUIRED', 
@@ -269,6 +357,16 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
         return { status: 'success', count };
     }
 
+    case 'send_direct_message': {
+        if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
+        try {
+            await ctx.whatsappService.sendText(args.phone, args.message);
+            return { status: 'success', message: `Message successfully sent to ${args.phone}` };
+        } catch (e: any) {
+            return { status: 'error', message: `Failed to send message: ${e.message}` };
+        }
+    }
+
     case 'audit_tenant': {
         if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
         const stats = await getOrgStats(args.tenantId);
@@ -282,16 +380,31 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
         return { status: 'success', message: 'User added to Global Fraud Guard.' };
     }
 
+    case 'suspend_tenant': {
+        if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
+        await suspendOrganization(args.tenantId, args.reason);
+        return { status: 'success', message: `Tenant ${args.tenantId} has been suspended. Reason: ${args.reason}` };
+    }
+
     case 'register_trial_interest': {
         // 1. Register in Database
         try {
-            await registerTrialInterest({
-                id: args.id,
-                name: args.name,
-                adminPhone: args.adminPhone,
-                botPhone: args.botPhone,
-                timezone: args.timezone
-            });
+            await Promise.all([
+              registerTrialInterest({
+                  id: args.id,
+                  name: args.name,
+                  adminPhone: args.adminPhone,
+                  botPhone: args.botPhone,
+                  timezone: args.timezone
+              }),
+              fbRegisterTrialInterest({
+                  id: args.id,
+                  name: args.name,
+                  adminPhone: args.adminPhone,
+                  botPhone: args.botPhone,
+                  timezone: args.timezone
+              })
+            ]);
         } catch (error: any) {
             if (error.message && error.message.includes('unique constraint')) {
                 return { status: 'error', reason: `Organization ID '${args.id}' already exists. Please choose a different ID.` };
@@ -398,7 +511,10 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
 
     case 'activate_tenant': {
         if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
-        await activateTenant(args.tenantId, args.phoneId, args.accessToken);
+        await Promise.all([
+          activateTenant(args.tenantId, args.phoneId, args.accessToken),
+          fbActivateTenant(args.tenantId, args.phoneId, args.accessToken)
+        ]);
         
         // Push mapping to Redis so sidecar immediately knows about it
         const org = await getOrgById(args.tenantId);

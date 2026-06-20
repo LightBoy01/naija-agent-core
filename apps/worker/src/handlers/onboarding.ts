@@ -1,13 +1,14 @@
 import { Job } from 'bullmq';
-import { JobData, OnboardingConfig, OnboardingData, SystemConfig, ONBOARDING_PROMPTS } from '@naija-agent/types';
+import { JobData, OnboardingConfig, OnboardingData, SystemConfig, ONBOARDING_PROMPTS, parseAndFormatPhone } from '@naija-agent/types';
 import { WhatsAppService } from '../services/whatsapp.js';
-import { GoogleGenAI } from '@google/genai';
 import { 
   getOrgById, 
   setOrgOnboarding, 
   completeOnboarding, 
   getPendingSetups,
   createTenant,
+  activateTenant as fbActivateTenant,
+  getDb,
   Organization
 } from '@naija-agent/firebase';
 import {
@@ -45,7 +46,7 @@ export async function handleOnboarding(
       const isReferral = text.includes('I_want_AI_for_my_business_');
 
       if (isReferral || state) {
-          logger.info({ from, state }, '🛠️ [PROSPECT FLOW] Processing step');
+          logger.info({ from, step: state?.step }, '🛠️ [PROSPECT FLOW] Processing step');
           
           let nextStep = state?.step || 'START';
           let nextData = state?.data || {};
@@ -79,13 +80,11 @@ export async function handleOnboarding(
              if (botPhone.length < 10 || isNaN(parseInt(botPhone))) {
                 reply = "Abeg enter a valid phone number (11 digits).";
              } else {
-                // --- CREATE TENANT & TRIGGER SIDECAR PAIRING ---
                 reply = `Creating your Empire account for *${nextData.name}*... ⏳`;
                 await tenantWhatsAppService.sendText(from, reply);
 
                 try {
                    // 1. Pre-check: validate phone is not already linked
-                   const { parseAndFormatPhone } = await import('@naija-agent/types');
                    const normalizedBotPhone = parseAndFormatPhone(botPhone);
                    if (normalizedBotPhone) {
                        const rawPhone = normalizedBotPhone.replace('+', '');
@@ -99,34 +98,11 @@ export async function handleOnboarding(
                        }
                    }
 
-                   // 2. Create Tenant (Firebase + PostgreSQL dual-write)
+                   // 2. Generate org ID (no DB writes yet)
                    const newOrgId = `org_${crypto.randomBytes(4).toString('hex')}`;
-                   await createTenant({
-                      id: newOrgId,
-                      name: nextData.name,
-                      whatsappPhoneId: 'PENDING',
-                      adminPhone: from,
-                      adminPin: nextData.adminPin,
-                      systemPrompt: `You are the AI Assistant for ${nextData.name}.`,
-                      timezone: 'Africa/Lagos'
-                   });
-                   
-                   // Drizzle write
-                   try {
-                     await pgCreateTenant({
-                       id: newOrgId,
-                       name: nextData.name,
-                       whatsappPhoneId: 'PENDING',
-                       adminPhone: from,
-                       adminPin: nextData.adminPin,
-                       systemPrompt: `You are the AI Assistant for ${nextData.name}.`,
-                       timezone: 'Africa/Lagos'
-                     });
-                   } catch (e: any) {
-                     logger.warn({ orgId: newOrgId, error: e.message }, '⚠️ [PROSPECT] PG dual-write failed, continuing');
-                   }
 
-                   // 3. Request Pairing Code from Sidecar
+                   // 3. Request Pairing Code from Sidecar FIRST
+                   // If this fails, nothing is persisted — no orphan state.
                    const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
                    const apiKey = process.env.ADMIN_API_KEY;
 
@@ -144,7 +120,29 @@ export async function handleOnboarding(
                    const pairingCode = response.data.code;
                    if (!pairingCode) throw new Error('Sidecar failed to generate pairing code.');
 
-                   // 4. Set Redis Mapping (for Sidecar routing)
+                   // 4. Create Tenant (Firebase + PostgreSQL dual-write) — only on Sidecar success
+                   await Promise.all([
+                     createTenant({
+                        id: newOrgId,
+                        name: nextData.name,
+                        whatsappPhoneId: 'PENDING',
+                        adminPhone: from,
+                        adminPin: nextData.adminPin,
+                        systemPrompt: `You are the AI Assistant for ${nextData.name}.`,
+                        timezone: 'Africa/Lagos'
+                     }),
+                     pgCreateTenant({
+                       id: newOrgId,
+                       name: nextData.name,
+                       whatsappPhoneId: 'PENDING',
+                       adminPhone: from,
+                       adminPin: nextData.adminPin,
+                       systemPrompt: `You are the AI Assistant for ${nextData.name}.`,
+                       timezone: 'Africa/Lagos'
+                     })
+                   ]);
+
+                   // 5. Set Redis Mapping (for Sidecar routing)
                    if (normalizedBotPhone) {
                        const rawPhone = normalizedBotPhone.replace('+', '');
                        const jid = `${rawPhone}@s.whatsapp.net`;
@@ -153,8 +151,7 @@ export async function handleOnboarding(
                        logger.info({ orgId: newOrgId, jid }, '🔗 [AUTO-ONBOARDING] Hydrated sidecar mapping in Redis');
                    }
 
-                   // 5. Update Tenant with Pending Setup (Firebase)
-                   const { getDb } = await import('@naija-agent/firebase');
+                   // 6. Update Tenant with Pending Setup (Firebase)
                    await (await getDb()).collection('organizations').doc(newOrgId).update({
                        status: 'AWAITING_SIDECAR',
                        pendingSetup: {
@@ -164,7 +161,7 @@ export async function handleOnboarding(
                        }
                    });
 
-                   // 6. Cleanup Prospect State
+                   // 7. Cleanup Prospect State
                    await redisClient.del(prospectKey);
 
                    reply = `✅ *Account Created!* \n\n🔑 *YOUR PAIRING CODE:* ${pairingCode}\n\n👉 *To Activate:*\n1. Open WhatsApp on your *Bot Phone* (${botPhone}).\n2. Go to **Settings > Linked Devices**.\n3. Tap **Link a Device**.\n4. Tap **Link with phone number instead**.\n5. Enter the code above.\n\nOnce done, your Digital Apprentice will wake up! 🚀`;
@@ -191,7 +188,7 @@ export async function handleOnboarding(
       }
   }
 
-  // 2. AUTOMATIC OTP RELAY (Master Context - Triggered by Boss sending code to Master)
+  // 2. AUTOMATIC OTP RELAY (Master Context — 6-digit code sent to Master Bot)
   const isSixDigits = /^\d{6}$/.test(text);
   if (org.config?.isMaster && isSixDigits) {
       const setups = await getPendingSetups();
@@ -219,20 +216,15 @@ export async function handleOnboarding(
                 await activationService.subscribeWaba(setup.wabaId);
              }
 
-             // 4. Update Firestore status
-             const { activateTenant: activate } = await import('@naija-agent/firebase');
-             await activate(target.id, setup.phoneId, setup.accessToken);
-             try {
-               await pgActivateTenant(target.id, setup.phoneId, setup.accessToken);
-             } catch (e: any) {
-               logger.warn({ orgId: target.id, error: e.message }, '⚠️ [AUTO-IGNITION] PG dual-write failed, continuing');
-             }
+             // 4. Update Firestore and PostgreSQL status
+             await Promise.all([
+               fbActivateTenant(target.id, setup.phoneId, setup.accessToken),
+               pgActivateTenant(target.id, setup.phoneId, setup.accessToken)
+             ]);
 
              // 5. Cleanup pending data
-             const { getDb } = await import('@naija-agent/firebase');
-             await (await getDb()).collection('organizations').doc(target.id).update({ 
-                pendingSetup: null 
-             });
+             const docRef = (await getDb()).collection('organizations').doc(target.id);
+             await docRef.update({ pendingSetup: null });
 
              logger.info({ orgId: target.id }, '✅ [AUTO-IGNITION] Success');
              
@@ -250,6 +242,10 @@ export async function handleOnboarding(
           }
           return { success: true };
       }
+
+      // No matching pending setup found — let the user know
+      await tenantWhatsAppService.sendText(from, `⚠️ Oga, I received your code *${text}*, but I cannot find a pending activation request for your number.\n\nPlease make sure you have completed the setup process on the web dashboard first.`);
+      return { success: true };
   }
 
   if (!isAdmin) return null; // Only Boss handles the rest of setup
@@ -305,53 +301,7 @@ export async function handleOnboarding(
       let nextData: OnboardingData = { ...currentData };
       let reply = "";
 
-      // --- PHASE 7.4: GREEDY SEMANTIC EXTRACTION ---
-      if ((text === '#setup' || nextStep === 'NAME' || nextStep === 'START') && text.length > 10) {
-         try {
-            const aiOrchestrator = (await import('@naija-agent/ai')).AIFactory.createRouter((await import('@naija-agent/ai')).GlobalModelRegistry);
-            
-            const extractionPrompt = `${ONBOARDING_PROMPTS.GREEDY_EXTRACTION}: "${text}"`;
-            
-            const result = await aiOrchestrator.generateText(extractionPrompt, {
-               model: SystemConfig.MODELS.ZYNUX_FALLBACK,
-               systemInstruction: "You are an expert entity extraction system. Return ONLY strict JSON.",
-               responseMimeType: 'application/json',
-            });
-            
-            const extracted = JSON.parse((result.text || "").replace(/```json|```/g, '').trim());
-            
-            logger.info({ orgId, extracted }, '🧠 [GREEDY EXTRACTION] AI Extraction Result');
-
-            // --- LOCALE-AWARE VALIDATION ---
-            const currency = org.currency || { code: 'NGN' };
-            
-            if (extracted.businessName) nextData.name = extracted.businessName;
-            if (extracted.adminPin && /^\d{4}$/.test(extracted.adminPin.trim())) {
-                const bcrypt = await import('bcrypt');
-                nextData.adminPin = await bcrypt.hash(extracted.adminPin.trim(), 10);
-            }
-            if (extracted.bankName) nextData.bankName = extracted.bankName;
-
-            // Bank Account Validation (Dynamic)
-            if (extracted.accountNumber) {
-               if (currency.code === 'NGN') {
-                  // NUBAN: Strictly 10 digits
-                  if (/^\d{10}$/.test(extracted.accountNumber)) nextData.accountNumber = extracted.accountNumber;
-               } else {
-                  // IBAN/SWIFT/ACH: 6 to 34 chars (alphanumeric)
-                  if (/^[a-zA-Z0-9]{6,34}$/.test(extracted.accountNumber)) nextData.accountNumber = extracted.accountNumber;
-               }
-            }
-            
-            if (extracted.accountName) nextData.accountName = extracted.accountName;
-
-         } catch (e) {
-            logger.warn({ orgId, error: e }, '⚠️ [EXTRACTION FAILED]');
-         }
-      }
-
       if (text === '#setup') {
-          // If we managed to extract the name already (e.g. "#setup My Shop is Bims"), jump ahead
           if (nextData.name) {
              nextStep = 'PIN';
              reply = `Welcome Oga! I see your shop name is *${nextData.name}*. \n\n*Step 2:* Set your *4-digit Admin PIN*.`;
@@ -360,7 +310,7 @@ export async function handleOnboarding(
              reply = `Oga! Welcome to Naija Agent. 🤝\n\nI am your new *Digital Apprentice*. Let's set up your shop so I can start making you money.\n\n*Step 1:* What is your *Business Name*?`;
           }
       } else if (text === '#back') {
-          // 🔙 [UX]: History Traversal (Simple Map)
+          // 🔙 [UX]: History Traversal
           const backMap: Record<string, OnboardingConfig['step']> = {
              'PIN': 'NAME',
              'BANK_NAME': 'PIN',
@@ -371,26 +321,46 @@ export async function handleOnboarding(
              'REVIEW': 'TONE',
              'BOT_PHONE': 'REVIEW'
           };
+
+          // Clear data for the step being rolled back from so it must be re-entered
+          const clearMap: Record<string, (keyof OnboardingData)[]> = {
+             'PIN': ['adminPin'],
+             'BANK_NAME': ['bankName'],
+             'BANK_ACCOUNT': ['accountNumber'],
+             'BANK_ACCOUNT_NAME': ['accountName'],
+             'TONE': ['systemPrompt'],
+             'CUSTOM_TONE': ['systemPrompt'],
+             'REVIEW': [],
+             'BOT_PHONE': ['botPhone'],
+          };
           
           if (backMap[nextStep]) {
-             const prevStep = backMap[nextStep] as string;
+             const currentStepName = nextStep;
              nextStep = backMap[nextStep]!;
+
+             // Clear data for the step we're leaving
+             const fieldsToClear = clearMap[currentStepName];
+             if (fieldsToClear) {
+               for (const field of fieldsToClear) {
+                 delete nextData[field];
+               }
+             }
              
-             // Dynamic lookup for the previous value to show the user
+             // Show the user what the previous step's value was (before we potentially cleared it)
              let prevVal = "Not set";
-             if (prevStep === 'NAME') prevVal = nextData.name || "Not set";
-             else if (prevStep === 'PIN') prevVal = nextData.adminPin ? "[HASHED]" : "Not set";
-             else if (prevStep === 'BANK_NAME') prevVal = nextData.bankName || "Not set";
-             else if (prevStep === 'BANK_ACCOUNT') prevVal = nextData.accountNumber || "Not set";
-             else if (prevStep === 'BANK_ACCOUNT_NAME') prevVal = nextData.accountName || "Not set";
-             else if (prevStep === 'TONE') prevVal = "Tone Selection";
+             if (currentStepName === 'PIN') prevVal = nextData.adminPin ? "[HASHED]" : "Not set";
+             else if (currentStepName === 'BANK_NAME') prevVal = nextData.bankName || "Not set";
+             else if (currentStepName === 'BANK_ACCOUNT') prevVal = nextData.accountNumber || "Not set";
+             else if (currentStepName === 'BANK_ACCOUNT_NAME') prevVal = nextData.accountName || "Not set";
+             else if (currentStepName === 'TONE') prevVal = "Tone Selection";
+             // Note: REVIEW clearMap is empty, so the values above are still accurate
 
              reply = `⏪ *Back to previous step.*\n\n(Current Data for this step: ${prevVal})\n\nPlease enter the value again or type the new one.`;
           } else {
              reply = "Oga, we are at the start. You fit only go forward from here!";
           }
       } else if (nextStep === 'NAME') {
-          if (!nextData.name) nextData.name = text; // Only set if not already extracted
+          if (!nextData.name) nextData.name = text;
           
           if (nextData.adminPin) {
              nextStep = 'BANK_NAME';
@@ -400,15 +370,11 @@ export async function handleOnboarding(
              reply = `Got it: *${nextData.name}*.\n\n*Step 2:* Set your *4-digit Admin PIN*. (e.g. 1234)`;
           }
       } else if (nextStep === 'PIN') {
-          if (nextData.adminPin && text.length > 4) { 
-             // User sent a long sentence, maybe bank details? Assume PIN was set by Greedy.
-          } else if (text.length !== 4 || isNaN(parseInt(text))) {
+          if (text.length !== 4 || isNaN(parseInt(text))) {
               reply = "Abeg, use exactly 4 numbers for your PIN.";
               return { success: true };
-          } else {
-              const bcrypt = await import('bcrypt');
-              nextData.adminPin = await bcrypt.hash(text, 10);
           }
+          nextData.adminPin = await bcrypt.hash(text, 10);
 
           if (nextData.bankName) {
              nextStep = 'BANK_ACCOUNT';
@@ -492,7 +458,6 @@ export async function handleOnboarding(
       } else if (nextStep === 'BOT_PHONE') {
           // --- SOVEREIGN AUTO-IGNITION (SIDECAR) ---
           const botPhone = text.replace(/\s+/g, '');
-          // Basic validation
           if (botPhone.length < 10) {
              reply = "Abeg enter a valid phone number.";
              return { success: true };
@@ -502,16 +467,7 @@ export async function handleOnboarding(
           await tenantWhatsAppService.sendText(from, reply);
 
           try {
-             // 1. Save Preliminary Data (Firebase + PostgreSQL)
-             await completeOnboarding(orgId, { ...nextData, botPhone: botPhone });
-             try {
-               await pgCompleteOnboarding(orgId, { ...nextData, adminPin: nextData.adminPin!, botPhone: botPhone });
-             } catch (e: any) {
-               logger.warn({ orgId, error: e.message }, '⚠️ [ONBOARDING] PG completeOnboarding dual-write failed, continuing');
-             }
-             
-             // 2. Pre-check: validate phone is not already linked
-             const { parseAndFormatPhone } = await import('@naija-agent/types');
+             // 1. Pre-check: validate phone is not already linked
              const normalizedBotPhone = parseAndFormatPhone(botPhone);
              if (normalizedBotPhone) {
                  const rawPhone = normalizedBotPhone.replace('+', '');
@@ -522,9 +478,10 @@ export async function handleOnboarding(
                     await tenantWhatsAppService.sendText(from, reply);
                     return { success: true };
                  }
-             } 
-             
-             // 3. Request Pairing Code from Sidecar
+             }
+
+             // 2. Request Pairing Code from Sidecar FIRST
+             // (If this fails, nothing was persisted — no cleanup needed)
              const sidecarUrl = process.env.WHATSAPP_SIDECAR_URL || 'http://localhost:8080';
              const apiKey = process.env.ADMIN_API_KEY;
 
@@ -542,6 +499,12 @@ export async function handleOnboarding(
              const pairingCode = response.data.code;
              if (!pairingCode) throw new Error('Sidecar failed to generate pairing code.');
 
+             // 3. Save Preliminary Data (Firebase + PostgreSQL) — only on Sidecar success
+             await Promise.all([
+               completeOnboarding(orgId, { ...nextData, botPhone: botPhone }),
+               pgCompleteOnboarding(orgId, { ...nextData, adminPin: nextData.adminPin!, botPhone: botPhone })
+             ]);
+
              // 4. Set Redis Mapping (for Sidecar routing)
              if (normalizedBotPhone) {
                  const rawPhone = normalizedBotPhone.replace('+', '');
@@ -552,8 +515,7 @@ export async function handleOnboarding(
              }
 
              // 5. Update Org with Pending Setup
-             const { getDb: getFbDb } = await import('@naija-agent/firebase');
-             await (await getFbDb()).collection('organizations').doc(orgId).update({
+             await (await getDb()).collection('organizations').doc(orgId).update({
                  whatsappPhoneId: 'PENDING',
                  status: 'AWAITING_SIDECAR',
                  pendingSetup: {
@@ -575,20 +537,15 @@ export async function handleOnboarding(
              }
           }
       } else if (nextStep === 'OTP_WAIT') {
-          // --- SIDECAR ACTIVATION MONITOR ---
-          // Since sidecar linking is automatic (it will just connect), 
-          // we tell the user to wait or type #status.
           reply = "Your bot is linking... ⏳\n\nPlease wait a few seconds, then type *#status* to see if I am LIVE! 🚀";
           return { success: true };
       }
 
       if (reply) {
-          await setOrgOnboarding(orgId, nextStep, nextData);
-          try {
-            await pgSetOrgOnboarding(orgId, nextStep, nextData);
-          } catch (e: any) {
-            logger.warn({ orgId, error: e.message }, '⚠️ [ONBOARDING] PG setOrgOnboarding dual-write failed, continuing');
-          }
+          await Promise.all([
+            setOrgOnboarding(orgId, nextStep, nextData),
+            pgSetOrgOnboarding(orgId, nextStep, nextData)
+          ]);
           await tenantWhatsAppService.sendText(from, reply);
           return { success: true };
       }

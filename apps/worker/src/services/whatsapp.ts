@@ -284,7 +284,21 @@ export class WhatsAppService {
     if (mediaId.startsWith('/tmp/')) {
         try {
             const fs = await import('fs/promises');
-            const buffer = await fs.readFile(mediaId);
+            const path = await import('path');
+            const resolvedPath = path.resolve(mediaId);
+            
+            // Path traversal prevention: strictly bound to /tmp/
+            if (!resolvedPath.startsWith('/tmp/')) {
+                throw new Error('Invalid media path: Traversal detected');
+            }
+
+            // Prevent OOM: Reject files over 10MB
+            const stats = await fs.stat(resolvedPath);
+            if (stats.size > 10 * 1024 * 1024) {
+                throw new Error('Media too large to process in-memory (max 10MB)');
+            }
+
+            const buffer = await fs.readFile(resolvedPath);
             let mimeType = 'application/octet-stream';
             if (mediaId.endsWith('.pdf')) mimeType = 'application/pdf';
             else if (mediaId.endsWith('.jpg') || mediaId.endsWith('.jpeg')) mimeType = 'image/jpeg';

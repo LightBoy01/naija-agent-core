@@ -37,7 +37,7 @@ export async function createTenant(data: {
         model: 'deepseek-v4-flash',
         tools: ['web_search']
       }
-    });
+    }).onConflictDoNothing({ target: organizations.id });
 
     // Update global vault total
     await tx.insert(networkMetadata).values({

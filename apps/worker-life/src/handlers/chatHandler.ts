@@ -53,7 +53,7 @@ export async function handleLifeChat(job: Job, deps: ChatDependencies) {
     let isDoc = type === 'document';
     let isAudio = type === 'audio';
 
-    if (fileName && type === 'life-chat') {
+    if (fileName && job.data.type === 'life-chat') {
         const lower = fileName.toLowerCase();
         if (lower.endsWith('.pdf') || lower.endsWith('.doc') || lower.endsWith('.docx')) isDoc = true;
         else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.mp4') || lower.endsWith('.png')) isImage = true;
