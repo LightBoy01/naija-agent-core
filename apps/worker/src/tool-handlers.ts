@@ -34,7 +34,7 @@ export async function handleToolCall(
     return { 
       status: 'error', 
       code: 'AUTH_REQUIRED', 
-      message: 'This action is LOCKED. Oga, please type your 4-digit PIN to proceed.' 
+      message: 'CRITICAL: You must explicitly ask the user to reply with their 4-digit Admin PIN to unlock this tool. Do NOT attempt to call other tools like generate_login_code to bypass this.' 
     };
   }
 
