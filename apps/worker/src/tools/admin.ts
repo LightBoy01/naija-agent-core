@@ -182,7 +182,7 @@ ${latest.recommendations || 'Expand your reach!'}
 
     case 'verify_admin_pin': {
         if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
-        const { getOrgById } = await import('@naija-agent/firebase');
+        const { getOrgById, setAdminAuth } = await import('@naija-agent/database');
         const org = await getOrgById(orgId);
         const bcrypt = await import('bcrypt');
         
@@ -194,7 +194,8 @@ ${latest.recommendations || 'Expand your reach!'}
     }
 
     case 'request_human_handoff': {
-      const adminPhone = (await (await getDb()).collection('organizations').doc(orgId).get()).data()?.config?.adminPhone;
+      const { getOrgById } = await import('@naija-agent/database');
+      const adminPhone = (await getOrgById(orgId))?.config?.adminPhone;
       if (adminPhone) {
         await whatsappService.sendText(adminPhone, `🆘 *HUMAN ASSISTANCE REQUESTED*\nFrom: ${from}\nReason: ${args.reason}`);
       }
