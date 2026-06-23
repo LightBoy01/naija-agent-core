@@ -3,6 +3,7 @@ import { chats, messages, cartItems, products } from './schema.js';
 import { eq, desc, sql, and, lt, gt } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { Message } from '@naija-agent/types';
+import { getOrgById } from './organizations.js';
 
 /**
  * Finds or creates a chat session in SQL.
@@ -166,7 +167,8 @@ export async function getNetworkChats(orgId: string, limit = 50): Promise<any[]>
 
   try {
     let rows;
-    if (orgId !== 'naija-agent-master') {
+    const org = await getOrgById(orgId);
+    if (!org || !(org.config as any)?.isMaster) {
       rows = await sqlDb.select().from(chats).where(eq(chats.orgId, orgId)).orderBy(desc(chats.lastMessageAt)).limit(limit);
     } else {
       rows = await sqlDb.select().from(chats).orderBy(desc(chats.lastMessageAt)).limit(limit);

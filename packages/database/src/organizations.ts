@@ -249,7 +249,8 @@ export async function getOrgStats(orgId: string) {
 }
 
 export async function getNetworkStats(orgId: string) {
-  if (orgId !== 'naija-agent-master') throw new Error('UNAUTHORIZED');
+  const org = await getOrgById(orgId);
+  if (!org || !(org.config as any)?.isMaster) throw new Error('UNAUTHORIZED');
   const db = getDb();
   
   const meta = await db.select().from(networkMetadata).where(eq(networkMetadata.key, 'global'));
