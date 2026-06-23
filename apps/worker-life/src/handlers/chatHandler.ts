@@ -137,7 +137,7 @@ export async function handleLifeChatResume(job: Job, deps: ChatDependencies) {
         return { success: false, error: 'MISSING_CHAT_ID' };
     }
 
-    const org = await getOrgById(orgId || 'naija-agent-master');
+    const org = await getOrgById(orgId || 'naija_agent_hq');
     const { lifeMemory } = await import('../services/lifeMemory.js');
     const lifeContext = await lifeMemory.getContext(userPhone);
     const energyCredits = lifeContext.energyCredits ?? 0;

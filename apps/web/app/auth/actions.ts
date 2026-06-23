@@ -80,7 +80,7 @@ export async function verifyMfa(prevState: AuthState, formData: FormData): Promi
   }
 
   // Currently MFA is only for Sovereign (naija-agent-master)
-  const isValid = await verifyMfaCode('naija-agent-master', code);
+  const isValid = await verifyMfaCode('naija_agent_hq', code);
 
   if (isValid) {
     // Stage 2: MFA Success. Set full session.

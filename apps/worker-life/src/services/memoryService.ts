@@ -3,7 +3,7 @@ import { logger } from '../utils/logger.js';
 import { randomUUID } from 'crypto';
 
 export class MemoryService {
-  async saveEpisodicEvent(phone: string, title: string, details: string, emotionalValence: string = 'neutral', orgId: string = 'naija-agent-master'): Promise<void> {
+  async saveEpisodicEvent(phone: string, title: string, details: string, emotionalValence: string = 'neutral', orgId: string = 'naija_agent_hq'): Promise<void> {
     try {
       const sqlDb = getDb();
       await sqlDb.insert(memories).values({

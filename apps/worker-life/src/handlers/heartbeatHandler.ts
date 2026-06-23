@@ -142,7 +142,7 @@ export async function handleProactiveNudge(job: Job, deps: HeartbeatDependencies
         }
 
         // Fetch user context or assume master org
-        let userOrgId = 'naija-agent-master';
+        let userOrgId = 'naija_agent_hq';
         try {
             const configs = await heartbeatService.getUserConfigs(userId);
             if (configs.length > 0 && configs[0].orgId) {

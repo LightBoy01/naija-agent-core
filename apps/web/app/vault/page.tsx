@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function MediaVault() {
   // Fixed: Pass the Sovereign ID to authorize the global query
-  const media = await getNetworkMedia('naija-agent-master', 24);
+  const media = await getNetworkMedia('naija_agent_hq', 24);
 
   return (
     <main className="min-h-screen p-8 bg-zinc-50 font-sans">

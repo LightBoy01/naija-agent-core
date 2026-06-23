@@ -6,7 +6,7 @@ import Link from 'next/link';
 export const dynamic = 'force-dynamic';
 
 export default async function ChatLogs() {
-  const chats = await getNetworkChats('naija-agent-master', 50);
+  const chats = await getNetworkChats('naija_agent_hq', 50);
 
   return (
     <main className="min-h-screen p-8 bg-zinc-50 font-sans">

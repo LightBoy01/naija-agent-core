@@ -32,8 +32,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function Dashboard() {
   const [stats, chats] = await Promise.all([
-    getNetworkStats('naija-agent-master'),
-    getNetworkChats('naija-agent-master', 10)
+    getNetworkStats('naija_agent_hq'),
+    getNetworkChats('naija_agent_hq', 10)
   ]);
 
   const allClients = (stats.clients || []).map((c: { id: string; name: string; balance: number; isActive: boolean; status: string; botPhone: string }) => sanitizeOrgForFrontend(c)) as Client[];

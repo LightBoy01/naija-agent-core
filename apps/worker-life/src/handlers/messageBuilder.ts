@@ -60,7 +60,7 @@ export interface ChatResult {
 
 export async function chatWithAelixxr(input: ChatInput, systemPrompt: string): Promise<{ result: ChatResult; chatId: string; primaryModel: string; normalizedHistory: AIMessage[] }> {
   const { ctx, ai, getDynamicModels } = input;
-  const chatId = await findOrCreateChat(ctx.orgId || 'naija-agent-master', `${ctx.userPhone}_life`, 'User');
+  const chatId = await findOrCreateChat(ctx.orgId || 'naija_agent_hq', `${ctx.userPhone}_life`, 'User');
   const history = await getChatHistory(chatId, 10);
 
   const normalizedHistory: AIMessage[] = history.map((m: any) => ({

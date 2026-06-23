@@ -7,7 +7,7 @@ import { geminiBreaker } from './circuitBreaker.js';
 import 'dotenv/config';
 
 export class SleepCycleService {
-    async consolidateMemory(userId: string, orgId: string = 'naija-agent-master') {
+    async consolidateMemory(userId: string, orgId: string = 'naija_agent_hq') {
         logger.info({ userId }, '💤 [SLEEP CYCLE] Starting memory consolidation...');
         try {
             const chatId = await findOrCreateChat(orgId, `${userId}_life`, 'User');
