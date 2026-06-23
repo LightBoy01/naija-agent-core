@@ -63,14 +63,47 @@ export class OpenAIProvider implements AIProvider {
     }));
   }
 
-  private parseResponse(content: string): { text: string; thinking?: string } {
-    const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/i);
+  private parseResponse(content: string): { text: string; thinking?: string; dsmlFunctionCalls?: any[] } {
+    let text = content;
+    let thinking: string | undefined = undefined;
+    let dsmlFunctionCalls: any[] = [];
+
+    const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/i);
     if (thinkMatch) {
-      const thinking = thinkMatch[1].trim();
-      const text = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-      return { text, thinking };
+      thinking = thinkMatch[1].trim();
+      text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
     }
-    return { text: content };
+
+    // Parse DSML tool calls
+    const dsmlMatch = text.match(/<｜｜DSML｜｜tool_calls>([\s\S]*?)<\/｜｜DSML｜｜tool_calls>/);
+    if (dsmlMatch) {
+        const dsmlContent = dsmlMatch[1];
+        const invokeRegex = /<｜｜DSML｜｜invoke name="([^"]+)">([\s\S]*?)<\/｜｜DSML｜｜invoke>/g;
+        let invokeMatch;
+        while ((invokeMatch = invokeRegex.exec(dsmlContent)) !== null) {
+            const name = invokeMatch[1];
+            const paramsContent = invokeMatch[2];
+            const args: any = {};
+            
+            const paramRegex = /<｜｜DSML｜｜parameter name="([^"]+)"[^>]*>([\s\S]*?)<\/｜｜DSML｜｜parameter>/g;
+            let paramMatch;
+            while ((paramMatch = paramRegex.exec(paramsContent)) !== null) {
+                const paramName = paramMatch[1];
+                let paramVal = paramMatch[2].trim();
+                try {
+                    // Parse as JSON if possible (for numbers, booleans, arrays)
+                    paramVal = JSON.parse(paramVal);
+                } catch {
+                    // Keep as string if it's plain text
+                }
+                args[paramName] = paramVal;
+            }
+            dsmlFunctionCalls.push({ name, args });
+        }
+        text = text.replace(/<｜｜DSML｜｜tool_calls>[\s\S]*?<\/｜｜DSML｜｜tool_calls>/g, '').trim();
+    }
+
+    return { text, thinking, dsmlFunctionCalls: dsmlFunctionCalls.length > 0 ? dsmlFunctionCalls : undefined };
   }
 
   async generateText(prompt: string, options?: AIOptions): Promise<AIResponse> {
@@ -92,11 +125,17 @@ export class OpenAIProvider implements AIProvider {
     });
 
     const content = response.choices[0].message.content || "";
-    const { text, thinking } = this.parseResponse(content);
+    const { text, thinking, dsmlFunctionCalls } = this.parseResponse(content);
+
+    let functionCalls: any[] | undefined = undefined;
+    if (dsmlFunctionCalls && dsmlFunctionCalls.length > 0) {
+        functionCalls = dsmlFunctionCalls;
+    }
 
     return {
       text,
       thinking,
+      functionCalls,
       usage: {
         promptTokens: response.usage?.prompt_tokens || 0,
         completionTokens: response.usage?.completion_tokens || 0,
@@ -182,15 +221,21 @@ export class OpenAIProvider implements AIProvider {
     });
 
     const content = response.choices[0].message.content || "";
-    const { text, thinking } = this.parseResponse(content);
+    const { text, thinking, dsmlFunctionCalls } = this.parseResponse(content);
+
+    let functionCalls = response.choices[0].message.tool_calls?.map((tc: any) => ({
+      name: tc.function.name,
+      args: JSON.parse(tc.function.arguments)
+    }));
+
+    if (dsmlFunctionCalls && dsmlFunctionCalls.length > 0) {
+        functionCalls = (functionCalls || []).concat(dsmlFunctionCalls);
+    }
 
     return {
       text,
       thinking,
-      functionCalls: response.choices[0].message.tool_calls?.map((tc: any) => ({
-        name: tc.function.name,
-        args: JSON.parse(tc.function.arguments)
-      })),
+      functionCalls: functionCalls?.length ? functionCalls : undefined,
       usage: {
         promptTokens: response.usage?.prompt_tokens || 0,
         completionTokens: response.usage?.completion_tokens || 0,

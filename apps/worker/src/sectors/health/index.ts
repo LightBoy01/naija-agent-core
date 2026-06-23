@@ -2,6 +2,7 @@ import { Type } from '@google/genai';
 import { SectorPack } from '@naija-agent/types';
 import { CountryCode } from 'libphonenumber-js';
 import { saveEntity, queryEntity } from '@naija-agent/firebase';
+import { logger } from '../../utils/logger.js';
 
 export function getHealthPack(currency: { code: string, symbol: string }, region: CountryCode = 'NG'): SectorPack {
   // ... (Definitions remain same) ...
@@ -91,7 +92,7 @@ export function getHealthPack(currency: { code: string, symbol: string }, region
     systemPrompt: prompt,
     tools: healthTools,
     execute: async (toolName: string, args: any, deps: any) => {
-      console.log(`🏥 [HealthPack] Executing ${toolName}`, args);
+      logger.info({ tool: toolName, args }, 'HealthPack executing tool');
       const { orgId } = deps;
 
       switch (toolName) {

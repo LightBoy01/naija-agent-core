@@ -30,7 +30,6 @@ import {
   getOrgById,
   getActiveOrganizations,
   getOrgDailyStats,
-  getOrgByBridgeSecret,
   getNetworkStats,
   getOrganizationsBySector
 } from '@naija-agent/database';
@@ -41,7 +40,6 @@ import {
 } from '@naija-agent/database';
 import { getProvider } from '@naija-agent/payments';
 import { formatCurrency } from './utils/currency.js';
-import legacyBridgeRoutes from './routes/legacy-bridge.js';
 import cronRoutes from './routes/crons.js';
 import webhookRoutes from './routes/webhooks.js';
 dotenv.config();
@@ -177,8 +175,6 @@ const lifeQueue = new Queue('life-queue', { connection: redisConnection });
 
 fastify.register(webhookRoutes, { whatsappQueue, lifeQueue, redisConnection, logger });
 
-// 5. Legacy SMS Bridge (Isolated)
-fastify.register(legacyBridgeRoutes, { whatsappQueue, redisConnection, logger });
 
 // 7. Proactive Cron (GET)
 fastify.register(cronRoutes, { prefix: '/cron', whatsappQueue, lifeQueue, logger });

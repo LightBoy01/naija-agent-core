@@ -3,10 +3,9 @@ import { JobData, Message, StaffData } from '@naija-agent/types';
 import { WhatsAppService } from '../services/whatsapp.js';
 import {
   findOrCreateChat, getChatHistory, saveMessage, verifyAdminSession,
-  getOrgById, logSystemEvent, getChatDemoState, setChatDemoState
+  getOrgById, logSystemEvent, getChatDemoState, setChatDemoState,
+  getAllKnowledge
 } from '@naija-agent/database';
-// TODO: Replace getAllKnowledge and getProducts with Postgres equivalents once Knowledge table is migrated
-import { getAllKnowledge, getProducts } from '@naija-agent/firebase'; 
 
 import { PaymentProvider } from '@naija-agent/payments';
 import { Redis } from 'ioredis';
@@ -107,6 +106,19 @@ export async function handleMessage(job: Job<JobData>, deps: MessagingDependenci
       if (customDNA) personaPrompt += `\n\n[BUSINESS DNA]: ${customDNA}`;
   }
 
+  const masterBotPhone = process.env.MASTER_BOT_PHONE || '2348000000000';
+  const adminPhone = (org.config as any)?.adminPhone || from;
+  
+  personaPrompt = personaPrompt
+      .replace(/\[Master_Bot_Number\]/g, masterBotPhone)
+      .replace(/\[Your_Number\]/g, masterBotPhone)
+      .replace(/<THEIR_PHONE_NUMBER>/g, from)
+      .replace(/\[Your_Ogas_Phone_Number\]/g, adminPhone);
+
+  let globalProtocolReady = globalProtocol
+      .replace(/\[Master_Bot_Number\]/g, masterBotPhone)
+      .replace(/\[Your_Ogas_Phone_Number\]/g, adminPhone);
+
   const isAuth = isAdmin ? await verifyAdminSession(orgId, from) : false;
   const adminStatus = isAdmin ? (isAuth ? 'AUTHENTICATED' : 'LOCKED') : (isStaff ? 'STAFF_AUTHORIZED' : 'NOT_AUTHENTICATED');
 
@@ -123,7 +135,7 @@ ${personaPrompt}
 [BUSINESS KNOWLEDGE]:
 ${activeDemoNiche ? 'Empty - Sandbox Mode. Make up fake items.' : (knowledgeContext || 'Empty - Please tell me your prices so I can start selling!')}
 
-${globalProtocol}
+${globalProtocolReady}
 
 CRITICAL: Reply directly to the user with your final message. Do NOT include your internal thoughts or reasoning in the final text. Do not wrap your message in JSON or markdown code blocks.
 `;
@@ -201,7 +213,7 @@ CRITICAL: Reply directly to the user with your final message. Do NOT include you
           const isProtected = PIN_PROTECTED_TOOLS.includes(call.name);
           if (isProtected && (!isAdmin || !isAuth)) {
               await redisClient.setex(`expecting_pin:${orgId}:${from}`, 300, 'true');
-              toolResponseParts.push({ functionResponse: { name: call.name, response: { status: 'error', code: 'AUTH_REQUIRED' } } });
+              toolResponseParts.push({ functionResponse: { name: call.name, response: { status: 'error', code: 'AUTH_REQUIRED', message: 'CRITICAL: You must explicitly ask the user to reply with their 4-digit Admin PIN to unlock this tool. Do NOT attempt to call other tools to bypass this.' } } });
               continue;
           }
           let response: any;

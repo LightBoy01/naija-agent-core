@@ -1,4 +1,4 @@
-import { Worker, Job, Queue } from 'bullmq';
+import { Worker, Job } from 'bullmq';
 import { Redis } from 'ioredis';
 import dotenv from 'dotenv';
 import pino from 'pino';
@@ -20,9 +20,8 @@ import { AIOrchestrator, GeminiProvider, AIFactory, GlobalModelRegistry } from '
 
 import { handleDailyReport, handleMasterReport } from './handlers/reporting.js';
 import { handleOnboarding } from './handlers/onboarding.js';
-import { handleBridgeHealth, handleSystemOutbound, handleTemplateSend, handleRequestOtp } from './handlers/system.js';
+import { handleSystemOutbound, handleTemplateSend, handleRequestOtp } from './handlers/system.js';
 import { handleCartRecovery, handleReminderScan, handleInventoryCleanup, handleScheduledReminder } from './handlers/reminders.js';
-import { handleSmsBridge } from './handlers/bridge.js';
 import { handleMessage, MessagingDependencies } from './handlers/messaging.js';
 import { formatCurrency } from './utils/currency.js';
 import { CountryCode } from 'libphonenumber-js';
@@ -85,8 +84,6 @@ const defaultWhatsAppService = new WhatsAppService(
   process.env.WHATSAPP_APP_SECRET
 );
 
-const whatsappQueue = new Queue('whatsapp-queue', { connection: redisClient as any });
-
 // --- Pipeline Architecture ---
 import { MessagePipeline } from './pipeline/index.js';
 import { OrgLoadInterceptor } from './pipeline/interceptors/org-load.js';
@@ -128,7 +125,23 @@ async function hydrateSidecar() {
     }
     logger.info(`✅ Hydrated sidecar mapping for ${count} organizations in Redis from Firebase`);
 }
-hydrateSidecar().catch(e => logger.error({error: e.message}, "Failed to hydrate sidecar mapping"));
+
+async function hydrateSidecarWithRetry(maxRetries = 5, baseDelayMs = 3000) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await hydrateSidecar();
+      return;
+    } catch (e: any) {
+      logger.error({ attempt, maxRetries, error: e.message }, 'Sidecar hydration failed');
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, baseDelayMs * attempt)); // 3s, 6s, 9s, 12s, 15s
+      }
+    }
+  }
+  logger.error('Sidecar hydration failed after all retries');
+}
+
+hydrateSidecarWithRetry();
 
 
 // --- Main Worker ---
@@ -143,14 +156,12 @@ const worker = new Worker<JobData>(
       switch (job.name) {
         case 'daily-report': return await handleDailyReport(job, globalPaymentProvider);
         case 'master-report': return await handleMasterReport();
-        case 'check-bridge-health': return await handleBridgeHealth(job, redisClient);
         case 'hourly-reminder-scan': return await handleReminderScan(job);
         case 'hourly-cart-recovery': return await handleCartRecovery(job);
         case 'hourly-inventory-cleanup': return await handleInventoryCleanup(job);
         case 'send-template': return await handleTemplateSend(job);
         case 'request-otp': return await handleRequestOtp(job);
         case 'scheduled-reminder': return await handleScheduledReminder(job, defaultWhatsAppService);
-        case 'process-bridge-sms': return await handleSmsBridge(job, whatsappQueue, aiOrchestrator, defaultWhatsAppService);
       }
     } catch (e: any) {
       logger.error({ jobId: job.id, error: e.message }, 'Special job failed');

@@ -228,8 +228,39 @@ func (m *Manager) createEventHandler(orgID string) whatsmeow.EventHandler {
 		switch v := evt.(type) {
 		case *events.Message:
 			m.handleMessage(orgID, v)
+		case *events.LoggedOut:
+			m.log.Warnf("🔌 Session logged out for %s: reason=%s", orgID, v.Reason)
+			m.withdrawClient(orgID)
+		case *events.StreamReplaced:
+			m.log.Warnf("🔌 Session stream replaced for %s — another client paired with same phone", orgID)
+			m.withdrawClient(orgID)
+		case *events.Disconnected:
+			m.log.Warnf("🔌 Session disconnected for %s — auto-reconnect will handle it", orgID)
 		}
 	}
+}
+
+// withdrawClient removes a client from the active map and disconnects it.
+// Called when a session is logged out, revoked, or replaced.
+func (m *Manager) withdrawClient(orgID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	client, exists := m.clients[orgID]
+	if !exists {
+		return
+	}
+
+	delete(m.clients, orgID)
+
+	// Disconnect in a goroutine so it doesn't block the event handler
+	go func(c *whatsmeow.Client) {
+		if c.IsConnected() {
+			c.Disconnect()
+		}
+	}(client)
+
+	m.log.Infof("🗑️ Withdrew client for %s from active pool", orgID)
 }
 
 func (m *Manager) handleMessage(orgID string, evt *events.Message) {

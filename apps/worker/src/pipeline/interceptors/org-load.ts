@@ -45,9 +45,9 @@ export const OrgLoadInterceptor: Interceptor = {
 
     // --- FINANCIAL SYNC (PHASE 9.3) ---
     // Overwrite Firestore balance with TiDB source of truth
-    const { getDb, organizations } = await import('@naija-agent/database');
+    const { getDb: getSqlDb, organizations } = await import('@naija-agent/database');
     const { eq } = await import('drizzle-orm');
-    const sqlDb = getDb();
+    const sqlDb = getSqlDb();
     const sqlResult = await sqlDb.select({ balanceKobo: organizations.balanceKobo })
       .from(organizations)
       .where(eq(organizations.id, ctx.orgId))
@@ -61,7 +61,7 @@ export const OrgLoadInterceptor: Interceptor = {
 
     // 🔄 [SIDECAR ACTIVATION]: First processing message triggers ACTIVE transition
     if ((org as any).status === 'AWAITING_SIDECAR') {
-      const db = getDb();
+      const db = (await import('@naija-agent/firebase')).getDb();
       await db.collection('organizations').doc(ctx.orgId).update({
         status: 'ACTIVE',
         updatedAt: new Date().toISOString()

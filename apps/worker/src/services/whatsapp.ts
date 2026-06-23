@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { parsePhoneNumber } from 'libphonenumber-js';
 import { SystemConfig } from '@naija-agent/types';
 import { Formatter } from '../utils/formatter.js';
+import { logger } from '../utils/logger.js';
 
 const WhatsAppSendResponseSchema = z.object({
   messaging_product: z.literal('whatsapp'),
@@ -41,7 +42,7 @@ export class WhatsAppService {
   async sendText(to: string, text: string): Promise<string> {
     const body = (text || '').trim();
     if (!body) {
-      console.warn('⚠️ [WHATSAPP_SERVICE] Attempted to send empty text. Using fallback.');
+      logger.warn('Attempted to send empty text. Using fallback.');
     }
     let finalBody = body || "I'm sorry, I couldn't generate a response. Please try again.";
 
@@ -97,7 +98,7 @@ export class WhatsAppService {
       }
       return lastMessageId;
     } catch (error: any) {
-      console.error('WhatsApp Send Error:', error.response?.data || error.message);
+      logger.error({ response: error.response?.data }, 'WhatsApp Send Error');
       throw new Error('Failed to send WhatsApp message');
     }
   }
@@ -183,7 +184,7 @@ export class WhatsAppService {
       const data = WhatsAppSendResponseSchema.parse(response.data);
       return data.messages[0].id;
     } catch (error: any) {
-      console.error('WhatsApp Send Image Error:', error.response?.data || error.message);
+      logger.error({ response: error.response?.data }, 'WhatsApp Send Image Error');
       throw new Error('Failed to send WhatsApp image');
     }
   }
@@ -227,7 +228,7 @@ export class WhatsAppService {
         mimeType: mimeType,
       };
     } catch (error: any) {
-      console.error('WhatsApp Download Error:', error.response?.data || error.message);
+      logger.error({ response: error.response?.data }, 'WhatsApp Download Error');
       if (error.message.includes('maxContentLength')) {
          throw new Error('File too large (exceeded 5MB limit)');
       }
@@ -254,7 +255,7 @@ export class WhatsAppService {
         }
       );
     } catch (e: any) {
-      console.error('❌ [SOVEREIGN SEND] Failed:', e.response?.data || e.message);
+      logger.error({ response: e.response?.data }, 'Sovereign send failed');
       throw new Error(`Failed to dispatch message via Sovereign engine: ${e.message}`);
     }
   }
@@ -280,7 +281,7 @@ export class WhatsAppService {
         },
       });
     } catch (e: any) {
-      console.error('❌ [SOVEREIGN SEND MEDIA] Failed:', e.response?.data || e.message);
+      logger.error({ response: e.response?.data }, 'Sovereign send media failed');
       throw new Error(`Failed to dispatch media via Sovereign engine: ${e.message}`);
     }
   }
@@ -317,7 +318,7 @@ export class WhatsAppService {
             
             return { buffer, mimeType };
         } catch (err: any) {
-            console.error('❌ [SOVEREIGN DOWNLOAD] Local file read failed:', err.message);
+            logger.error({ error: err.message }, 'Sovereign download local file read failed');
             throw new Error(`Failed to read local media file: ${err.message}`);
         }
     }
@@ -351,7 +352,7 @@ export class WhatsAppService {
          );
          return true;
        } catch (e: any) {
-         console.error('❌ [SOVEREIGN TYPING] Failed:', e.response?.data || e.message);
+         logger.error({ response: e.response?.data }, 'Sovereign typing indicator failed');
          return false;
        }
     }
@@ -391,7 +392,7 @@ export class WhatsAppService {
 
       return response.data;
     } catch (error: any) {
-      console.error('WhatsApp Send Template Error:', error.response?.data || error.message);
+      logger.error({ response: error.response?.data }, 'WhatsApp Send Template Error');
       throw error;
     }
   }
@@ -410,10 +411,10 @@ export class WhatsAppService {
           params: this.getAuthParams(),
         }
       );
-      console.log(`✅ WABA ${wabaId} subscribed successfully!`);
+      logger.info({ wabaId }, 'WABA subscribed successfully');
       return true;
     } catch (error: any) {
-      console.error('❌ WABA Subscription Failed:', error.response?.data || error.message);
+      logger.error({ wabaId, response: error.response?.data }, 'WABA Subscription Failed');
       return false;
     }
   }
@@ -439,11 +440,11 @@ export class WhatsAppService {
         }
       );
 
-      console.log(`✅ Phone registration successful for ID: ${this.phoneId}`);
+      logger.info({ phoneId: this.phoneId }, 'Phone registration successful');
       return response.data.success || true;
     } catch (error: any) {
       const metaError = error.response?.data?.error?.message || error.message;
-      console.error(`❌ Phone Registration Failed (${this.phoneId}):`, metaError);
+      logger.error({ phoneId: this.phoneId, error: metaError }, 'Phone Registration Failed');
       throw new Error(`Meta Registration Error: ${metaError}`);
     }
   }
@@ -469,11 +470,11 @@ export class WhatsAppService {
           params: this.getAuthParams(),
         }
       );
-      console.log(`✅ Code requested successfully via ${method} for ID: ${this.phoneId}`);
+      logger.info({ phoneId: this.phoneId, method }, 'Code requested successfully');
       return response.data.success || true;
     } catch (error: any) {
       const metaError = error.response?.data?.error?.message || error.message;
-      console.error(`❌ Code Request Failed (${this.phoneId}):`, metaError);
+      logger.error({ phoneId: this.phoneId, method, error: metaError }, 'Code Request Failed');
       throw new Error(`Meta Code Request Error: ${metaError}`);
     }
   }
@@ -508,11 +509,11 @@ export class WhatsAppService {
         }
       );
 
-      console.log(`✅ Phone Number Added Successfully! ID: ${response.data.id}`);
+      logger.info({ phoneId: response.data.id }, 'Phone Number Added Successfully');
       return { phoneId: response.data.id };
     } catch (error: any) {
       const metaError = error.response?.data?.error?.message || error.message;
-      console.error(`❌ Add Phone Number Failed:`, metaError);
+      logger.error({ error: metaError }, 'Add Phone Number Failed');
       throw new Error(`Meta Add Number Error: ${metaError}`);
     }
   }

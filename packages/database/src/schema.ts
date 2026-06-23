@@ -39,6 +39,7 @@ export const organizations = pgTable('organizations', {
   id: varchar('id', { length: 64 }).primaryKey(),
   name: varchar('name', { length: 255 }).notNull(),
   balanceKobo: bigint('balance_kobo', { mode: 'number' }).default(0).notNull(),
+  lifetimeDepositsKobo: bigint('lifetime_deposits_kobo', { mode: 'number' }).default(0).notNull(),
   isActive: boolean('is_active').default(true).notNull(),
   status: varchar('status', { length: 50 }).default('ACTIVE').notNull(), // 'ACTIVE', 'SUSPENDED', 'TRIAL', etc.
   region: varchar('region', { length: 10 }).default('NG').notNull(),
@@ -127,11 +128,12 @@ export const energyLedger = pgTable('energy_ledger', {
 export const referrals = pgTable('referrals', {
   id: varchar('id', { length: 128 }).primaryKey(),
   referrerPhone: varchar('referrer_phone', { length: 64 }).references(() => users.phone).notNull(),
-  referredPhone: varchar('referred_phone', { length: 64 }).notNull(),
-  status: varchar('status', { length: 20 }).default('pending').notNull(), // 'pending', 'completed', 'rewarded'
-  rewardAmount: integer('reward_amount').default(50).notNull(), // Energy Credits
+  referredOrgId: varchar('referred_org_id', { length: 64 }).references(() => organizations.id).notNull(),
+  status: varchar('status', { length: 20 }).default('pending').notNull(), // 'pending', 'pending_settlement', 'paid'
+  commissionEarnedKobo: integer('commission_earned_kobo').default(100000).notNull(), // 1000 NGN Flat
   createdAt: timestamp('created_at').defaultNow().notNull(),
-  completedAt: timestamp('completed_at'),
+  settlementDate: timestamp('settlement_date'), // Tracks the 14-day hold
+  completedAt: timestamp('completed_at'), // When it was finally paid out
 });
 
 // --- Chats (Conversation State) ---

@@ -1,4 +1,3 @@
-import { Type } from '@google/genai';
 import { AIProvider } from '@naija-agent/ai';
 import { logger } from '../utils/logger.js';
 import { SystemConfig } from '@naija-agent/types';
@@ -34,46 +33,37 @@ export class PriceGuard {
     logger.info('🛡️ [PRICE GUARD] Price detected in response. Starting deep validation...');
 
     // 2. Use a lightweight model to extract all mentioned items and prices
-    const extractionSchema = {
-      type: Type.OBJECT,
-      properties: {
-        findings: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              item: { type: Type.STRING },
-              price: { type: Type.NUMBER },
-              raw_mention: { type: Type.STRING }
-            },
-            required: ["item", "price", "raw_mention"]
-          }
-        }
-      },
-      required: ["findings"]
-    };
+    // Using plain-text instructions instead of responseSchema — DeepSeek models
+    // don't support structured output, so we parse JSON from the response manually.
+    const prompt = `Extract all items and their mentioned prices from this text as a JSON array.
+Currency context: ${currency.code} (${currency.symbol}).
+Example: "Cake is 5k" -> [{"item": "Cake", "price": 5000, "raw_mention": "5k"}]
 
-    const prompt = `Extract all items and their mentioned prices from this text. 
-    Currency context: ${currency.code} (${currency.symbol}). 
-    Example: "Cake is 5k" -> {item: "Cake", price: 5000}.
-    
-    Text to analyze:
-    "${text}"`;
+Return ONLY a valid JSON array, no other text or markdown.
+
+Text to analyze:
+"${text}"`;
 
     try {
       const result = await this.ai.generateText(prompt, {
         model: SystemConfig.MODELS.ZYNUX_FALLBACK || 'gemini-flash-lite-latest',
-        responseMimeType: 'application/json',
-        responseSchema: extractionSchema as any
       });
 
-      const data = JSON.parse(result.text);
-      if (!data.findings || data.findings.length === 0) {
+      // Parse response — handle both plain JSON and markdown code fence wrapping
+      let clean = result.text.trim();
+      if (clean.startsWith('```')) {
+        clean = clean.replace(/```(?:json)?\n?/g, '').replace(/```\n?/g, '').trim();
+      }
+      const data = JSON.parse(clean);
+
+      // Handle both {findings: [...]} and bare array formats
+      const findings = Array.isArray(data) ? data : (data.findings || []);
+      if (findings.length === 0) {
         return { isSafe: true };
       }
 
       // 3. Cross-reference with business knowledge
-      for (const finding of data.findings) {
+      for (const finding of findings) {
         const itemName = finding.item.toLowerCase();
         const mentionedPrice = finding.price;
 

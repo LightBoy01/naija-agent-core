@@ -1,14 +1,12 @@
 import { Job } from 'bullmq';
-import { JobData, SystemConfig } from '@naija-agent/types';
+import { JobData } from '@naija-agent/types';
 import { WhatsAppService } from '../services/whatsapp.js';
 import { 
-  getOrgById, 
+  getOrgById,
   getOrgByPhoneId,
-  logSystemEvent, 
   getActiveOrganizations,
   releaseExpiredReservations
 } from '@naija-agent/firebase';
-import { Redis } from 'ioredis';
 import { logger } from '../utils/logger.js';
 
 export async function handleInventoryCleanup(
@@ -31,53 +29,6 @@ export async function handleInventoryCleanup(
     }
   }
   logger.info({ totalReleased }, `📦 [INVENTORY CLEANUP] Scan complete.`);
-  return { success: true };
-}
-
-export async function handleBridgeHealth(
-  job: Job<JobData>,
-  redisClient: Redis
-): Promise<{ success: boolean }> {
-  const { orgId } = job.data;
-  if (!orgId) throw new Error('Missing orgId for health-check job');
-  
-  const org = await getOrgById(orgId);
-  if (!org || !org.config?.adminPhone) return { success: true };
-
-  const heartbeatKey = `bridge_heartbeat:${orgId}`;
-  const lastHeartbeat = await redisClient.get(heartbeatKey);
-  const lastAlertKey = `bridge_offline_alert:${orgId}`;
-  const hasRecentlyAlerted = await redisClient.get(lastAlertKey);
-
-  if (lastHeartbeat) {
-    const now = Date.now();
-    const diffMinutes = (now - parseInt(lastHeartbeat)) / (1000 * 60);
-
-    // 🛡️ [RED TEAM]: Implement grace period from config
-    if (diffMinutes > SystemConfig.LIMITS.BRIDGE_OFFLINE_GRACE_MINUTES && !hasRecentlyAlerted) {
-       logger.warn({ orgId, diffMinutes: Math.floor(diffMinutes) }, `🚨 [GUARDIAN] Bridge is OFFLINE.`);
-       
-       const offlineMsg = `🚨 *Bridge Offline Alert*\n\nOga, your SMS Bridge for *${org.name}* hasn't sent a heartbeat for over ${SystemConfig.LIMITS.BRIDGE_OFFLINE_GRACE_MINUTES} minutes.\n\nI cannot verify bank transfers automatically until it's back online! Please check your bridge device.`;
-       
-       const tenantWhatsAppService = new WhatsAppService(
-         org.config?.whatsappToken || process.env.WHATSAPP_API_TOKEN || '',
-         org.whatsappPhoneId || process.env.WHATSAPP_PHONE_ID || '',
-         org.config?.appSecret || process.env.WHATSAPP_APP_SECRET
-       );
-
-       await tenantWhatsAppService.sendText(org.config.adminPhone, offlineMsg);
-       await logSystemEvent(org.id, 'BRIDGE_OFFLINE_ALERT', `Sent alert to Boss: Bridge offline for ${Math.floor(diffMinutes)} mins.`);
-       
-       // 🛡️ [RED TEAM]: Implement 24h cooldown to prevent alarm fatigue
-       await redisClient.setex(lastAlertKey, 86400, '1');
-    } else if (diffMinutes <= SystemConfig.LIMITS.BRIDGE_OFFLINE_GRACE_MINUTES) {
-       if (hasRecentlyAlerted) {
-          logger.info({ orgId }, `✅ [GUARDIAN] Bridge is back ONLINE.`);
-          await logSystemEvent(org.id, 'BRIDGE_RESTORED', 'Bridge heartbeat detected after outage.');
-          await redisClient.del(lastAlertKey);
-       }
-    }
-  }
   return { success: true };
 }
 

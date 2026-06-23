@@ -107,3 +107,4 @@ Enable LOS agents to seamlessly purchase from BOS agents.
 1. **The Great Firebase Purge:** Eradicate all remaining `@naija-agent/firebase` imports in `apps/api` and `apps/worker` to finalize the Drizzle/Postgres single source of truth.
 2. **MFA Interceptor:** Build a deterministic chat interceptor to halt AI execution and resume only when a Boss provides a valid 6-digit MFA code for Sovereign Tools (e.g., broadcasts).
 3. **Phase 11 Topography:** Document VPC security rules mapping Sidecar, Worker, and Redis on Tencent Cloud.
+4. **Data Ingestion Automation (The Cold Start Fix):** Build rapid catalog ingestion tools (Instagram Scraper, Conversational Onboarding, or CSV Upload) to allow merchants to populate their PostgreSQL products table instantly after sidecar pairing, reducing time-to-first-sale to under 5 minutes.

@@ -71,7 +71,7 @@ export const SYSTEM_TOOLS = [
       properties: {
         tenantId: { type: Type.STRING, description: "Organization slug to suspend" },
         reason: { type: Type.STRING, description: "Reason for suspension (e.g. Debt, Fraud)" },
-        mfa_code: { type: Type.STRING, description: "Approval code for suspension (If requested)." }
+        ...(process.env.ENFORCE_MFA === 'true' ? { mfa_code: { type: Type.STRING, description: "Approval code for suspension (If requested)." } } : {})
       },
       required: ["tenantId", "reason"]
     }
@@ -112,7 +112,7 @@ export const SYSTEM_TOOLS = [
       type: Type.OBJECT,
       properties: {
         message: { type: Type.STRING, description: "The message to send to all Bosses." },
-        mfa_code: { type: Type.STRING, description: "Approval code for high-stakes broadcast (If requested)." }
+        ...(process.env.ENFORCE_MFA === 'true' ? { mfa_code: { type: Type.STRING, description: "Approval code for high-stakes broadcast (If requested)." } } : {})
       },
       required: ["message"]
     }

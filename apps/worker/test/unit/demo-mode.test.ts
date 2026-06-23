@@ -17,6 +17,7 @@ vi.mock('@naija-agent/database', () => ({
   findOrCreateChat: mockFindOrCreateChat,
   getChatDemoState: vi.fn(),
   getChatHistory: vi.fn().mockResolvedValue([]),
+  getAllKnowledge: vi.fn().mockResolvedValue({}),
   saveMessage: vi.fn().mockResolvedValue(undefined),
   getDb: vi.fn(),
   eq: vi.fn(),
@@ -32,7 +33,6 @@ vi.mock('@naija-agent/database', () => ({
 
 vi.mock('@naija-agent/firebase', () => ({
   getOrgById: vi.fn().mockResolvedValue(null),
-  getAllKnowledge: vi.fn().mockResolvedValue({}),
   createTenant: vi.fn().mockResolvedValue(undefined),
   registerTrialInterest: vi.fn().mockResolvedValue(undefined),
   activateTenant: vi.fn().mockResolvedValue(undefined),

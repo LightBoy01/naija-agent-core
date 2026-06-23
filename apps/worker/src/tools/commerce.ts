@@ -1,5 +1,6 @@
 import { Type } from '@google/genai';
 import { HandlerContext } from './definitions.js';
+import { logger } from '../utils/logger.js';
 
 export const COMMERCE_TOOLS = [
   {
@@ -174,7 +175,7 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
         try {
           link = await paymentProvider.createPaymentLink(orgId, email, args.amount);
         } catch (e: any) {
-          console.error('❌ [REFILL] Paystack link generation failed:', e.message);
+          logger.error({ error: e.message }, 'Paystack link generation failed');
         }
       }
 
@@ -226,7 +227,7 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
             ? `🚨 *NETWORK ALERT:* This customer has been flagged by ${uniqueReportingOrgs} different businesses for fraud!`
             : `⚠️ *FRAUD WARNING:* This customer has a suspicious report from another business in our network.`;
           
-          console.warn(`🛡️ [SCAM-SHIELD] Flagged user ${from} attempting transaction for ${orgId}. uniqueOrgs: ${uniqueReportingOrgs}`);
+          logger.warn({ user: from, orgId, uniqueReportingOrgs }, 'Scam-Shield flagged user attempting transaction');
           
           if (isAdmin || isStaff) {
              // Managers get the technical warning
@@ -241,7 +242,7 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
 
       if (args.isSuspicious) {
          const reason = args.suspicionReason || "AI detected Photoshop/editing artifacts.";
-         console.warn(`🚨 [FRAUD ALERT] AI flagged suspicious receipt from ${from} for ${orgId}. Reason: ${reason}`);
+         logger.warn({ user: from, orgId, reason }, 'Fraud Alert — AI flagged suspicious receipt');
          
          const fraudAlert = `🚨 *FRAUD ALERT: SUSPICIOUS RECEIPT*\n\nA customer (${from}) sent a receipt for *${formattedAmount}* that looks **EDITED** or **FAKE**.\n\n*Reason:* ${reason}\n*Ref:* ${args.reference}\n\nI have blocked this transaction. Please investigate!`;
          
@@ -274,7 +275,7 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
               const diff = Math.abs(args.amount - tx.amount);
               if (diff > 10) {
                   const txFormatted = formatCurrency(tx.amount, currency.locale, currency.code);
-                  console.warn(`🛑 [FRAUD ATTEMPT] Amount Mismatch for ${args.reference}. Receipt: ${formattedAmount}, Bank: ${txFormatted}`);
+                  logger.warn({ reference: args.reference, receiptAmount: args.amount, bankAmount: tx.amount }, 'Fraud Attempt — Amount Mismatch');
                   return { 
                     status: 'failed', 
                     code: 'AMOUNT_MISMATCH', 
@@ -313,7 +314,7 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
                   
                   if (activity.metadata?.cartItems) {
                       await finalizeSale(orgId, activity.metadata.cartItems as { productId: string, quantity: number }[]);
-                      console.log(`✅ [STOCK] Finalized sale for Order ${activity.id}. Reserved units converted to physical deduction.`);
+                      logger.info({ orderId: activity.id }, 'Finalized sale — reserved units converted to physical deduction');
                   }
               }
 
@@ -327,19 +328,16 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
           }
 
           return { status: 'verified', data: verifiedTx };
-      } else if (orgConfig?.useSmsBridge) {
-          await logPendingTransaction(orgId, from, args.amount, args.reference);
-          return { status: 'pending', code: 'BRIDGE_AWAIT', message: "Logged. Waiting for bank SMS confirmation." };
       } else {
           const HIGH_VALUE_THRESHOLD = 10000;
           const isHighValue = args.amount >= HIGH_VALUE_THRESHOLD;
 
           if (isHighValue) {
-              console.warn(`🛡️ [VALUE GUARD] High-value receipt (${args.amount}) detected for ${orgId} without bridge.`);
+              logger.warn({ orgId, amount: args.amount }, 'High-value receipt detected');
               await logPendingTransaction(orgId, from, args.amount, args.reference);
               await logSystemEvent(orgId, 'HIGH_VALUE_VISION_ATTEMPT', `High-value receipt (${formattedAmount}) from ${from} awaiting manual/bridge confirmation.`, { reference: args.reference });
               
-              const alert = `⚠️ *HIGH VALUE RECEIPT*\n\nA customer (${from}) sent a receipt for *${formattedAmount}* (Ref: ${args.reference}).\n\nBecause this is a large amount and you don't have an SMS Bridge, I have *NOT* verified it automatically. Please check your bank and confirm manually!`;
+              const alert = `⚠️ *HIGH VALUE RECEIPT*\n\nA customer (${from}) sent a receipt for *${formattedAmount}* (Ref: ${args.reference}).\n\nBecause this is a large amount, I have *NOT* verified it automatically. Please check your bank and confirm manually!`;
               
               if (orgConfig?.commandCenterGroupId && (orgConfig.notificationPolicy === 'group_only' || orgConfig.notificationPolicy === 'dual')) {
                   await whatsappService.sendText(orgConfig.commandCenterGroupId, alert);
@@ -363,7 +361,7 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
               extractedDate: args.date
           });
 
-          const visionAlert = `👁️ *VISION VERIFICATION*\n\nOga, I have accepted a receipt for *${formattedAmount}* (Ref: ${args.reference}) from ${from}.\n\n*Note:* I verified this using my eyes only (No SMS Bridge).`;
+          const visionAlert = `👁️ *VISION VERIFICATION*\n\nOga, I have accepted a receipt for *${formattedAmount}* (Ref: ${args.reference}) from ${from}.\n\n*Note:* I verified this using my eyes only.`;
           
           if (orgConfig?.commandCenterGroupId && (orgConfig.notificationPolicy === 'group_only' || orgConfig.notificationPolicy === 'dual')) {
               await whatsappService.sendText(orgConfig.commandCenterGroupId, visionAlert);
@@ -491,7 +489,7 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
            paymentLink = await paymentProvider.createPaymentLink(orgId, email, totalNaira);
            paymentSection = `💳 *PAY WITH CARD/TRANSFER:*\n👉 [Click to Pay Securely](${paymentLink})`;
         } catch (e: any) {
-           console.error('Payment Link Error:', e.message);
+           logger.error({ error: e.message }, 'Payment Link Error');
         }
       }
 

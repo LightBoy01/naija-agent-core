@@ -88,8 +88,6 @@ function makeOrg(overrides: Record<string, any> = {}) {
       adminPin: '$2b$10$hashed_1234',
       model: 'deepseek-v4-flash',
       tools: ['web_search'],
-      bridgeSecret: 'test-secret',
-      useSmsBridge: false,
     },
     onboardingStep: 'NONE',
     onboardingData: null,
@@ -177,8 +175,9 @@ describe('Zynux Onboarding - End-to-End', () => {
 
       const result = await handleOnboarding(job, masterOrg, null, whatsappService, redisClient);
 
-      expect(result).toEqual({ success: true });
-      expect(whatsappService.sendText).toHaveBeenCalledWith(
+      // Unmatched 6-digit codes pass through to normal AI handling
+      expect(result).toBeNull();
+      expect(whatsappService.sendText).not.toHaveBeenCalledWith(
         '2348055555555',
         expect.stringContaining('cannot find a pending activation')
       );
@@ -424,7 +423,6 @@ describe('Zynux Onboarding - End-to-End', () => {
         adminPin: '$2b$10$hashed_9999',
         model: 'deepseek-v4-flash',
         tools: ['web_search'],
-        bridgeSecret: 'test-secret',
       },
     });
 

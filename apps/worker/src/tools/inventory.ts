@@ -89,7 +89,7 @@ import {
   saveStagingProduct,
   deleteProduct, 
   searchProducts 
-} from '@naija-agent/firebase';
+} from '@naija-agent/database';
 import { FieldValue } from 'firebase-admin/firestore';
 
 export async function handleInventoryTools(name: string, args: any, ctx: HandlerContext): Promise<any> {
@@ -101,15 +101,15 @@ export async function handleInventoryTools(name: string, args: any, ctx: Handler
       for (const prod of args.products) {
           if (isVisionContext) {
               await saveProduct(orgId, prod.key, {
-                  content: prod.content,
-                  imageUrl: prod.imageUrl || null,
-                  updatedAt: FieldValue.serverTimestamp()
+                  name: prod.key,
+                  description: prod.content,
+                  metadata: { imageUrl: prod.imageUrl || null }
               });
           } else {
               await saveProduct(orgId, prod.key, {
-                  content: prod.content,
-                  imageUrl: prod.imageUrl || null,
-                  updatedAt: FieldValue.serverTimestamp()
+                  name: prod.key,
+                  description: prod.content,
+                  metadata: { imageUrl: prod.imageUrl || null }
               });
           }
           savedCount++;
@@ -119,34 +119,37 @@ export async function handleInventoryTools(name: string, args: any, ctx: Handler
 
     case 'save_product':
       if (isVisionContext) {
-          // If in vision context, we are likely confirming a "detected" product
           await saveProduct(orgId, args.key, {
-              content: args.content,
-              imageUrl: args.imageUrl,
-              updatedAt: FieldValue.serverTimestamp()
+              name: args.key,
+              description: args.content,
+              metadata: { imageUrl: args.imageUrl || null }
           });
       } else {
           await saveProduct(orgId, args.key, {
-              content: args.content,
-              imageUrl: args.imageUrl,
-              updatedAt: FieldValue.serverTimestamp()
+              name: args.key,
+              description: args.content,
+              metadata: { imageUrl: args.imageUrl || null }
           });
       }
       return { status: 'success', message: `Product ${args.key} saved.` };
 
     case 'manage_stock': {
-        const { getDb } = await import('@naija-agent/firebase');
+        const { getDb, schema } = await import('@naija-agent/database');
+        const { eq, and, sql } = await import('drizzle-orm');
         const db = getDb();
-        const productRef = db.collection('organizations').doc(orgId).collection('products').doc(args.productId);
         
-        let updateData: any = {};
-        if (args.action === 'add') updateData.stock = FieldValue.increment(args.amount);
-        else if (args.action === 'reduce') updateData.stock = FieldValue.increment(-args.amount);
-        else if (args.action === 'set') updateData.stock = args.amount;
+        let stockUpdate;
+        if (args.action === 'add') stockUpdate = sql`${schema.products.stock} + ${args.amount}`;
+        else if (args.action === 'reduce') stockUpdate = sql`${schema.products.stock} - ${args.amount}`;
+        else if (args.action === 'set') stockUpdate = args.amount;
         
+        const updateData: any = { stock: stockUpdate };
         if (args.threshold !== undefined) updateData.lowStockThreshold = args.threshold;
         
-        await productRef.update(updateData);
+        await db.update(schema.products)
+            .set(updateData)
+            .where(and(eq(schema.products.id, args.productId), eq(schema.products.orgId, orgId)));
+            
         return { status: 'success', message: `Stock for ${args.productId} updated.` };
     }
 

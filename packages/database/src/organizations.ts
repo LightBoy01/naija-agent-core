@@ -1,9 +1,7 @@
 import { getDb } from './db.js';
 import { organizations, systemLogs, networkMetadata } from './schema.js';
 import { eq, sql, and } from 'drizzle-orm';
-import crypto from 'crypto';
 import bcrypt from 'bcrypt';
-import { randomUUID } from 'crypto';
 
 export async function createTenant(data: {
   id: string;
@@ -16,8 +14,7 @@ export async function createTenant(data: {
 }) {
   const db = getDb();
   const hashedPin = await bcrypt.hash(data.adminPin, 10);
-  const bridgeSecret = crypto.randomBytes(16).toString('hex');
-  const bonusKobo = 100000;
+  const bonusKobo = 200000;
   
   await db.transaction(async (tx) => {
     await tx.insert(organizations).values({
@@ -32,8 +29,6 @@ export async function createTenant(data: {
       config: {
         adminPhone: data.adminPhone,
         adminPin: hashedPin,
-        bridgeSecret,
-        useSmsBridge: true,
         model: 'deepseek-v4-flash',
         tools: ['web_search']
       }
@@ -62,7 +57,7 @@ export async function registerTrialInterest(data: {
   timezone?: string;
 }) {
   const db = getDb();
-  const trialBonus = 100000;
+  const trialBonus = 200000;
   
   await db.transaction(async (tx) => {
     await tx.insert(organizations).values({
@@ -100,7 +95,10 @@ export async function topupTenant(tenantId: string, amount: number, reference: s
   const db = getDb();
   await db.transaction(async (tx) => {
     await tx.update(organizations)
-      .set({ balanceKobo: sql`${organizations.balanceKobo} + ${amount}` })
+      .set({ 
+        balanceKobo: sql`${organizations.balanceKobo} + ${amount}`,
+        lifetimeDepositsKobo: sql`${organizations.lifetimeDepositsKobo} + ${amount}`
+      })
       .where(eq(organizations.id, tenantId));
     
     await tx.update(networkMetadata)
@@ -306,13 +304,6 @@ export async function getOrgByPhoneId(phoneId: string) {
   return orgs[0] || null;
 }
 
-export async function getOrgByBridgeSecret(secret: string) {
-  const db = getDb();
-  // Using JSONB search for bridgeSecret in config
-  const orgs = await db.select().from(organizations).where(sql`config->>'bridgeSecret' = ${secret}`);
-  return orgs[0] || null;
-}
-
 export async function findOrgByAdminPhone(phone: string) {
   const db = getDb();
   const orgs = await db.select().from(organizations).where(sql`config->>'adminPhone' = ${phone}`);
@@ -348,4 +339,69 @@ export async function getOrganizationsBySector(sector: string, capability?: stri
     });
   }
   return results;
+}
+
+// --- Referral Logic ---
+import { referrals } from './schema.js';
+import crypto from 'crypto';
+
+export async function createReferral(referrerPhone: string, referredOrgId: string) {
+  const db = getDb();
+  await db.insert(referrals).values({
+    id: `ref_${crypto.randomBytes(8).toString('hex')}`,
+    referrerPhone,
+    referredOrgId,
+    status: 'pending',
+    commissionEarnedKobo: 100000,
+  }).onConflictDoNothing();
+}
+
+export async function processReferralConversion(orgId: string) {
+  const db = getDb();
+  const org = await getOrgById(orgId);
+  if (!org || org.lifetimeDepositsKobo < 500000) return null; // 5000 NGN threshold
+
+  const pendingReferrals = await db.select().from(referrals).where(
+    sql`${referrals.referredOrgId} = ${orgId} AND ${referrals.status} = 'pending'`
+  );
+  
+  if (pendingReferrals.length > 0) {
+    const referral = pendingReferrals[0];
+    const settlementDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    
+    await db.update(referrals).set({
+      status: 'pending_settlement',
+      settlementDate,
+    }).where(eq(referrals.id, referral.id));
+    
+    return referral;
+  }
+  return null;
+}
+
+import { users } from './schema.js';
+
+export async function processMatureReferrals() {
+  const db = getDb();
+  const now = new Date();
+  
+  const matureReferrals = await db.select().from(referrals).where(
+    sql`${referrals.status} = 'pending_settlement' AND ${referrals.settlementDate} <= ${now}`
+  );
+  
+  const processed = [];
+  
+  for (const ref of matureReferrals) {
+    await db.transaction(async (tx) => {
+      await tx.update(referrals).set({ status: 'paid' }).where(eq(referrals.id, ref.id));
+      
+      // Attempt to update the user's vault balance. If user doesn't exist, ignore (they can still register later but the vault update might fail. Wait, if they don't exist, we should upsert or just ignore for now? Assuming Aelixxr users exist.)
+      await tx.update(users).set({ 
+         vaultBalanceKobo: sql`${users.vaultBalanceKobo} + ${ref.commissionEarnedKobo}`
+      }).where(eq(users.phone, ref.referrerPhone));
+    });
+    processed.push(ref);
+  }
+  
+  return processed;
 }

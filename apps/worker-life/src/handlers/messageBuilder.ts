@@ -5,7 +5,12 @@ import { promptService } from '../services/promptService.js';
 import { LifePipelineContext } from '../pipeline/types.js';
 
 export async function buildSystemPrompt(ai: AIProvider, ctx: LifePipelineContext): Promise<string> {
-  const soulPrompt = promptService.getPrompt('Aelixxr.Soul.md');
+  let soulPrompt = promptService.getPrompt('Aelixxr.Soul.md');
+  const masterBotPhone = process.env.MASTER_BOT_PHONE || '2348000000000';
+  soulPrompt = soulPrompt
+      .replace(/\[Master_Bot_Number\]/g, masterBotPhone)
+      .replace(/<USER_PHONE_NUMBER>/g, ctx.userPhone);
+      
   let semanticMemories = '';
 
   if (ctx.message) {

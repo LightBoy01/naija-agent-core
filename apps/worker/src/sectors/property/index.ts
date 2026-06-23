@@ -2,6 +2,7 @@ import { Type } from '@google/genai';
 import { SectorPack } from '@naija-agent/types';
 import { CountryCode } from 'libphonenumber-js';
 import { saveEntity, queryEntity } from '@naija-agent/firebase';
+import { logger } from '../../utils/logger.js';
 
 export function getPropertyPack(currency: { code: string, symbol: string }, region: CountryCode = 'NG'): SectorPack {
   const propertyEntity = {
@@ -84,7 +85,7 @@ export function getPropertyPack(currency: { code: string, symbol: string }, regi
     systemPrompt: prompt,
     tools: propertyTools,
     execute: async (toolName: string, args: Record<string, unknown>, deps: any) => {
-      console.log(`🏠 [PropertyPack] Executing ${toolName}`, args);
+      logger.info({ tool: toolName, args }, 'PropertyPack executing tool');
       const { orgId } = deps;
 
       switch (toolName) {

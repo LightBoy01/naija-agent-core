@@ -1,5 +1,6 @@
 import { Type } from '@google/genai';
 import { HandlerContext } from './definitions.js';
+import { logger } from '../utils/logger.js';
 
 export const CONTENT_TOOLS = [
   {
@@ -116,7 +117,7 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
         };
 
       } catch (e: any) {
-        console.error('Document Search Failed:', e.message);
+        logger.error({ error: e.message }, 'Document Search Failed');
         return { status: 'error', message: 'The document search engine is temporarily down.' };
       }
     }
@@ -154,12 +155,12 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
         try {
             return await Promise.any([searxngPromise, bravePromise]);
         } catch (e: any) {
-            console.error('Web Search Failed: Both engines failed or timed out.');
+            logger.info('Web Search Failed: Both engines failed or timed out');
             return { error: 'Oga, I don search tire for today! Both engines failed.' };
         }
 
       } catch (err: any) {
-          console.error('Web Search Setup Failed:', err.message);
+          logger.error({ error: err.message }, 'Web Search Setup Failed');
           return { error: 'Oga, I don search tire for today! Both engines failed.' };
       }
     }
@@ -186,7 +187,7 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
         });
 
         try {
-          console.log(`🎨 [IMAGE GEN] Generating image for ${orgId}: ${args.prompt}`);
+          logger.info({ orgId, prompt: args.prompt }, 'Generating image');
           
           const imageResult = await imageGenAI.models.generateContent({
              model: SystemConfig.MODELS.IMAGE_GEN,
@@ -205,7 +206,7 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
           }
         } catch (genErr: any) {
            if (genErr.message.includes('429')) {
-              console.warn(`🔄 [IMAGE FALLBACK] Quota Exceeded. Switching to Creative Prompt Fallback...`);
+              logger.warn({ orgId }, 'Image generation quota exceeded — switching to Creative Prompt Fallback');
               
               const promptResult = await imageGenAI.models.generateContent({
                 model: SystemConfig.MODELS.ZYNUX_FALLBACK,
@@ -221,7 +222,7 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
         }
 
       } catch (err: any) {
-        console.error('Image Generation Failed:', err.message);
+        logger.error({ error: err.message }, 'Image Generation Failed');
         return { status: 'error', message: 'I tried to create the image, but my creative engine failed. Please try again later.' };
       }
     }

@@ -144,4 +144,38 @@ export default async function cronRoutes(fastify: FastifyInstance, opts: CronRou
       return reply.status(500).send({ error: 'Failed to release locks' });
     }
   });
+
+  fastify.get('/referral-settlement', async (request, reply) => {
+    const cronSecret = (request.headers as any)['x-cron-secret'];
+    if (cronSecret !== process.env.CRON_SECRET) return reply.status(401).send('Unauthorized');
+
+    try {
+      logger.info("🕒 Running Referral Settlement CRON...");
+      const { processMatureReferrals } = await import('@naija-agent/database');
+      
+      const processed = await processMatureReferrals();
+
+      for (const ref of processed) {
+        const formattedBonus = '₦' + (ref.commissionEarnedKobo / 100).toLocaleString();
+        const notificationMsg = `🎉 *REFERRAL BONUS UNLOCKED!*\n\nOga, that your ${formattedBonus} referral bonus has matured and is now in your Alajo Vault!\n\nYou can withdraw it to your bank or use it to buy airtime. Thank you for building the network.`;
+
+        await whatsappQueue.add('process-message', {
+          type: 'text',
+          orgId: 'system',
+          phoneId: process.env.WHATSAPP_PHONE_ID || 'PENDING',
+          from: ref.referrerPhone,
+          messageId: `REF-PAID-${Date.now()}-${ref.id}`,
+          timestamp: Date.now(),
+          content: { text: notificationMsg }
+        }, { removeOnComplete: true });
+        
+        logger.info({ referrer: ref.referrerPhone, amount: ref.commissionEarnedKobo }, "✅ Paid out referral bonus.");
+      }
+
+      return reply.send({ status: 'success', message: `Settled ${processed.length} referrals.` });
+    } catch (error: any) {
+      logger.error({ error: error.message }, "❌ Failed to run Referral Settlement");
+      return reply.status(500).send({ error: 'Failed to settle referrals' });
+    }
+  });
 }

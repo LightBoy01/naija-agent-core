@@ -37,7 +37,16 @@ async function handleProspectFlow(
   const rawState = await redisClient.get(prospectKey);
   let state = rawState ? JSON.parse(rawState) : null;
   
-  const isReferral = text.includes('I_want_AI_for_my_business_');
+  let isReferral = false;
+  
+  if (text.includes('I_want_AI_for_my_business_')) {
+    isReferral = true;
+    const match = text.match(/I_want_AI_for_my_business_(\d+)/);
+    if (match) {
+       const referrerPhone = match[1];
+       await redisClient.set(`referral:${from}`, referrerPhone, 'EX', 7 * 24 * 60 * 60);
+    }
+  }
 
   if (!isReferral && !state) return { handled: false };
 
@@ -273,9 +282,8 @@ async function handleOtpRelay(
       return { handled: true };
   }
 
-  // No matching pending setup found — let the user know
-  await tenantWhatsAppService.sendText(from, `⚠️ Oga, I received your code *${text}*, but I cannot find a pending activation request for your number.\n\nPlease make sure you have completed the setup process on the web dashboard first.`);
-  return { handled: true };
+  // No matching pending setup found — pass through to normal AI handling
+  return { handled: false };
 }
 
 // ─── BOSS SETUP FLOW (#setup state machine) ─────────────────────────
@@ -302,22 +310,12 @@ async function handleBossSetup(
 
   // STATUS COMMAND
   if (text.toLowerCase() === '#status') {
-      const heartbeatKey = `bridge_heartbeat:${orgId}`;
-      const lastHeartbeat = await redisClient.get(heartbeatKey);
       const balanceMajor = (org.balance || 0) / 100;
-      
-      let bridgeStatus = "❌ OFFLINE";
-      if (lastHeartbeat) {
-          const diffMinutes = (Date.now() - parseInt(lastHeartbeat)) / (1000 * 60);
-          if (diffMinutes <= 15) bridgeStatus = "✅ ONLINE";
-          else bridgeStatus = `⚠️ LAGGING (${Math.floor(diffMinutes)}m ago)`;
-      }
 
       const statusMsg = `📊 *BOT STATUS REPORT*\n\n` +
         `🤖 *Bot Name:* ${org.name}\n` +
         `🔋 *Service:* ${org.isActive ? '✅ ACTIVE' : '💤 MAINTENANCE'}\n` +
         `💳 *Balance:* ${formatCurrency(balanceMajor, org.currency?.locale || 'en-NG', org.currency?.code || 'NGN')}\n` +
-        `📲 *SMS Bridge:* ${bridgeStatus}\n` +
         `🧠 *Model:* ${org.config?.model || SystemConfig.MODELS.ZYNUX_PRIMARY}\n\n` +
         `Oga, I am at your service!`;
       
@@ -572,6 +570,18 @@ async function handleBossSetup(
                  await redisClient.set(`sidecar_map:${jid}`, orgId);
                  await redisClient.set(`sidecar_map:${rawPhone}`, orgId);
                  logger.info({ orgId, jid }, '🔗 [AUTO-ONBOARDING] Hydrated sidecar mapping in Redis');
+             }
+
+             // 4b. Check for Referral
+             try {
+                const { createReferral } = await import('@naija-agent/database');
+                const referrerPhone = await redisClient.get(`referral:${from}`);
+                if (referrerPhone) {
+                    await createReferral(referrerPhone, orgId);
+                    logger.info({ orgId, referrerPhone }, '🤝 [REFERRAL] Referral logged for new tenant');
+                }
+             } catch (refErr: any) {
+                logger.error({ orgId, error: refErr.message }, '⚠️ [REFERRAL] Failed to log referral');
              }
 
              // 5. Update Org with Pending Setup
