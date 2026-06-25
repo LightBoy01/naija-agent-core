@@ -7,6 +7,7 @@ import { proactiveService } from '../services/proactive.js';
 import { searchVault } from '@naija-agent/storage';
 import { AIProvider } from '@naija-agent/ai';
 import { SystemConfig } from '@naija-agent/types';
+import { redisClient } from '../index.js';
 
 export interface HeartbeatDependencies {
     ai: AIProvider;
@@ -122,7 +123,19 @@ export async function handleEvaluateHeartbeat(job: Job, deps: HeartbeatDependenc
         // --- SOVEREIGN SNITCH: Heartbeat Alert ---
         try {
             const masterPhone = process.env.MASTER_ADMIN_PHONE || SystemConfig.CONTACTS.MASTER_ADMIN_PHONE;
-            await whatsappService.sendText(masterPhone, `🚨 *AELIXXR HEARTBEAT ERROR*\n\n*User:* ${userId}\n*Config:* ${config.id}\n*Error:* ${err.message}`);
+            
+            const rateLimitKey = `snitch_rate_limit:heartbeat`;
+            const errorCount = await redisClient.incr(rateLimitKey);
+            
+            if (errorCount === 1) {
+                await redisClient.expire(rateLimitKey, 60);
+            }
+
+            if (errorCount <= 3) {
+                await whatsappService.sendText(masterPhone, `🚨 *AELIXXR HEARTBEAT ERROR*\n\n*User:* ${userId}\n*Config:* ${config.id}\n*Error:* ${err.message}`);
+            } else if (errorCount === 4) {
+                await whatsappService.sendText(masterPhone, `🛑 *CIRCUIT BREAKER ENGAGED*\n\nMultiple Aelixxr Heartbeat errors occurring rapidly. Muting heartbeat alerts for 1 minute.`);
+            }
         } catch (sErr) {}
         
         throw err;
@@ -208,7 +221,19 @@ export async function handleEvaluateNudge(job: Job, deps: HeartbeatDependencies)
         // --- SOVEREIGN SNITCH: Nudge Alert ---
         try {
             const masterPhone = process.env.MASTER_ADMIN_PHONE || SystemConfig.CONTACTS.MASTER_ADMIN_PHONE;
-            await whatsappService.sendText(masterPhone, `🚨 *AELIXXR NUDGE ERROR*\n\n*User:* ${nudgeUserId}\n*Error:* ${err.message}`);
+            
+            const rateLimitKey = `snitch_rate_limit:nudge`;
+            const errorCount = await redisClient.incr(rateLimitKey);
+            
+            if (errorCount === 1) {
+                await redisClient.expire(rateLimitKey, 60);
+            }
+
+            if (errorCount <= 3) {
+                await whatsappService.sendText(masterPhone, `🚨 *AELIXXR NUDGE ERROR*\n\n*User:* ${nudgeUserId}\n*Error:* ${err.message}`);
+            } else if (errorCount === 4) {
+                await whatsappService.sendText(masterPhone, `🛑 *CIRCUIT BREAKER ENGAGED*\n\nMultiple Aelixxr Nudge errors occurring rapidly. Muting nudge alerts for 1 minute.`);
+            }
         } catch (sErr) {}
         
         throw err;

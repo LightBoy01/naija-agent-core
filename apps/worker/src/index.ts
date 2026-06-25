@@ -251,8 +251,21 @@ worker.on('failed', async (job, err) => {
   if (process.env.MASTER_ADMIN_PHONE && process.env.WHATSAPP_API_TOKEN) {
      try {
        const snitchService = new WhatsAppService(process.env.WHATSAPP_API_TOKEN, process.env.WHATSAPP_PHONE_ID || '');
-       const alert = `🚨 *SYSTEM ALERT*\n\nJob *${job?.name}* (${job?.id}) failed!\n\nError: ${err.message}`;
-       await snitchService.sendText(process.env.MASTER_ADMIN_PHONE, alert);
+       
+       const rateLimitKey = `snitch_rate_limit:global`;
+       const errorCount = await redisClient.incr(rateLimitKey);
+       
+       if (errorCount === 1) {
+           await redisClient.expire(rateLimitKey, 60);
+       }
+
+       if (errorCount <= 3) {
+           const alert = `🚨 *SYSTEM ALERT*\n\nJob *${job?.name}* (${job?.id}) failed!\n\nError: ${err.message}`;
+           await snitchService.sendText(process.env.MASTER_ADMIN_PHONE, alert);
+       } else if (errorCount === 4) {
+           const circuitAlert = `🛑 *CIRCUIT BREAKER ENGAGED*\n\nMultiple jobs are failing rapidly. The Sovereign Snitch is muting alerts for the next minute to prevent spam.\n\nPlease check server logs immediately!`;
+           await snitchService.sendText(process.env.MASTER_ADMIN_PHONE, circuitAlert);
+       }
      } catch (snitchErr: any) {}
   }
 });

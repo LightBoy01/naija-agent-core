@@ -26,12 +26,25 @@ export const MediaInterceptor: Interceptor = {
         } 
         // 2. Fallback to legacy WhatsApp Cloud API
         else if (mediaId && ctx.tenantWhatsAppService) {
-            try {
-                const downloaded = await ctx.tenantWhatsAppService.downloadMedia(mediaId);
-                buffer = downloaded.buffer;
-                mimeType = downloaded.mimeType;
-            } catch (e: any) {
-                logger.error({ orgId, mediaId, error: e.message }, '❌ [MEDIA] Failed to download from Meta API');
+            let retries = 3;
+            let delay = 1000; // Start with a 1-second delay
+            
+            while (retries > 0) {
+                try {
+                    const downloaded = await ctx.tenantWhatsAppService.downloadMedia(mediaId);
+                    buffer = downloaded.buffer;
+                    mimeType = downloaded.mimeType;
+                    break; // Break the loop on success
+                } catch (e: any) {
+                    retries--;
+                    if (retries === 0) {
+                        logger.error({ orgId, mediaId, error: e.message }, '❌ [MEDIA] Failed to download from Meta API after all retries');
+                    } else {
+                        logger.warn({ orgId, mediaId, delayMs: delay, error: e.message }, '⚠️ [MEDIA] Meta API download failed, retrying...');
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2; // Exponential backoff: 1s -> 2s -> 4s
+                    }
+                }
             }
         }
 
