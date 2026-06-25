@@ -53,7 +53,7 @@ export const SYSTEM_TOOLS = [
 
 const sanitizeLearnedRule = (rule: string): string | null => {
   const lowercaseRule = rule.toLowerCase();
-  const allowedCategories = ['shorter', 'longer', 'pidgin', 'formal', 'casual', 'summarize', 'tone', 'voice'];
+  const allowedCategories = ['shorter', 'longer', 'pidgin', 'formal', 'casual', 'summarize', 'tone', 'voice', 'format', 'markdown', 'whatsapp', 'text'];
   const dangerousKeywords = [
     'ignore', 'master', 'system', 'override', 'security', 'hack', 'instruction', 
     'tool', 'call', 'function', 'verify', 'delete', 'save', 'always', 'never',
@@ -66,7 +66,7 @@ const sanitizeLearnedRule = (rule: string): string | null => {
   }
 
   const isStylistic = allowedCategories.some(cat => lowercaseRule.includes(cat));
-  if (!isStylistic && lowercaseRule.length > 50) {
+  if (!isStylistic && lowercaseRule.length > 200) {
     logger.warn({ rule }, '🚫 [FEEDBACK] Rejected rule: too long/complex and not clearly stylistic');
     return null;
   }
