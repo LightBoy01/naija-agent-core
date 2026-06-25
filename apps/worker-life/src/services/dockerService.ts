@@ -50,7 +50,7 @@ export class DockerService {
           ],
           HostConfig: {
             AutoRemove: true, // Automatically delete after exit
-            NetworkMode: 'naija-agent-network', // Ensure it can reach Postgres/Redis
+            NetworkMode: process.env.DOCKER_NETWORK || 'naija-agent-network', // Ensure it can reach Postgres/Redis
           },
         },
         { socketPath: this.socketPath }
