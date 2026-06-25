@@ -44,5 +44,19 @@ services:
     # Internal Network Only
     restart: always
 
+  # --- Autonomous Research & Actions (Hermes Gateway) ---
+  hermes:
+    image: naija-agent/hermes-agent:latest
+    command: python3 gateway/run.py
+    env_file:
+      - .env
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - HOST=0.0.0.0
+      - PORT=8000
+    # Internal network only; exposed to the app container.
+    restart: always
+
 volumes:
   pgdata:

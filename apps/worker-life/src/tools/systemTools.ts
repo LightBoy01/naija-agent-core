@@ -23,6 +23,17 @@ export const SYSTEM_TOOLS = [
       }
     },
     {
+      name: 'interactive_delegate',
+      description: 'Hand off the entire conversation stream to the Hermes Agent (The Body). Use this when the user explicitly asks to talk to Hermes directly, or when a task requires an interactive terminal/coding session. The user will be routed to Hermes until they say !aelixxr.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          reason: { type: Type.STRING, description: 'The reason for transferring control to Hermes.' }
+        },
+        required: ['reason']
+      }
+    },
+    {
       name: 'create_reminder',
       description: 'Schedule a proactive WhatsApp message. To calculate triggerTime: Take the Current UNIX Timestamp provided in the system context and add the required duration in milliseconds (e.g., 30 mins = 1,800,000ms). Use this for "Remind me to...", "Tell me when it is...", or alerts.',
       parameters: {
@@ -98,9 +109,21 @@ export async function executeSystemTool(name: string, args: Record<string, any>,
           });
           
           return { 
-              status: 'success', 
-              message: `Task successfully delegated to Hermes (${args.sector}). I will notify you when the background operation is complete.` 
+              status: 'Delegated', 
+              message: 'Hermes is now working on it in the background.' 
           };
+
+      case 'interactive_delegate': {
+          logger.info({ reason: args.reason }, '🔄 Handing off interactive session to Hermes Gateway');
+          const uid = args.userId; // Provided by the framework injection
+          if (!uid) return { error: 'Missing userId context' };
+          
+          await lifeMemory.updateContext(uid, { activeAgent: 'hermes' });
+          return {
+              status: 'Handed_Off',
+              message: 'Tell the user you have successfully handed them over to Hermes. They are now talking to Hermes directly.'
+          };
+      }
 
       case 'create_reminder':
         const triggerTime = Number(args.triggerTime);
