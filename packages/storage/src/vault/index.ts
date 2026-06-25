@@ -252,7 +252,7 @@ export async function ingestDocument(
     mimeType,
     caption: options?.caption || null,
     tags: analysis.tags || [],
-    embedding: embedding.length > 0 ? { data: embedding } as any : null,
+    embedding: embedding.length > 0 ? embedding : null,
     createdAt: now,
     updatedAt: now,
   });

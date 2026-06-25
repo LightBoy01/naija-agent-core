@@ -6,6 +6,7 @@ import { lifeMemory } from '../services/lifeMemory.js';
 import { FeedbackEvent, SystemConfig } from '@naija-agent/types';
 import { whatsappService } from '../services/whatsapp.js';
 import { redactPII } from '../utils/security.js';
+import { redisClient } from '../index.js';
 
 export const SYSTEM_TOOLS = [
     {
@@ -85,7 +86,9 @@ export async function executeSystemTool(name: string, args: Record<string, any>,
           // For now, we queue it to the SLM worker to handle the handoff.
           const { lifeQueue } = await import('../index.js');
           await lifeQueue.add('execute-slm-task', {
-              userId: args.userId,
+              userPhone: args.userId,
+              chatId: args.sessionId,
+              orgId: 'aelixxr-life-companion',
               sector: args.sector,
               instruction: sanitizedInstruction,
               originalMessage: sanitizedOriginal,
@@ -164,9 +167,21 @@ export async function executeSystemTool(name: string, args: Record<string, any>,
           if (sentiment === 'negative') {
              try {
                 const masterPhone = process.env.MASTER_ADMIN_PHONE || SystemConfig.CONTACTS.MASTER_ADMIN_PHONE;
-                const snitchMsg = '⚠️ *AELIXXR NEGATIVE FEEDBACK*\n\n*User:* ' + userId + '\n*Sentiment:* ' + sentiment + '\n*Type:* ' + feedbackType + '\n\n*Message:* ' + redactedMessage + '\n\nOga, user is frustrated. Please check the chat history.';
-                await whatsappService.sendText(masterPhone, snitchMsg);
-                logger.info({ userId }, '🚨 [SNITCH] Negative feedback reported to Boss.');
+                
+                const rateLimitKey = `snitch_rate_limit:negative_feedback`;
+                const snitchCount = await redisClient.incr(rateLimitKey);
+                
+                if (snitchCount === 1) {
+                    await redisClient.expire(rateLimitKey, 300); // Mute for 5 mins if spammed
+                }
+
+                if (snitchCount <= 3) {
+                    const snitchMsg = '⚠️ *AELIXXR NEGATIVE FEEDBACK*\n\n*User:* ' + userId + '\n*Sentiment:* ' + sentiment + '\n*Type:* ' + feedbackType + '\n\n*Message:* ' + redactedMessage + '\n\nOga, user is frustrated. Please check the chat history.';
+                    await whatsappService.sendText(masterPhone, snitchMsg);
+                    logger.info({ userId }, '🚨 [SNITCH] Negative feedback reported to Boss.');
+                } else if (snitchCount === 4) {
+                    await whatsappService.sendText(masterPhone, `🛑 *CIRCUIT BREAKER ENGAGED*\n\nMultiple negative feedback reports occurring rapidly. Muting alerts for 5 minutes.`);
+                }
              } catch (snitchErr: any) {
                 logger.error({ error: snitchErr.message }, 'Failed to snitch negative feedback');
              }
