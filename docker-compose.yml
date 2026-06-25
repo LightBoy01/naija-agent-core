@@ -53,6 +53,7 @@ services:
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - LLM_MODEL=deepseek/deepseek-v4-flash
       - API_SERVER_ENABLED=true
       - API_SERVER_KEY=sovereign_internal_key
       - API_SERVER_MODEL_NAME=deepseek-v4-flash
