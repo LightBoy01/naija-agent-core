@@ -53,6 +53,8 @@ services:
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - API_SERVER_ENABLED=true
+      - GATEWAY_ALLOW_ALL_USERS=true
       - HOST=0.0.0.0
       - PORT=8000
     # Internal network only; exposed to the app container.
