@@ -16,18 +16,18 @@ export async function proxyToHermes(userPhone: string, message: string, hermesSe
 
     const response = await axios.post(`${HERMES_URL}/v1/chat/completions`, {
       messages: [{ role: 'user', content: message }],
-      session_id: hermesSessionId,
-      // Hermes might need the user's phone to identify the session
-      user_id: userPhone
+      user: userPhone // OpenAI standard for tracking users
     }, {
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer sovereign_internal_key',
+        'X-Hermes-Session-Id': hermesSessionId || userPhone
       },
-      timeout: 60000 // Hermes might take a while to think/use tools
+      timeout: 120000 // Hermes might take a while to think/use tools
     });
 
     const reply = response.data?.choices?.[0]?.message?.content;
-    const newSessionId = response.data?.session_id || hermesSessionId;
+    const newSessionId = response.headers['x-hermes-session-id'] || hermesSessionId || userPhone;
 
     if (reply) {
       await whatsappService.sendText(userPhone, reply, phoneId);
