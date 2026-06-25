@@ -55,6 +55,7 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - API_SERVER_ENABLED=true
       - API_SERVER_KEY=sovereign_internal_key
+      - API_SERVER_MODEL_NAME=deepseek-v4-flash
       - GATEWAY_ALLOW_ALL_USERS=true
       - API_SERVER_HOST=0.0.0.0
       - API_SERVER_PORT=8000
