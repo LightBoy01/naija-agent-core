@@ -35,7 +35,7 @@ export class DockerService {
         `http://localhost/v${this.apiVersion}/containers/create?name=${containerName}`,
         {
           Image: 'naija-agent/hermes-agent:latest', // Ensure this image is built on the VPS
-          Cmd: ['python3', 'cli.py', '-q', options.instruction, '--provider', 'gemini'],
+          Cmd: ['python3', 'cli.py', '-q', options.instruction],
           Env: [
             `INSTRUCTION=${options.instruction}`,
             `USER_PHONE=${options.userPhone}`,
@@ -46,7 +46,9 @@ export class DockerService {
             `TRAJECTORY=${JSON.stringify(options.trajectory || [])}`,
             `STEP_COUNT=${options.stepCount || 0}`,
             `DATABASE_URL=${process.env.DATABASE_URL}`,
-            `GEMINI_API_KEY=${process.env.GEMINI_API_KEY}`
+            `GEMINI_API_KEY=${process.env.GEMINI_API_KEY}`,
+            `DEEPSEEK_API_KEY=${process.env.DEEPSEEK_API_KEY}`,
+            `LLM_MODEL=deepseek/deepseek-v4-flash`
           ],
           HostConfig: {
             AutoRemove: true, // Automatically delete after exit
