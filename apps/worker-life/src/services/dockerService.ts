@@ -102,7 +102,12 @@ export class DockerService {
       return { success: false, error: 'TIMEOUT' };
 
     } catch (error: any) {
-      logger.error({ error: error.message }, '❌ [DOCKER] Failed to orchestrate Hermes container');
+      logger.error({ 
+        error: error.message, 
+        status: error.response?.status, 
+        data: error.response?.data,
+        url: error.config?.url
+      }, '❌ [DOCKER] Failed to orchestrate Hermes container');
       return { success: false, error: error.message };
     }
   }
