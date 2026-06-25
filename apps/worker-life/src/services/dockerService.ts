@@ -8,7 +8,7 @@ import { randomUUID } from 'crypto';
  */
 export class DockerService {
   private socketPath = process.env.DOCKER_SOCKET_PATH || '/var/run/docker.sock';
-  private apiVersion = 'v1.43';
+  private apiVersion = '1.43';
 
   /**
    * Spawns a Hermes container, executes a task, and returns the result.
