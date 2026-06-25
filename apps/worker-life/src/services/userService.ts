@@ -49,7 +49,9 @@ export class UserService {
         pinHash: user.pinHash || undefined,
         lastInteraction: user.updatedAt,
         sessionStatus: user.sessionStatus || undefined,
-        sessionExpiry: user.sessionExpiry || undefined
+        sessionExpiry: user.sessionExpiry || undefined,
+        activeAgent: (user as any).activeAgent,
+        hermesSessionId: (user as any).hermesSessionId || undefined
       };
     } catch (error: any) {
       logger.error({ phone, error: error.message }, 'Failed to fetch Life Context from Database');
@@ -88,6 +90,8 @@ export class UserService {
         };
         if (updates.pinAttempts !== undefined) sqlUpdates.pinAttempts = updates.pinAttempts;
         if (updates.pinLockUntil !== undefined) sqlUpdates.pinLockUntil = updates.pinLockUntil;
+        if (updates.activeAgent !== undefined) sqlUpdates.activeAgent = updates.activeAgent;
+        if (updates.hermesSessionId !== undefined) sqlUpdates.hermesSessionId = updates.hermesSessionId;
         await sqlDb.update(users).set(sqlUpdates).where(sql`${users.phone} = ${safePhone}` as any);
       }
       logger.info({ phone, updates }, '💾 Updated Life Memory (PostgreSQL)');

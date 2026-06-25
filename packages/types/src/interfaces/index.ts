@@ -144,6 +144,8 @@ export interface LifeContext {
     pinLockUntil?: FirestoreTimestamp | Date; // Added for lockout logic
     sessionStatus?: string; // e.g. 'IDLE', 'AWAITING_PIN'
     sessionExpiry?: FirestoreTimestamp | Date;
+    activeAgent?: string;
+    hermesSessionId?: string;
 }
 
 export interface FeedbackEvent {

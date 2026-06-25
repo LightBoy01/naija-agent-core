@@ -73,6 +73,8 @@ export const users = pgTable('users', {
   context: jsonb('context'), // Legacy catch-all for migration
   sessionStatus: varchar('session_status', { length: 50 }), // e.g. 'IDLE', 'AWAITING_PIN'
   sessionExpiry: timestamp('session_expiry'),
+  activeAgent: varchar('active_agent', { length: 50 }).default('aelixxr').notNull(),
+  hermesSessionId: varchar('hermes_session_id', { length: 128 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

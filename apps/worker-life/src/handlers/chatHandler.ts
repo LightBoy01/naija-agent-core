@@ -87,6 +87,30 @@ export async function handleLifeChat(job: Job, deps: ChatDependencies) {
     if (ctx.isError) return { success: false, error: ctx.errorMessage };
     if (ctx.shortCircuit) return { success: false, reason: ctx.shortCircuitReason };
 
+    // --- Interactive Multi-Agent Routing (Hermes Gateway) ---
+    const activeAgent = ctx.lifeContext?.activeAgent || 'aelixxr';
+    const overrideMatch = typeof rawMessage === 'string' && rawMessage.trim().toLowerCase().startsWith('!aelixxr');
+
+    if (overrideMatch && activeAgent === 'hermes') {
+        const { lifeMemory } = await import('../services/lifeMemory.js');
+        await lifeMemory.updateContext(userPhone, { activeAgent: 'aelixxr' });
+        logger.info({ userPhone }, '🔄 User triggered override. Switching activeAgent back to Aelixxr.');
+        // Remove the command prefix so Aelixxr reads the rest of the message normally
+        ctx.message = rawMessage.replace(/^!aelixxr\s*/i, '');
+    } else if (activeAgent === 'hermes' && ctx.type === 'text' && typeof rawMessage === 'string') {
+        const { proxyToHermes } = await import('../services/hermesProxy.js');
+        const { lifeMemory } = await import('../services/lifeMemory.js');
+        
+        const hermesSessionId = ctx.lifeContext?.hermesSessionId;
+        const proxyResult = await proxyToHermes(userPhone, rawMessage, hermesSessionId, phoneId);
+        
+        if (proxyResult.success && proxyResult.newSessionId && proxyResult.newSessionId !== hermesSessionId) {
+            await lifeMemory.updateContext(userPhone, { hermesSessionId: proxyResult.newSessionId });
+        }
+        
+        return { success: proxyResult.success };
+    }
+
     try {
         const systemPrompt = await buildSystemPrompt(ai, ctx);
         const { result, chatId, primaryModel, normalizedHistory } = await chatWithAelixxr({ ctx, ai, getDynamicModels }, systemPrompt);
