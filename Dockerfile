@@ -1,5 +1,4 @@
-# Stage 1: Polyglot Builder
-FROM node:20-bookworm AS builder
+FROM node:22-bookworm AS builder
 
 WORKDIR /app
 
@@ -38,8 +37,7 @@ RUN npm run build
 # 5. Provision Hermes Python Environment
 RUN cd hermes-agent && uv venv && uv pip install .
 
-# --- Stage 2: Institutional Runner ---
-FROM node:20-bookworm-slim AS runner
+FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
