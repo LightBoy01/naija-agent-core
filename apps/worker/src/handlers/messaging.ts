@@ -15,6 +15,7 @@ import { getPriceGuardRegex, formatCurrency, parsePrice } from '../utils/currenc
 import { formatInTimeZone } from 'date-fns-tz';
 import { logger } from '../utils/logger.js';
 import { SectorPack, SystemConfig } from '@naija-agent/types';
+import { deductOrgBalance } from '@naija-agent/database';
 import { AIProvider, AIMessage } from '@naija-agent/ai';
 import { promptService } from '../services/promptService.js';
 import { PriceGuard } from '../services/priceGuard.js';
@@ -217,6 +218,15 @@ CRITICAL: Reply directly to the user with your final message. Do NOT include you
               continue;
           }
           let response: any;
+          if (!isAdmin && !org.config?.isMaster) {
+              const toolCost = SystemConfig.COSTS.TOOL_CALL_KOBO;
+              const resultBalance = await deductOrgBalance(orgId, toolCost);
+              if (resultBalance === null) {
+                  toolResponseParts.push({ functionResponse: { name: call.name, response: { status: 'error', message: 'INSUFFICIENT_BALANCE: Tool execution aborted due to low balance. Tell the user we are briefly offline.' } } });
+                  continue;
+              }
+          }
+
           try {
             response = await handleToolCall(call.name, call.args, { 
               orgId, from, isStaff, isAdmin, isAuth,

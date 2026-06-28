@@ -2,13 +2,14 @@
 export const SystemConfig = {
     // Financial (Kobo)
     COSTS: {
-        REPLY_KOBO: 3300, // 33.00 NGN
-        IMAGE_PROCESSING_KOBO: 7700, // 77.00 NGN
-        DOCUMENT_ANALYSIS_KOBO: 9900, // 99.00 NGN
-        VISUAL_TURN_FEE_KOBO: 5000, // 50.00 NGN
+        REPLY_KOBO: 1000, // 10.00 NGN
+        TOOL_CALL_KOBO: 3000, // 30.00 NGN
+        IMAGE_PROCESSING_KOBO: 5000, // 50.00 NGN
+        DOCUMENT_ANALYSIS_KOBO: 5000, // 50.00 NGN
+        ADVANCED_TASK_KOBO: 7000, // 70.00 NGN
         CART_NUDGE_KOBO: 1000, // 10.00 NGN
-        TRIAL_BONUS_KOBO: 100000, // 1,000.00 NGN
-        STARTING_BONUS_KOBO: 50000, // 500.00 NGN
+        TRIAL_BONUS_KOBO: 100000, // 1,000.00 NGN (Legacy)
+        STARTING_BONUS_KOBO: 10000, // 100.00 NGN (10 Credits setup)
 
         // --- AELIXXR (Life OS) Costs ---
         LIFE_CHAT_FREE_TIER: 0,       // Chit-chat is free
