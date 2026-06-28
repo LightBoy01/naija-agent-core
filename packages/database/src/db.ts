@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema.js';
-import { organizations, transactions } from './schema.js';
+import { organizations, transactions, referrals, users } from './schema.js';
 import { eq, sql } from 'drizzle-orm';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -82,6 +82,31 @@ export async function deductOrgBalance(orgId: string, amountKobo: number): Promi
       await tx.update(organizations)
         .set({ balanceKobo: newBalance })
         .where(eq(organizations.id, orgId));
+
+      // --- 30% RevShare Logic ---
+      const now = new Date();
+      const activeReferrals = await tx.select()
+        .from(referrals)
+        .where(
+          sql`${referrals.referredOrgId} = ${orgId} AND ${referrals.status} = 'active' AND ${referrals.expiresAt} > ${now}`
+        );
+
+      if (activeReferrals.length > 0) {
+        const ref = activeReferrals[0];
+        const revShareKobo = Math.floor(amountKobo * 0.3);
+
+        if (revShareKobo > 0) {
+          // Increment the referral's tracked earnings
+          await tx.update(referrals)
+            .set({ commissionEarnedKobo: sql`${referrals.commissionEarnedKobo} + ${revShareKobo}` })
+            .where(eq(referrals.id, ref.id));
+            
+          // Add to partner's Vault (if they exist)
+          await tx.update(users)
+            .set({ vaultBalanceKobo: sql`${users.vaultBalanceKobo} + ${revShareKobo}` })
+            .where(eq(users.phone, ref.referrerPhone));
+        }
+      }
     });
     return newBalance;
   } catch (e) {
