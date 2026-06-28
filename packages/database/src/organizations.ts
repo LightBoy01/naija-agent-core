@@ -14,7 +14,7 @@ export async function createTenant(data: {
 }) {
   const db = getDb();
   const hashedPin = await bcrypt.hash(data.adminPin, 10);
-  const bonusKobo = 200000;
+  const bonusKobo = 10000; // 100 NGN (10 Credits)
   
   await db.transaction(async (tx) => {
     await tx.insert(organizations).values({
@@ -58,7 +58,8 @@ export async function registerTrialInterest(data: {
   referralPhone?: string;
 }) {
   const db = getDb();
-  const trialBonus = 200000;
+  // 10,000 Kobo (10 Credits) for organic, 50,000 Kobo (50 Credits) for referred
+  const trialBonus = data.referralPhone ? 50000 : 10000;
   
   await db.transaction(async (tx) => {
     await tx.insert(organizations).values({
