@@ -126,16 +126,14 @@ export const energyLedger = pgTable('energy_ledger', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-// --- Referrals (Growth Loop) ---
 export const referrals = pgTable('referrals', {
   id: varchar('id', { length: 128 }).primaryKey(),
   referrerPhone: varchar('referrer_phone', { length: 64 }).references(() => users.phone).notNull(),
   referredOrgId: varchar('referred_org_id', { length: 64 }).references(() => organizations.id).notNull(),
-  status: varchar('status', { length: 20 }).default('pending').notNull(), // 'pending', 'pending_settlement', 'paid'
-  commissionEarnedKobo: integer('commission_earned_kobo').default(100000).notNull(), // 1000 NGN Flat
+  status: varchar('status', { length: 20 }).default('active').notNull(), // 'active', 'expired'
+  commissionEarnedKobo: bigint('commission_earned_kobo', { mode: 'number' }).default(0).notNull(), // Tracks total accumulated 30% RevShare
   createdAt: timestamp('created_at').defaultNow().notNull(),
-  settlementDate: timestamp('settlement_date'), // Tracks the 14-day hold
-  completedAt: timestamp('completed_at'), // When it was finally paid out
+  expiresAt: timestamp('expires_at'), // Exactly 365 days from activation
 });
 
 // --- Chats (Conversation State) ---

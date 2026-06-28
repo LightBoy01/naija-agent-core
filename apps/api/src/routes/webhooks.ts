@@ -8,8 +8,7 @@ import {
   getOrgByPhoneId, 
   setOptOut, 
   checkOptOut,
-  findOrgByAdminPhone,
-  processReferralConversion
+  findOrgByAdminPhone
 } from '@naija-agent/database';
 import { getProvider } from '@naija-agent/payments';
 import { formatCurrency } from '../utils/currency.js';
@@ -166,20 +165,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
           await whatsappQueue.add('process-message', notificationJob, { removeOnComplete: true });
         }
 
-        // --- REFERRAL CHECK ---
-        const referral = await processReferralConversion(orgId);
-        if (referral && process.env.MASTER_ADMIN_PHONE) {
-            const adminMsg = `🔔 *REFERRAL CONVERTED*\n\nOrg: ${org?.name} crossed 5k deposits.\nReferrer: ${referral.referrerPhone} earns 1k.\nStatus: Locked for 14 days.`;
-            await whatsappQueue.add('process-message', {
-               type: 'text',
-               orgId: 'system',
-               phoneId: process.env.WHATSAPP_PHONE_ID || 'PENDING',
-               from: process.env.MASTER_ADMIN_PHONE,
-               messageId: `REF-${Date.now()}`,
-               timestamp: Date.now(),
-               content: { text: adminMsg }
-            }, { removeOnComplete: true });
-        }
+
       }
     } catch (e: any) {
       if (e.message === 'DUPLICATE_REFERENCE') {
@@ -276,20 +262,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
           await whatsappQueue.add('process-message', notificationJob, { removeOnComplete: true });
         }
 
-        // --- REFERRAL CHECK ---
-        const referral = await processReferralConversion(orgId);
-        if (referral && process.env.MASTER_ADMIN_PHONE) {
-            const adminMsg = `🔔 *REFERRAL CONVERTED (Monnify)*\n\nOrg: ${org?.name} crossed 5k deposits.\nReferrer: ${referral.referrerPhone} earns 1k.\nStatus: Locked for 14 days.`;
-            await whatsappQueue.add('process-message', {
-               type: 'text',
-               orgId: 'system',
-               phoneId: process.env.WHATSAPP_PHONE_ID || 'PENDING',
-               from: process.env.MASTER_ADMIN_PHONE,
-               messageId: `REF-${Date.now()}`,
-               timestamp: Date.now(),
-               content: { text: adminMsg }
-            }, { removeOnComplete: true });
-        }
+
       }
     } catch (e: any) {
       if (e.message !== 'DUPLICATE_REFERENCE') logger.error({ reference, error: e.message }, '❌ Monnify processing error');

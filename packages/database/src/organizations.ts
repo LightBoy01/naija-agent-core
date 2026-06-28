@@ -348,61 +348,37 @@ import crypto from 'crypto';
 
 export async function createReferral(referrerPhone: string, referredOrgId: string) {
   const db = getDb();
+  const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // 1 year from now
   await db.insert(referrals).values({
     id: `ref_${crypto.randomBytes(8).toString('hex')}`,
     referrerPhone,
     referredOrgId,
-    status: 'pending',
-    commissionEarnedKobo: 100000,
+    status: 'active',
+    commissionEarnedKobo: 0,
+    expiresAt
   }).onConflictDoNothing();
 }
 
-export async function processReferralConversion(orgId: string) {
+export async function getPartnerStats(referrerPhone: string) {
   const db = getDb();
-  const org = await getOrgById(orgId);
-  if (!org || org.lifetimeDepositsKobo < 500000) return null; // 5000 NGN threshold
-
-  const pendingReferrals = await db.select().from(referrals).where(
-    sql`${referrals.referredOrgId} = ${orgId} AND ${referrals.status} = 'pending'`
+  const partnerReferrals = await db.select().from(referrals).where(
+    eq(referrals.referrerPhone, referrerPhone)
   );
-  
-  if (pendingReferrals.length > 0) {
-    const referral = pendingReferrals[0];
-    const settlementDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
-    
-    await db.update(referrals).set({
-      status: 'pending_settlement',
-      settlementDate,
-    }).where(eq(referrals.id, referral.id));
-    
-    return referral;
-  }
-  return null;
-}
 
-import { users } from './schema.js';
-
-export async function processMatureReferrals() {
-  const db = getDb();
+  let activeCount = 0;
+  let totalEarnedKobo = 0;
   const now = new Date();
-  
-  const matureReferrals = await db.select().from(referrals).where(
-    sql`${referrals.status} = 'pending_settlement' AND ${referrals.settlementDate} <= ${now}`
-  );
-  
-  const processed = [];
-  
-  for (const ref of matureReferrals) {
-    await db.transaction(async (tx) => {
-      await tx.update(referrals).set({ status: 'paid' }).where(eq(referrals.id, ref.id));
-      
-      // Attempt to update the user's vault balance. If user doesn't exist, ignore (they can still register later but the vault update might fail. Wait, if they don't exist, we should upsert or just ignore for now? Assuming Aelixxr users exist.)
-      await tx.update(users).set({ 
-         vaultBalanceKobo: sql`${users.vaultBalanceKobo} + ${ref.commissionEarnedKobo}`
-      }).where(eq(users.phone, ref.referrerPhone));
-    });
-    processed.push(ref);
+
+  for (const ref of partnerReferrals) {
+    totalEarnedKobo += ref.commissionEarnedKobo || 0;
+    if (ref.status === 'active' && ref.expiresAt && new Date(ref.expiresAt) > now) {
+      activeCount++;
+    }
   }
-  
-  return processed;
+
+  return {
+    totalReferrals: partnerReferrals.length,
+    activeReferrals: activeCount,
+    totalEarnedKobo
+  };
 }

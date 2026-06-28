@@ -195,6 +195,17 @@ export const SYSTEM_TOOLS = [
     name: "get_pending_setups",
     description: "Retrieves a list of all businesses waiting for activation or payment. (Sovereign Only)",
     parameters: { type: Type.OBJECT, properties: {} }
+  },
+  {
+    name: "get_partner_stats",
+    description: "Retrieves the referral and earnings statistics for a partner. (Sovereign Only)",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        partnerPhone: { type: Type.STRING, description: "The partner's phone number (e.g. 23480000000)" }
+      },
+      required: ["partnerPhone"]
+    }
   }
 ];
 
@@ -214,7 +225,8 @@ import {
   setMfaCode,
   findOrCreateChat,
   setChatDemoState,
-  suspendOrganization
+  suspendOrganization,
+  getPartnerStats
 } from '@naija-agent/database';
 import {
   createTenant as fbCreateTenant,
@@ -449,7 +461,7 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
 
         return { 
             status: 'success', 
-            message: `Great! We've registered your interest for ${args.name}. Your new Bot Phone will be ${args.botPhone}. We've also credited your account with a FREE ₦1,000 Trial Bonus!${pairingCodeMsg || ' Proceed to the dashboard to scan the QR code and wake up your AI.'}` 
+            message: `Great! We've registered your interest for ${args.name}. Your new Bot Phone will be ${args.botPhone}. We've also credited your account with 10 free setup credits!${pairingCodeMsg || ' Proceed to the dashboard to scan the QR code and wake up your AI.'}` 
         };
     }
 
@@ -540,6 +552,12 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
         // getNetworkStats signature: (orgId)
         const stats = await getNetworkStats(orgId);
         return { status: 'success', stats };
+    }
+
+    case 'get_partner_stats': {
+        if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
+        const stats = await getPartnerStats(args.partnerPhone);
+        return { status: 'success', stats, instructions: "Present these stats clearly to the partner." };
     }
 
     case 'generate_login_code': {
