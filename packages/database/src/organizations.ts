@@ -55,6 +55,7 @@ export async function registerTrialInterest(data: {
   adminPhone: string;
   botPhone: string;
   timezone?: string;
+  referralPhone?: string;
 }) {
   const db = getDb();
   const trialBonus = 200000;
@@ -88,6 +89,10 @@ export async function registerTrialInterest(data: {
         activeClients: sql`${networkMetadata.activeClients} + 1`
       }
     });
+
+    if (data.referralPhone) {
+      await createReferral(data.referralPhone, data.id);
+    }
   });
 }
 

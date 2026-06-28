@@ -36,8 +36,9 @@ export const SYSTEM_TOOLS = [
         id: { type: Type.STRING, description: "Organization slug (e.g. kudirat_kitchen)" },
         name: { type: Type.STRING, description: "Business display name" },
         adminPhone: { type: Type.STRING, description: `The Boss's personal WhatsApp (e.g. 23480000000)` },
-        botPhone: { type: Type.STRING, description: `The new SIM number for the bot (e.g. 23480000000)` },
-        timezone: { type: Type.STRING, description: "Business timezone (e.g. Africa/Lagos, America/New_York). Default: Africa/Lagos" }
+        botPhone: { type: Type.STRING, description: `The new dedicated WhatsApp number (e.g. 23480000000)` },
+        timezone: { type: Type.STRING, description: "Timezone, e.g. 'Africa/Lagos'" },
+        referralPhone: { type: Type.STRING, description: "Optional. The phone number of the Partner/Coach who referred them." }
       },
       required: ["id", "name", "adminPhone", "botPhone"]
     }
@@ -407,7 +408,8 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
                   name: args.name,
                   adminPhone: args.adminPhone,
                   botPhone: args.botPhone,
-                  timezone: args.timezone
+                  timezone: args.timezone,
+                  referralPhone: args.referralPhone
               }),
               fbRegisterTrialInterest({
                   id: args.id,
