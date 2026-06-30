@@ -33,6 +33,7 @@ export interface MessagingDependencies {
   sectorPack?: SectorPack;
   mediaBuffer?: Buffer | null;
   mediaMime?: string | null;
+  systemPromptExtension?: string;
 }
 
 export async function handleMessage(job: Job<JobData>, deps: MessagingDependencies): Promise<{ success: boolean; reason?: string }> {
@@ -137,6 +138,7 @@ ${personaPrompt}
 ${activeDemoNiche ? 'Empty - Sandbox Mode. Make up fake items.' : (knowledgeContext || 'Empty - Please tell me your prices so I can start selling!')}
 
 ${globalProtocolReady}
+${deps.systemPromptExtension || ''}
 
 CRITICAL: Reply directly to the user with your final message. Do NOT include your internal thoughts or reasoning in the final text. Do not wrap your message in JSON or markdown code blocks.
 `;

@@ -89,12 +89,15 @@ export async function handleRequestOtp(
 
   // 2. Trigger Meta OTP request
   const tenantService = new WhatsAppService(accessToken, phoneId, process.env.WHATSAPP_APP_SECRET);
+  let metaFailed = false;
+  let metaError = '';
   try {
     logger.info({ tenantId }, `📡 [RELAY] Requesting Meta code...`);
     await tenantService.requestCode('SMS');
   } catch (metaErr: any) {
     logger.error({ tenantId, error: metaErr.message }, `❌ [RELAY] Meta Code Request Failed.`);
-    // Don't throw yet, still notify the Boss that we tried
+    metaFailed = true;
+    metaError = metaErr.message;
   }
 
   // 3. Ping the Boss
@@ -105,7 +108,10 @@ export async function handleRequestOtp(
       process.env.WHATSAPP_APP_SECRET
     );
 
-    const relayMsg = `📢 *ACTIVATION READY*\n\nOga Boss is ready to move your bot to the cloud. Are you holding the phone for SIM *${org.config?.botPhone || 'N/A'}*?\n\nI have just sent your 6-digit activation code via WhatsApp message or SMS. \n\n*Action:* Simply type the 6-digit code here!`;
+    const relayMsg = metaFailed
+      ? `⚠️ *ACTIVATION ISSUE*\n\nOga, I tried to send the 6-digit code but Meta failed: *${metaError}*\n\nThis is usually temporary. Please try again in a few minutes or ask the Sovereign to help with the Meta Cloud API registration.`
+      : `📢 *ACTIVATION READY*\n\nOga Boss is ready to move your bot to the cloud. Are you holding the phone for SIM *${org.config?.botPhone || 'N/A'}*?\n\nI have just sent your 6-digit activation code via WhatsApp message or SMS. \n\n*Action:* Simply type the 6-digit code here!`;
+
     await activationService.sendText(org.config.adminPhone, relayMsg);
     logger.info({ orgId: org.id, adminPhone: org.config.adminPhone }, `✅ [RELAY] Initiated for Org.`);
   }

@@ -227,7 +227,8 @@ import {
   findOrCreateChat,
   setChatDemoState,
   suspendOrganization,
-  getPartnerStats
+  getPartnerStats,
+  isRegisteredPartner
 } from '@naija-agent/database';
 import {
   createTenant as fbCreateTenant,
@@ -400,6 +401,35 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
     }
 
     case 'register_trial_interest': {
+        const { parseAndFormatPhone } = await import('@naija-agent/types');
+
+        if (args.referralPhone) {
+            const normalizedRef = parseAndFormatPhone(args.referralPhone) || args.referralPhone;
+            const normalizedAdmin = parseAndFormatPhone(args.adminPhone) || args.adminPhone;
+            const normalizedBot = parseAndFormatPhone(args.botPhone) || args.botPhone;
+            
+            if (normalizedRef === normalizedAdmin || normalizedRef === normalizedBot) {
+                logger.warn({ orgId: args.id, ref: args.referralPhone }, '🛑 [REFERRAL] Blocked self-referral attempt.');
+                args.referralPhone = null;
+            } else {
+                const isValid = await isRegisteredPartner(args.referralPhone);
+                if (!isValid) {
+                    logger.warn({ orgId: args.id, ref: args.referralPhone }, '🛑 [REFERRAL] Blocked invalid/unregistered partner phone.');
+                    args.referralPhone = null;
+                }
+            }
+        }
+
+        let isBetaCohort = false;
+        let betaExpiresAt = undefined;
+        if (ctx.redisClient) {
+            const isBeta = await ctx.redisClient.get(`referral_beta:${ctx.from}`);
+            if (isBeta === 'true') {
+                isBetaCohort = true;
+                betaExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+            }
+        }
+
         // 1. Register in Database
         try {
             await Promise.all([
@@ -409,14 +439,17 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
                   adminPhone: args.adminPhone,
                   botPhone: args.botPhone,
                   timezone: args.timezone,
-                  referralPhone: args.referralPhone
+                  referralPhone: args.referralPhone,
+                  isBetaCohort,
+                  betaExpiresAt
               }),
               fbRegisterTrialInterest({
                   id: args.id,
                   name: args.name,
                   adminPhone: args.adminPhone,
                   botPhone: args.botPhone,
-                  timezone: args.timezone
+                  timezone: args.timezone,
+                  referralPhone: args.referralPhone
               })
             ]);
         } catch (error: any) {
@@ -427,7 +460,6 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
         }
 
         // 2. Normalize Phone and Set Redis Mapping (for Sidecar routing)
-        const { parseAndFormatPhone } = await import('@naija-agent/types');
         const normalizedBotPhone = parseAndFormatPhone(args.botPhone);
         if (normalizedBotPhone && ctx.redisClient) {
             const rawPhone = normalizedBotPhone.replace('+', '');
@@ -461,9 +493,11 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
             logger.error({ error: e.response?.data || e.message, orgId: args.id }, '❌ [AUTO-PAIR] Failed during trial registration');
         }
 
+        const bonusCredits = args.referralPhone ? 50 : 10;
+        const bonusNaira = args.referralPhone ? 500 : 100;
         return { 
             status: 'success', 
-            message: `Great! We've registered your interest for ${args.name}. Your new Bot Phone will be ${args.botPhone}. We've also credited your account with 10 free setup credits!${pairingCodeMsg || ' Proceed to the dashboard to scan the QR code and wake up your AI.'}` 
+            message: `Great! We've registered your interest for ${args.name}. Your new Bot Phone will be ${args.botPhone}. Because you ${args.referralPhone ? 'used a VIP Partner link, you' : ''} have been credited with ${bonusCredits} free setup credits (₦${bonusNaira})!${pairingCodeMsg || ' Proceed to the dashboard to scan the QR code and wake up your AI.'}` 
         };
     }
 

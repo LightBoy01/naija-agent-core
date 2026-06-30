@@ -35,7 +35,7 @@ export class DockerService {
         `http://localhost/v${this.apiVersion}/containers/create?name=${containerName}`,
         {
           Image: 'naija-agent/hermes-agent:latest', // Ensure this image is built on the VPS
-          Cmd: ['python3', 'cli.py', '-q', options.instruction],
+          Cmd: ['python3', 'cli.py', '--provider', 'deepseek', '-q', options.instruction],
           Env: [
             `INSTRUCTION=${options.instruction}`,
             `USER_PHONE=${options.userPhone}`,

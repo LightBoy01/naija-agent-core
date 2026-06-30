@@ -34,6 +34,15 @@ export const vector = customType<{
   },
 });
 
+// --- Beta Feedback ---
+export const betaFeedback = pgTable('beta_feedback', {
+  id: varchar('id', { length: 64 }).primaryKey(),
+  orgId: varchar('org_id', { length: 64 }).notNull(),
+  userPhone: varchar('user_phone', { length: 64 }).notNull(),
+  content: text('content').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 // --- Organizations (Tenants) ---
 export const organizations = pgTable('organizations', {
   id: varchar('id', { length: 64 }).primaryKey(),
@@ -54,6 +63,9 @@ export const organizations = pgTable('organizations', {
   systemPrompt: text('system_prompt'),
   config: jsonb('config'),
   trialStartedAt: timestamp('trial_started_at'),
+  isBetaPartner: boolean('is_beta_partner').default(false).notNull(),
+  isBetaCohort: boolean('is_beta_cohort').default(false).notNull(),
+  betaExpiresAt: timestamp('beta_expires_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

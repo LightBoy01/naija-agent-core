@@ -5,7 +5,7 @@ import {
 } from 'firebase-admin/firestore';
 import { incrementNetworkStats } from './stats.js';
 import { setAdminAuth } from './auth.js';
-import { Organization, OnboardingData, OnboardingConfig, parseAndFormatPhone } from '@naija-agent/types';
+import { Organization, OnboardingData, OnboardingConfig, SystemConfig, parseAndFormatPhone } from '@naija-agent/types';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 
@@ -21,8 +21,10 @@ export async function registerTrialInterest(data: {
   adminPhone: string;
   botPhone: string;
   timezone?: string;
+  referralPhone?: string;
 }): Promise<void> {
-  const trialBonus = 100000; // 1,000.00 NGN Trial Gift
+  // 10,000 Kobo (10 Credits) for organic, 50,000 Kobo (50 Credits) for referred
+  const trialBonus = data.referralPhone ? 50000 : 10000;
   const timezone = data.timezone || 'Africa/Lagos';
   const adminPhone = parseAndFormatPhone(data.adminPhone) || data.adminPhone;
   const botPhone = parseAndFormatPhone(data.botPhone) || data.botPhone;
@@ -174,32 +176,71 @@ export async function completeHybridOnboarding(orgId: string, data: OnboardingDa
     hashedPin = await bcrypt.hash(hashedPin, 10);
   }
 
-  const adminPhone = await db.runTransaction(async (transaction) => {
-    const orgRef = orgsRef.doc(orgId);
-    const doc = await transaction.get(orgRef);
+  let fbCompleted = false;
+  let adminPhone: string | undefined;
 
-    if (!doc.exists) throw new Error(`Organization ${orgId} not found`);
+  try {
+    adminPhone = await db.runTransaction(async (transaction) => {
+      const orgRef = orgsRef.doc(orgId);
+      const doc = await transaction.get(orgRef);
 
-    transaction.update(orgRef, {
-      name: data.name,
-      onboardingStep: 'COMPLETE',
-      onboardingData: null,
-      status: 'ACTIVE',
-      isActive: true,
-      whatsappPhoneId: data.meta.phoneId,
-      'config.whatsappToken': data.meta.accessToken,
-      'config.wabaId': data.meta.wabaId,
-      'config.adminPin': hashedPin,
-      'config.bankDetails': {
+      if (!doc.exists) throw new Error(`Organization ${orgId} not found`);
+
+      transaction.update(orgRef, {
+        name: data.name,
+        onboardingStep: 'COMPLETE',
+        onboardingData: null,
+        status: 'ACTIVE',
+        isActive: true,
+        whatsappPhoneId: data.meta.phoneId,
+        'config.whatsappToken': data.meta.accessToken,
+        'config.wabaId': data.meta.wabaId,
+        'config.adminPin': hashedPin,
+        'config.bankDetails': {
+          bankName: data.bankName,
+          accountNumber: data.accountNumber,
+          accountName: data.accountName
+        },
+        updatedAt: FieldValue.serverTimestamp()
+      });
+
+      return doc.data()?.config?.adminPhone;
+    });
+    fbCompleted = true;
+
+    // PostgreSQL dual-write
+    try {
+      const { completeOnboarding: pgCompleteOnboarding } = await import('@naija-agent/database');
+      await pgCompleteOnboarding(orgId, {
+        name: data.name,
+        adminPin: hashedPin,
         bankName: data.bankName,
         accountNumber: data.accountNumber,
-        accountName: data.accountName
-      },
-      updatedAt: FieldValue.serverTimestamp()
-    });
-
-    return doc.data()?.config?.adminPhone;
-  });
+        accountName: data.accountName,
+        timezone: undefined
+      });
+    } catch (pgErr: any) {
+      // Rollback Firebase if PostgreSQL fails
+      if (fbCompleted) {
+        try {
+          await orgsRef.doc(orgId).update({
+            status: 'PENDING_META',
+            onboardingStep: 'BOT_PHONE',
+            onboardingData: data
+          });
+        } catch (rollbackErr: any) {
+          console.error(`[ROLLBACK] Failed to revert Firebase: ${rollbackErr.message}`);
+        }
+      }
+      throw new Error(`PostgreSQL write failed (Firebase rolled back): ${pgErr.message}`);
+    }
+  } catch (e) {
+    if (fbCompleted && !adminPhone) {
+      // Firebase succeeded but we're unsure of state, mark for retry
+      console.error(`[HYBRID] Partial completion for ${orgId}, Firebase committed but PG may have failed`);
+    }
+    throw e;
+  }
 
   // 🛡️ [UX]: Auto-authenticate the Boss (Post-Transaction)
   if (adminPhone) {
@@ -215,9 +256,13 @@ export async function createTenant(data: {
   systemPrompt: string;
   timezone?: string;
 }): Promise<void> {
-  const hashedPin = await bcrypt.hash(data.adminPin, 10);
+  let hashedPin = data.adminPin;
+  const isBcrypt = /^\$2[aby]\$.{56}$/.test(hashedPin);
+  if (!isBcrypt) {
+    hashedPin = await bcrypt.hash(hashedPin, 10);
+  }
   const bridgeSecret = crypto.randomBytes(16).toString('hex'); 
-  const bonusKobo = 100000;
+  const bonusKobo = SystemConfig.COSTS.STARTING_BONUS_KOBO;
   const timezone = data.timezone || 'Africa/Lagos';
   const adminPhone = parseAndFormatPhone(data.adminPhone) || data.adminPhone;
 

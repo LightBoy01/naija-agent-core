@@ -13,6 +13,19 @@ export const BillingInterceptor: Interceptor = {
       return ctx;
     }
 
+    // Beta Cohort Check
+    if (ctx.org.isBetaCohort) {
+        if (ctx.org.betaExpiresAt && new Date(ctx.org.betaExpiresAt) < new Date()) {
+            if (ctx.tenantWhatsAppService) {
+                await ctx.tenantWhatsAppService.sendText(ctx.from, `🛑 *Beta Period Expired*\n\nYour exclusive 7-day Beta trial has concluded. Please top up your Vault to continue using Zynux.`);
+            }
+            ctx.shortCircuit = true;
+            ctx.shortCircuitReason = 'BETA_EXPIRED';
+            return ctx;
+        }
+        return ctx; // Waive billing
+    }
+
     // 2. Prevent Double-Deduction on Job Retries
     const billingKey = `billed:job:${ctx.job.id}`;
     const alreadyBilled = await ctx.redisClient.get(billingKey);

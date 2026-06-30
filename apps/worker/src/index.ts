@@ -94,10 +94,14 @@ import { MfaInterceptor } from './pipeline/interceptors/mfa.js';
 import { BillingInterceptor } from './pipeline/interceptors/billing.js';
 import { SpamInterceptor } from './pipeline/interceptors/spam.js';
 import { MediaInterceptor } from './pipeline/interceptors/media.js';
+import { ReferralInterceptor } from './pipeline/interceptors/referral.js';
+import { FeedbackInterceptor } from './pipeline/interceptors/feedback.js';
 
 // Setup Pipeline
 const messagePipeline = new MessagePipeline()
   .use(OrgLoadInterceptor)
+  .use(ReferralInterceptor)
+  .use(FeedbackInterceptor)
   .use(MediaInterceptor)
   .use(SpamInterceptor)
   .use(RateLimitInterceptor)
@@ -219,7 +223,8 @@ const worker = new Worker<JobData>(
         tenantTools: ctx.tenantTools || [],
         sectorPack: ctx.sectorPack,
         mediaBuffer: (ctx as any).mediaBuffer,
-        mediaMime: (ctx as any).mediaMime
+        mediaMime: (ctx as any).mediaMime,
+        systemPromptExtension: (ctx as any).systemPromptExtension
         };
       return await handleMessage(job, deps);
     } catch (error: any) {

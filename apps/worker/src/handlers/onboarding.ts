@@ -16,6 +16,7 @@ import {
   completeOnboarding as pgCompleteOnboarding,
   createTenant as pgCreateTenant,
   activateTenant as pgActivateTenant,
+  getDb as getSqlDb,
 } from '@naija-agent/database';
 import { Redis } from 'ioredis';
 import { formatCurrency } from '../utils/currency.js';
@@ -23,6 +24,7 @@ import { logger } from '../utils/logger.js';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import axios from 'axios';
+import { sql } from 'drizzle-orm';
 
 // ─── PROSPECT FLOW (Sovereign Lead Capture) ─────────────────────────
 
@@ -169,7 +171,7 @@ async function handleProspectFlow(
                logger.info({ orgId: newOrgId, jid }, '🔗 [AUTO-ONBOARDING] Hydrated sidecar mapping in Redis');
            }
 
-           // 6. Update Tenant with Pending Setup (Firebase)
+           // 6. Update Tenant with Pending Setup (Firebase + PostgreSQL)
            await (await getDb()).collection('organizations').doc(newOrgId).update({
                status: 'AWAITING_SIDECAR',
                pendingSetup: {
@@ -178,6 +180,23 @@ async function handleProspectFlow(
                    initiatedAt: new Date().toISOString()
                }
            });
+
+           // PostgreSQL equivalent
+           try {
+             const sqlDb = getSqlDb();
+             const pendingSetupJson = { botPhone, pairingCode, initiatedAt: new Date().toISOString() };
+             await sqlDb.execute(sql`
+               UPDATE organizations SET
+                 status = 'AWAITING_SIDECAR',
+                 config = CASE
+                   WHEN config IS NULL THEN jsonb_build_object('pendingSetup', ${JSON.stringify(pendingSetupJson)}::jsonb)
+                   ELSE config || jsonb_build_object('pendingSetup', ${JSON.stringify(pendingSetupJson)}::jsonb)
+                 END
+               WHERE id = ${newOrgId}
+             `);
+           } catch (pgErr: any) {
+             logger.error({ newOrgId, error: pgErr.message }, '⚠️ [PROSPECT FLOW] Failed to write pendingSetup to PostgreSQL');
+           }
 
            // 7. Cleanup Prospect State
            await redisClient.del(prospectKey);
@@ -302,7 +321,10 @@ async function handleBossSetup(
 
   // RESTART / CANCEL COMMANDS
   if (text === '#cancel' || text === '#reset') {
-      await setOrgOnboarding(orgId, 'START', {});
+      await Promise.all([
+        setOrgOnboarding(orgId, 'START', {}),
+        pgSetOrgOnboarding(orgId, 'START', {})
+      ]);
       const resetMsg = text === '#reset' ? "💥 *Bot Reset Successful.* All setup data cleared. Type *#setup* to start fresh." : "🛑 *Setup Cancelled.*\n\nOga, I have cleared your temporary setup data. Type *#setup* when you are ready to start again.";
       await tenantWhatsAppService.sendText(from, resetMsg);
       return { handled: true };
@@ -334,7 +356,7 @@ async function handleBossSetup(
   const currentStep = onboarding?.step || (org.onboardingStep as OnboardingConfig['step']) || 'NONE';
   const currentData = onboarding?.data || (org.onboardingData as OnboardingData) || {};
 
-  if (text !== '#setup' && currentStep === 'NONE' && currentStep === 'COMPLETE') return { handled: false };
+  if (text !== '#setup' && (currentStep === 'NONE' || currentStep === 'COMPLETE')) return { handled: false };
 
   if (text === '#setup' || (currentStep !== 'COMPLETE' && currentStep !== 'NONE')) {
       logger.info({ orgId, step: currentStep || 'START' }, '🛠️ [ONBOARDING] Progressing step');
@@ -405,6 +427,11 @@ async function handleBossSetup(
           if (!nextData.name) nextData.name = text;
           
           if (nextData.adminPin) {
+             // Check if pre-populated PIN is already bcrypt-hashed
+             const isBcrypt = /^\$2[aby]\$.{56}$/.test(nextData.adminPin);
+             if (!isBcrypt) {
+               nextData.adminPin = await bcrypt.hash(nextData.adminPin, 10);
+             }
              nextStep = 'BANK_NAME';
              reply = `Got it: *${nextData.name}*. \n(PIN already secured 🔐)\n\n*Step 3:* What is your *Bank Name*?`;
           } else {

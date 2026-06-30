@@ -13,7 +13,11 @@ export async function createTenant(data: {
   timezone?: string;
 }) {
   const db = getDb();
-  const hashedPin = await bcrypt.hash(data.adminPin, 10);
+  let hashedPin = data.adminPin;
+  const isBcrypt = /^\$2[aby]\$.{56}$/.test(hashedPin);
+  if (!isBcrypt) {
+    hashedPin = await bcrypt.hash(hashedPin, 10);
+  }
   const bonusKobo = 10000; // 100 NGN (10 Credits)
   
   await db.transaction(async (tx) => {
@@ -56,6 +60,8 @@ export async function registerTrialInterest(data: {
   botPhone: string;
   timezone?: string;
   referralPhone?: string;
+  isBetaCohort?: boolean;
+  betaExpiresAt?: Date;
 }) {
   const db = getDb();
   // 10,000 Kobo (10 Credits) for organic, 50,000 Kobo (50 Credits) for referred
@@ -70,6 +76,8 @@ export async function registerTrialInterest(data: {
       status: 'TRIAL',
       timezone: data.timezone || 'Africa/Lagos',
       whatsappPhoneId: 'PENDING',
+      isBetaCohort: data.isBetaCohort || false,
+      betaExpiresAt: data.betaExpiresAt || null,
       config: {
         status: 'TRIAL',
         adminPhone: data.adminPhone,
@@ -110,6 +118,17 @@ export async function topupTenant(tenantId: string, amount: number, reference: s
     await tx.update(networkMetadata)
       .set({ totalVaultKobo: sql`${networkMetadata.totalVaultKobo} + ${amount}` })
       .where(eq(networkMetadata.key, 'global'));
+
+    const now = new Date();
+    const activeRefs = await tx.select().from(referrals).where(
+      sql`${referrals.referredOrgId} = ${tenantId} AND ${referrals.status} = 'active' AND ${referrals.expiresAt} > ${now}`
+    );
+    if (activeRefs.length > 0) {
+      const commission = Math.floor(amount * 0.30);
+      await tx.update(referrals)
+        .set({ commissionEarnedKobo: sql`${referrals.commissionEarnedKobo} + ${commission}` })
+        .where(eq(referrals.id, activeRefs[0].id));
+    }
   });
 }
 
@@ -352,12 +371,30 @@ export async function getOrganizationsBySector(sector: string, capability?: stri
 import { referrals } from './schema.js';
 import crypto from 'crypto';
 
+import { parseAndFormatPhone } from '@naija-agent/types';
+
+export async function getPartnerStatus(phone: string): Promise<{ isPartner: boolean, isBeta: boolean }> {
+  const db = getDb();
+  const normalized = parseAndFormatPhone(phone) || phone;
+  const orgs = await db.select().from(organizations).where(
+    sql`config->>'adminPhone' = ${normalized} AND ${organizations.isActive} = true`
+  );
+  if (orgs.length === 0) return { isPartner: false, isBeta: false };
+  return { isPartner: true, isBeta: orgs[0].isBetaPartner };
+}
+
+export async function isRegisteredPartner(phone: string): Promise<boolean> {
+  const status = await getPartnerStatus(phone);
+  return status.isPartner;
+}
+
 export async function createReferral(referrerPhone: string, referredOrgId: string) {
   const db = getDb();
+  const normalized = parseAndFormatPhone(referrerPhone) || referrerPhone;
   const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // 1 year from now
   await db.insert(referrals).values({
     id: `ref_${crypto.randomBytes(8).toString('hex')}`,
-    referrerPhone,
+    referrerPhone: normalized,
     referredOrgId,
     status: 'active',
     commissionEarnedKobo: 0,
@@ -387,4 +424,37 @@ export async function getPartnerStats(referrerPhone: string) {
     activeReferrals: activeCount,
     totalEarnedKobo
   };
+}
+
+export async function processMatureReferrals() {
+  const db = getDb();
+  const now = new Date();
+  
+  const matureRefs = await db.select()
+    .from(referrals)
+    .where(
+      sql`${referrals.expiresAt} <= ${now} AND ${referrals.status} = 'active' AND ${referrals.commissionEarnedKobo} > 0`
+    );
+  
+  for (const ref of matureRefs) {
+    await db.update(referrals)
+      .set({ status: 'expired' })
+      .where(eq(referrals.id, ref.id));
+  }
+  
+  return matureRefs;
+}
+
+export async function insertBetaFeedback(orgId: string, userPhone: string, content: string) {
+  const db = getDb();
+  // Ensure we have betaFeedback imported from schema
+  const { betaFeedback } = await import('./schema.js');
+  const crypto = await import('crypto');
+  
+  await db.insert(betaFeedback).values({
+    id: `bf_${crypto.randomBytes(8).toString('hex')}`,
+    orgId,
+    userPhone,
+    content: content.substring(0, 500) // Hard truncation
+  });
 }

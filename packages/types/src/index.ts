@@ -200,6 +200,8 @@ export const OrganizationSchema = z.object({
   sector: z.string().default('commerce'),
   trialStartedAt: FirestoreTimestampSchema.optional(),
   trialMessageCount: z.number().default(0),
+  isBetaCohort: z.boolean().optional().default(false),
+  betaExpiresAt: z.union([z.string(), z.date()]).optional().nullable(),
   systemPrompt: z.string().optional(),
   onboardingStep: z.string().optional(), // e.g. 'NAME', 'PIN', 'BANK', 'TONE', 'COMPLETE'
   onboardingData: OnboardingDataSchema.optional(), // Temporary storage for setup data
