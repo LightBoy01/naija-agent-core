@@ -15,6 +15,7 @@ export async function proxyToHermes(userPhone: string, message: string, hermesSe
     whatsappService.sendTypingIndicator(userPhone).catch(e => logger.warn('Typing ind err'));
 
     const response = await axios.post(`${HERMES_URL}/v1/chat/completions`, {
+      model: process.env.LLM_MODEL || 'deepseek/deepseek-v4-flash',
       messages: [{ role: 'user', content: message }],
       user: userPhone // OpenAI standard for tracking users
     }, {
