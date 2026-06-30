@@ -47,7 +47,7 @@ services:
   # --- Autonomous Research & Actions (Hermes Gateway) ---
   hermes:
     image: naija-agent/hermes-agent:latest
-    command: python3 gateway/run.py
+    command: sh -c "mkdir -p /opt/data && printf 'model:\n  default: deepseek/deepseek-v4-flash\n  provider: deepseek\n' > /opt/data/config.yaml && python3 gateway/run.py"
     env_file:
       - .env
     environment:
