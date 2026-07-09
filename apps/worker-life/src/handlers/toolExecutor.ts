@@ -2,7 +2,7 @@ import { AIMessage, AIProvider } from '@naija-agent/ai';
 import { logger } from '../utils/logger.js';
 import { billingService } from '../services/billingService.js';
 import { executeLifeTool } from '../tools/index.js';
-import { redactPII } from '../utils/security.js';
+import { redactPII, redactToolArguments } from '../utils/security.js';
 
 export interface ToolExecutorInput {
   functionCalls: Array<{ name: string; args: Record<string, any> }>;
@@ -37,8 +37,8 @@ export async function executeToolCalls(input: ToolExecutorInput): Promise<ToolEx
 
   const toolHistory: AIMessage[] = [
     ...normalizedHistory,
-    { role: 'user', parts: [{ text: ctx.message || "[Media]" }] },
-    { role: 'model', parts: functionCalls.map(fc => ({ functionCall: fc })) }
+    { role: 'user', parts: [{ text: buildSafeUserMessage(ctx) }] },
+    { role: 'model', parts: functionCalls.map(fc => ({ functionCall: { ...fc, args: redactToolArguments(fc.args) } })) }
   ];
 
   const toolResponses: any[] = [];

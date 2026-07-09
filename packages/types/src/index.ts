@@ -74,6 +74,7 @@ export const PaymentConfigSchema = z.object({
   provider: z.enum(['paystack', 'monnify']),
   secretKey: z.string(),
   publicKey: z.string().optional(),
+  redirectUrl: z.string().optional(),
 });
 
 export type PaymentConfig = z.infer<typeof PaymentConfigSchema>;

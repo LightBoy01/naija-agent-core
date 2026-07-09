@@ -9,8 +9,9 @@ export class MonnifyProvider implements PaymentProvider {
   private baseUrl = 'https://api.monnify.com'; // Default to Production
   private accessToken: string | null = null;
   private tokenExpiresAt: number = 0;
+  private redirectUrl: string;
 
-  constructor(combinedKey: string) {
+  constructor(combinedKey: string, redirectUrl?: string) {
     // Format: API_KEY:SECRET_KEY[:CONTRACT_CODE][:WALLET_ACCOUNT_NUMBER]
     const [apiKey, secretKey, contractCode, walletAccountNumber] = combinedKey.split(':');
     if (!apiKey || !secretKey) {
@@ -20,6 +21,7 @@ export class MonnifyProvider implements PaymentProvider {
     this.secretKey = secretKey;
     this.contractCode = contractCode || process.env.MONNIFY_CONTRACT_CODE || null;
     this.walletAccountNumber = walletAccountNumber || process.env.MONNIFY_WALLET_ACCOUNT_NUMBER || null;
+    this.redirectUrl = redirectUrl || "https://dashboard.naija-agent.com/callback";
     
     // Check if it's a test key (usually starts with MK_TEST)
     if (this.apiKey.startsWith('MK_TEST')) {
@@ -143,7 +145,7 @@ export class MonnifyProvider implements PaymentProvider {
         paymentDescription: `Bot Credit Refill for ${orgId}`,
         currencyCode: "NGN",
         contractCode: contractCode,
-        redirectUrl: "https://ai-job-spot.vercel.app", // Placeholder
+        redirectUrl: this.redirectUrl,
         paymentMethods: ["CARD", "ACCOUNT_TRANSFER"]
       };
 
@@ -364,6 +366,39 @@ export class MonnifyProvider implements PaymentProvider {
       return { success: false, message: data.responseMessage || 'Vending failed' };
     } catch (error: any) {
       console.error('Monnify vendUtility Error:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  async refund(transactionReference: string, amountNaira?: number, reason?: string): Promise<{ success: boolean; message: string; refundReference?: string }> {
+    try {
+      const token = await this.getAccessToken();
+      const payload: any = {
+        transactionReference,
+        refundReference: `REF_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        refundReason: reason || 'Customer requested refund'
+      };
+      
+      if (amountNaira) {
+        payload.refundAmount = amountNaira; // Monnify amount is in Naira
+      }
+
+      const response = await fetch(`${this.baseUrl}/api/v1/refunds`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      if (data.requestSuccessful) {
+        return { success: true, message: 'Refund initiated successfully', refundReference: payload.refundReference };
+      }
+      return { success: false, message: data.responseMessage || 'Refund failed' };
+    } catch (error: any) {
+      console.error('Monnify Refund Error:', error);
       return { success: false, message: error.message };
     }
   }

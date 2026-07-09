@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NaijaAgent · Wealth Review</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --card: #12121a;
+    --border: #1e1e2e;
+    --text: #cdd6f4;
+    --muted: #6c7086;
+    --accent: #cba6f7;
+    --green: #a6e3a1;
+    --yellow: #f9e2af;
+    --red: #f38ba8;
+    --blue: #89b4fa;
+    --score-glow: #f5c2e7;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6;
+    padding: 16px;
+    max-width: 680px;
+    margin: 0 auto;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 {
+    font-size: 1.6rem;
+    font-weight: 800;
+    margin: 8px 0 4px;
+    letter-spacing: -0.02em;
+  }
+  h2 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 28px 0 12px;
+    color: var(--accent);
+    letter-spacing: -0.01em;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 0.92rem;
+    font-weight: 600;
+    margin: 16px 0 8px;
+    color: var(--blue);
+  }
+  .subtitle { color: var(--muted); font-size: 0.82rem; margin-bottom: 20px; }
+  .score-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 16px 0 20px;
+  }
+  .score-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 10px;
+    text-align: center;
+  }
+  .score-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .score-val {
+    font-size: 2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--score-glow), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.03em;
+  }
+  .score-tag {
+    font-size: 0.68rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .formula {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    text-align: center;
+    font-size: 0.88rem;
+    margin-bottom: 20px;
+    color: var(--muted);
+    letter-spacing: -0.01em;
+    word-break: break-all;
+  }
+  .formula strong { color: var(--text); font-size: 1.4rem; }
+  .formula .mult { color: var(--accent); }
+  .formula .eq { color: var(--yellow); font-size: 1.3rem; font-weight: 700; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 0.78rem;
+  }
+  th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-size: 0.66rem;
+    letter-spacing: 0.05em;
+    padding: 8px 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 8px 6px;
+    border-bottom: 1px solid rgba(30,30,46,0.6);
+    vertical-align: top;
+    line-height: 1.45;
+  }
+  td:first-child { font-weight: 600; }
+  td:last-child, td:nth-child(3) { color: var(--muted); font-size: 0.72rem; }
+  .tag {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+  .tag-crit { background: rgba(243,139,168,0.15); color: var(--red); }
+  .tag-high { background: rgba(249,226,175,0.12); color: var(--yellow); }
+  .tag-med { background: rgba(137,180,250,0.12); color: var(--blue); }
+  .tag-good { background: rgba(166,227,161,0.12); color: var(--green); }
+  .verdict { padding: 8px 12px; border-radius: 8px; font-size: 0.8rem; margin: 6px 0 12px; }
+  .verdict-h { background: rgba(166,227,161,0.1); border-left: 3px solid var(--green); }
+  .verdict-m { background: rgba(249,226,175,0.08); border-left: 3px solid var(--yellow); }
+  .verdict-l { background: rgba(243,139,168,0.08); border-left: 3px solid var(--red); }
+  .issue {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 8px 0;
+    font-size: 0.8rem;
+  }
+  .issue-num {
+    display: inline-block;
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    background: rgba(203,166,247,0.12);
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 0.7rem;
+    text-align: center;
+    line-height: 22px;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+  .issue-path {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.68rem;
+    color: var(--muted);
+    word-break: break-all;
+    margin-top: 4px;
+  }
+  .issue .row { display: flex; align-items: flex-start; gap: 8px; }
+  .issue .desc { flex: 1; }
+  .rec {
+    margin: 10px 0 10px 22px;
+    font-size: 0.79rem;
+    color: var(--text);
+    list-style-type: "→ ";
+    padding-left: 8px;
+  }
+  .dim-header {
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-top: 8px;
+    color: var(--text);
+  }
+  .dim-detail {
+    font-size: 0.74rem;
+    color: var(--muted);
+    margin-bottom: 8px;
+    padding-left: 6px;
+    border-left: 2px solid var(--border);
+  }
+  .separator {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 20px 0;
+  }
+  .footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.68rem;
+    margin: 28px 0 12px;
+  }
+  .meter {
+    height: 5px;
+    border-radius: 4px;
+    background: var(--border);
+    margin: 4px 0 0;
+    overflow: hidden;
+  }
+  .meter-fill { height: 100%; border-radius: 4px; }
+  .meter-h { background: var(--green); }
+  .meter-m { background: var(--yellow); }
+  .meter-l { background: var(--red); }
+  .scoring-note { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+  .code-block {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 8px 0;
+  }
+  .code-block div {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.72rem;
+    line-height: 1.8;
+  }
+  .code-block .cmd { color: var(--blue); }
+  .code-block .comment { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>NaijaAgent Wealth Review</h1>
+<p class="subtitle">Assessed against <em>Wealth = {Magnitude of Friction Solved} × {Scale of Network} × {Frictionless Leverage}</em><br>&#128197; 2026-07-02 · ~/naija-agent-core · commit 3baed21</p>
+
+<!-- SCORES -->
+<div class="score-grid">
+  <div class="score-card">
+    <div class="score-label">Friction Solved</div>
+    <div class="score-val">8.5</div>
+    <div class="score-tag">Strong</div>
+    <div class="meter"><div class="meter-fill meter-h" style="width:85%"></div></div>
+  </div>
+  <div class="score-card">
+    <div class="score-label">Network Scale</div>
+    <div class="score-val">6.0</div>
+    <div class="score-tag">Design good, unproven</div>
+    <div class="meter"><div class="meter-fill meter-m" style="width:60%"></div></div>
+  </div>
+  <div class="score-card">
+    <div class="score-label">Leverage</div>
+    <div class="score-val">7.5</div>
+    <div class="score-tag">Innovative, fragile</div>
+    <div class="meter"><div class="meter-fill meter-m" style="width:75%"></div></div>
+  </div>
+</div>
+
+<div class="formula">
+  <strong>8.5</strong> <span class="mult">×</span> <strong>6.0</strong> <span class="mult">×</span> <strong>7.5</strong> <span class="mult">=</span> <span class="eq">382.5</span>
+</div>
+<p class="scoring-note" style="text-align:center">Multiplicative formula — single weak dimension drags everything. Network (6.0) is the ceiling.</p>
+
+<hr class="separator">
+
+<!-- DIMENSION 1: FRICTION SOLVED -->
+<h2>1. Magnitude of Friction Solved — 8.5<span style="font-size:0.7rem;color:var(--muted)">/10</span></h2>
+
+<div class="verdict verdict-h">
+  <strong>Strongest dimension.</strong> Solves an entire value chain end-to-end. A merchant goes from 4+ apps → just WhatsApp.
+</div>
+
+<h3>Frictions Eliminated (verified in production code)</h3>
+<table>
+  <tr><th>Friction</th><th>Before</th><th>After</th></tr>
+  <tr>
+    <td>Receipt verification</td>
+    <td>Manually open bank app per order</td>
+    <td>3-tier AI vision + bank API auto-verification<br><span class="tag tag-good">commerce.ts</span></td>
+  </tr>
+  <tr>
+    <td>Receipt forgery</td>
+    <td>No detection capability</td>
+    <td>AI Photoshop forensics: isSuspicious flag + suspicionReason<br><span class="tag tag-good">commerce.ts · verify_transaction</span></td>
+  </tr>
+  <tr>
+    <td>Cross-business fraud</td>
+    <td>WhatsApp group word-of-mouth</td>
+    <td>Scam-Shield: SHA-256 hashed phones, 2+ org consensus<br><span class="tag tag-good">database/fraud.ts · fraud interceptor</span></td>
+  </tr>
+  <tr>
+    <td>AI price errors</td>
+    <td>Proofread every response manually</td>
+    <td>Price Guard: 2-pass validation, 5% tolerance, hard-fail<br><span class="tag tag-good">services/priceGuard.ts</span></td>
+  </tr>
+  <tr>
+    <td>Multi-app workflow</td>
+    <td>WhatsApp + Bank + Excel + Phone</td>
+    <td>Full commerce in WhatsApp: cart→checkout→pay→track<br><span class="tag tag-good">commerce.ts · full lifecycle</span></td>
+  </tr>
+  <tr>
+    <td>Stock overselling</td>
+    <td>No live inventory</td>
+    <td>Atomic stock reservation + 2hr price lock<br><span class="tag tag-good">commerce.ts · add_to_cart</span></td>
+  </tr>
+  <tr>
+    <td>Language barrier</td>
+    <td>Global SaaS is English-only</td>
+    <td>Pidgin English AI, Nigerian norms, local payment rails<br><span class="tag tag-good">Gemini + system prompts</span></td>
+  </tr>
+  <tr>
+    <td>Media loss</td>
+    <td>Lost when phone dies</td>
+    <td>Sovereign archival to OSS (Tencent COS / R2 / Alibaba)<br><span class="tag tag-good">media.ts interceptor</span></td>
+  </tr>
+  <tr>
+    <td>Business onboarding</td>
+    <td>Manual phone setup</td>
+    <td>Zero-touch: signup → pairing code → live AI in minutes<br><span class="tag tag-good">system.ts · register_trial_interest</span></td>
+  </tr>
+  <tr>
+    <td>SMS reach (rural)</td>
+    <td>No integration</td>
+    <td>Twilio bridge with HMAC-SHA1, per-tenant sessions<br><span class="tag tag-good">hermes/sms.py</span></td>
+  </tr>
+</table>
+
+<h3>Frictions Still Unsolved</h3>
+<table>
+  <tr><th>Gap</th><th>Status</th><th>Location</th></tr>
+  <tr>
+    <td>Legal Pack</td>
+    <td><span class="tag tag-high">Stub</span></td>
+    <td class="issue-path">apps/worker/src/sectors/legal/index.ts:75</td>
+  </tr>
+  <tr>
+    <td>Market data</td>
+    <td><span class="tag tag-high">Mock only</span></td>
+    <td class="issue-path">worker-life/src/services/marketData.ts:33</td>
+  </tr>
+  <tr>
+    <td>Refund/dispute flow</td>
+    <td><span class="tag tag-high">Missing</span></td>
+    <td class="issue-path">No webhook handlers for charge.refund</td>
+  </tr>
+  <tr>
+    <td>Media download</td>
+    <td><span class="tag tag-crit">Returns 501</span></td>
+    <td class="issue-path">whatsapp-sidecar/api/server.go:119</td>
+  </tr>
+  <tr>
+    <td>Health/Japa/Edu modules</td>
+    <td><span class="tag tag-med">Unchecked</span></td>
+    <td class="issue-path">TASK_LIST.md</td>
+  </tr>
+</table>
+
+<div class="dim-detail">
+  <strong>→ 8.5:</strong> Core commerce loop is complete and real. Finishing Legal + market data + refunds pushes this to 9+.
+</div>
+
+<hr class="separator">
+
+<!-- DIMENSION 2: NETWORK SCALE -->
+<h2>2. Scale of Network — 6.0<span style="font-size:0.7rem;color:var(--muted)">/10</span></h2>
+
+<div class="verdict verdict-m">
+  <strong>Strong design, unproven foundation.</strong> Network effects are real but infrastructure caps growth at dozens of tenants.
+</div>
+
+<h3>Network Effects Built In</h3>
+<div class="issue">
+  <div class="row"><span class="issue-num">1</span><div class="desc"><strong>GlobalFraudGuard — Gets Stronger Per Tenant</strong><br>SHA-256 hashed phone numbers (privacy-preserving), 2+ org consensus for blacklisting. More tenants = more reporters = higher precision. Rate-limited: 3 attempts per 5 min window. <em>Genuine data network effect.</em></div></div>
+</div>
+<div class="issue">
+  <div class="row"><span class="issue-num">2</span><div class="desc"><strong>30% Referral Revenue Share</strong><br>deductOrgBalance() credits 30% of AI usage to referrer. 365-day tracking. Commission accumulates in referrals table + partner's vault. Direct viral incentive.</div></div>
+</div>
+<div class="issue">
+  <div class="row"><span class="issue-num">3</span><div class="desc"><strong>Peer Benchmarking</strong><br>getNetworkHealthInsight() provides anonymized averages. Implicit competitive pressure drives retention. "My sales are 40% below network average."</div></div>
+</div>
+<div class="issue">
+  <div class="row"><span class="issue-num">4</span><div class="desc"><strong>Multi-Tenant From DB Up</strong><br>orgId on every table. Middleware-enforced session scoping. Per-tenant: AI model, system prompt, payment provider, proxy config. Trial→Onboard→Activate→Suspend lifecycle.</div></div>
+</div>
+
+<h3>Scale Ceilings</h3>
+<table>
+  <tr><th>Limitation</th><th>Impact</th></tr>
+  <tr><td>Single PostgreSQL</td><td>No sharding. Works for dozens, breaks at hundreds.</td></tr>
+  <tr><td>Single-container deployment</td><td>docker-compose bundles API + worker + sidecar + Hermes. No horizontal scale.</td></tr>
+  <tr><td>No public API / SDK</td><td>No app marketplace, no webhooks. Network grows only by direct onboarding.</td></tr>
+  <tr><td>No multi-region</td><td>Nigeria-first. region: 'US'/'UK'/'GLOBAL' fields exist but no actual multi-region infra.</td></tr>
+  <tr><td>0% worker-life tests</td><td>10 handler files, 0 tests. Scaling life companion = scaling untested code.</td></tr>
+  <tr><td>Worker+worker-life split</td><td>Two BullMQ workers sharing Redis/Postgres. Duplicated patterns. Fragile.</td></tr>
+  <tr><td>Hermes Docker-on-demand</td><td>Polls container with 5s interval. Ties up worker thread. No crash cleanup.</td></tr>
+</table>
+
+<div class="dim-detail">
+  <strong>→ 6.0:</strong> The pieces for a 9/10 network are architected. But PostgreSQL sharding, horizontal workers, and a public API are needed to unlock it.
+</div>
+
+<hr class="separator">
+
+<!-- DIMENSION 3: LEVERAGE -->
+<h2>3. Frictionless Leverage — 7.5<span style="font-size:0.7rem;color:var(--muted)">/10</span></h2>
+
+<div class="verdict verdict-m">
+  <strong>Most innovative, most fragile.</strong> 10-100x cost advantage over SaaS, but production backdoors and missing auth break the leverage.
+</div>
+
+<h3>Leverage Mechanisms Working</h3>
+<table>
+  <tr><th>Mechanism</th><th>Detail</th></tr>
+  <tr><td>WhatsApp distribution</td><td>No app install. Every Nigerian already uses it. Zero customer infrastructure.</td></tr>
+  <tr><td>€12.85/mo self-hosted</td><td>All-in-one Docker: API + Worker + Worker-Life + Sidecar + Hermes. ~70MB saved via shared V8 heap.</td></tr>
+  <tr><td>Free-tier AI arbitrage</td><td>Alibaba Qwen (1M+ free), DeepSeek (5M free), Groq (800 t/s), Cloudflare (10K/day), HuggingFace. CapabilityRouter picks cheapest capable model.</td></tr>
+  <tr><td>Context caching</td><td>SHA-256 hash of system prompts. Saves ~90% token cost per tenant. 1hr TTL with auto-renew.</td></tr>
+  <tr><td>Per-message micro-billing</td><td>Only pay for actual AI usage. Not per-seat SaaS. Idempotency prevents double-charge.</td></tr>
+  <tr><td>Tiered verification</td><td>Sub-₦10K = cheap vision. Above = manual fallback. AI spends proportionally to transaction value.</td></tr>
+  <tr><td>AI replaces 5 roles</td><td>Sales clerk + accountant + support + staff manager + onboarding specialist.</td></tr>
+  <tr><td>Composable interceptors</td><td>10 interceptors per message. Independently testable, independently fail-safe. Short-circuit on error.</td></tr>
+  <tr><td>Multi-provider failover</td><td>429/503/RESOURCE_EXHAUSTED → auto-tries next model. Tool normalization bridges Gemini ↔ OpenAI.</td></tr>
+  <tr><td>Viral feedback loop</td><td>4+ star rating → "Get your own AI assistant: wa.me/..." in every satisfied customer chat.</td></tr>
+</table>
+
+<h3>Leverage Breaks</h3>
+<table>
+  <tr><th>Issue</th><th>Severity</th><th>Location</th></tr>
+  <tr>
+    <td>HACK/DEBUG bypass in recharge</td>
+    <td><span class="tag tag-crit">CRITICAL</span></td>
+    <td class="issue-path">worker-life/src/tools/finance/recharge.ts:131</td>
+  </tr>
+  <tr>
+    <td>Paystack single-key (breaks multi-tenant)</td>
+    <td><span class="tag tag-crit">CRITICAL</span></td>
+    <td class="issue-path">apps/api/src/routes/webhooks.ts:107</td>
+  </tr>
+  <tr>
+    <td>Sidecar no-auth in dev mode</td>
+    <td><span class="tag tag-crit">CRITICAL</span></td>
+    <td class="issue-path">whatsapp-sidecar/api/server.go:26</td>
+  </tr>
+  <tr>
+    <td>No rate limit on /send</td>
+    <td><span class="tag tag-high">HIGH</span></td>
+    <td class="issue-path">apps/api/src/routes/webhooks.ts:414</td>
+  </tr>
+  <tr>
+    <td>Monnify redirectUrl hardcoded</td>
+    <td><span class="tag tag-high">HIGH</span></td>
+    <td class="issue-path">packages/payments/src/monnify.ts:157</td>
+  </tr>
+  <tr>
+    <td>0% test coverage (worker-life)</td>
+    <td><span class="tag tag-high">HIGH</span></td>
+    <td class="issue-path">10 handlers + 4 interceptors + all services</td>
+  </tr>
+  <tr>
+    <td>40% test coverage (worker)</td>
+    <td><span class="tag tag-med">MED</span></td>
+    <td class="issue-path">6 of 10 interceptors untested</td>
+  </tr>
+  <tr>
+    <td>Dual database (Firebase + PG)</td>
+    <td><span class="tag tag-med">MED</span></td>
+    <td class="issue-path">Every write → 2 writes with manual rollback</td>
+  </tr>
+</table>
+
+<div class="dim-detail">
+  <strong>→ 7.5:</strong> Brilliant design. But HACK/DEBUG backdoors, single-key Paystack, and sidecar no-auth are production-level risks. Fix these + add coverage → 8.5+.
+</div>
+
+<hr class="separator">
+
+<!-- TOP 5 CRITICAL -->
+<h2>&#128308; Top 5 Critical Issues</h2>
+
+<div class="issue">
+  <div class="row"><span class="issue-num">1</span><div class="desc">
+    <strong>HACK/DEBUG bypass in production recharge code</strong>
+    <span class="tag tag-crit">Backdoor</span>
+    <div class="issue-path">apps/worker-life/src/tools/finance/recharge.ts:131,139</div>
+    <p style="margin-top:4px;color:var(--muted);font-size:0.72rem"><code>reference.includes('HACK') || reference.includes('DEBUG')</code> — anyone who knows the string can bypass payment checks.</p>
+  </div></div>
+</div>
+
+<div class="issue">
+  <div class="row"><span class="issue-num">2</span><div class="desc">
+    <strong>Paystack uses single global secret key</strong>
+    <span class="tag tag-crit">Multi-tenant break</span>
+    <div class="issue-path">apps/api/src/routes/webhooks.ts:107-109</div>
+    <p style="margin-top:4px;color:var(--muted);font-size:0.72rem">Different orgs with different Paystack keys can't coexist on the same webhook. Monnify handles this correctly — Paystack doesn't.</p>
+  </div></div>
+</div>
+
+<div class="issue">
+  <div class="row"><span class="issue-num">3</span><div class="desc">
+    <strong>Sidecar API no-auth fallback in dev mode</strong>
+    <span class="tag tag-crit">Open door</span>
+    <div class="issue-path">apps/whatsapp-sidecar/api/server.go:26-30</div>
+    <p style="margin-top:4px;color:var(--muted);font-size:0.72rem">If ADMIN_API_KEY env var is unset in production, sidecar is wide open with zero authentication.</p>
+  </div></div>
+</div>
+
+<div class="issue">
+  <div class="row"><span class="issue-num">4</span><div class="desc">
+    <strong>0% test coverage on worker-life</strong>
+    <span class="tag tag-crit">All untested</span>
+    <div class="issue-path">apps/worker-life/src/handlers/ (10 files), interceptors/ (4 files), services/ (all)</div>
+    <p style="margin-top:4px;color:var(--muted);font-size:0.72rem">Red team flagged 2 critical bugs in this code. There are certainly more. Zero automated coverage.</p>
+  </div></div>
+</div>
+
+<div class="issue">
+  <div class="row"><span class="issue-num">5</span><div class="desc">
+    <strong>Sidecar /download/{mediaId} returns HTTP 501</strong>
+    <span class="tag tag-crit">Blocked pipeline</span>
+    <div class="issue-path">apps/whatsapp-sidecar/api/server.go:119</div>
+    <p style="margin-top:4px;color:var(--muted);font-size:0.72rem">"Direct download without media key not yet implemented." Media retrieval pipeline is broken.</p>
+  </div></div>
+</div>
+
+<hr class="separator">
+
+<!-- TOP 5 STRATEGIC -->
+<h2>&#128993; Top 5 Strategic Recommendations</h2>
+
+<div class="issue">
+  <div class="row"><span class="issue-num">1</span><div class="desc"><strong>Complete Firebase → PostgreSQL migration</strong><br><span style="color:var(--muted);font-size:0.72rem">Dual-write is the biggest operational tax. Every feature adds two failure points. Finish the migration, drop Firebase writes.</span></div></div>
+</div>
+<div class="issue">
+  <div class="row"><span class="issue-num">2</span><div class="desc"><strong>Build a public API + webhook system</strong><br><span style="color:var(--muted);font-size:0.72rem">Network ceiling is low without third-party integrations. Let developers build on the platform. App marketplace effect.</span></div></div>
+</div>
+<div class="issue">
+  <div class="row"><span class="issue-num">3</span><div class="desc"><strong>Add test coverage before new features</strong><br><span style="color:var(--muted);font-size:0.72rem">Red team found bugs in untested code. A 3-day test sprint on worker-life handlers + interceptors catches most issues. Set CI coverage ≥70%.</span></div></div>
+</div>
+<div class="issue">
+  <div class="row"><span class="issue-num">4</span><div class="desc"><strong>Design for horizontal scale now</strong><br><span style="color:var(--muted);font-size:0.72rem">Single-container is great for €12.85/mo. But PostgreSQL read replicas and split workers should be architected before you need them.</span></div></div>
+</div>
+<div class="issue">
+  <div class="row"><span class="issue-num">5</span><div class="desc"><strong>Ship the Legal Pack</strong><br><span style="color:var(--muted);font-size:0.72rem">Scaffolding done (tools, schemas, prompts). execute() always returns "coming_soon." Finishing it unlocks a new friction category: legal research for Nigerian businesses.</span></div></div>
+</div>
+
+<hr class="separator">
+
+<!-- WHAT MOVES EACH DIMENSION -->
+<h2>&#128200; What Moves Each Dimension</h2>
+
+<h3>8.5 → 9.0: Finish the last friction gaps</h3>
+<ul class="rec">
+  <li>Implement Legal Pack execution logic (already scaffolded)</li>
+  <li>Connect live market data (NGX commodity tracker API)</li>
+  <li>Add refund/dispute webhook handlers</li>
+  <li>Fix sidecar media download endpoint</li>
+</ul>
+
+<h3>6.0 → 7.5: Unblock scale</h3>
+<ul class="rec">
+  <li>PostgreSQL read replicas or Citus sharding by orgId</li>
+  <li>Split workers for horizontal scaling (not single-container)</li>
+  <li>Public API + webhook subscriptions for developer ecosystem</li>
+  <li>Multi-region deployment with region field routing</li>
+  <li>Add worker-life test coverage → 0%→70%</li>
+</ul>
+
+<h3>7.5 → 8.5: Harden the foundation</h3>
+<ul class="rec">
+  <li>Remove HACK/DEBUG bypass strings from recharge.ts</li>
+  <li>Fix Paystack multi-tenant key architecture</li>
+  <li>Add test coverage to all 6 untested interceptors</li>
+  <li>Complete Firebase→PostgreSQL migration (eliminate dual-write)</li>
+  <li>Add per-tenant rate limiting on /send endpoint</li>
+  <li>Implement CI with coverage thresholds ≥70%</li>
+  <li>Fix sidecar auth — require API key in all modes</li>
+</ul>
+
+<hr class="separator">
+
+<!-- VERIFICATION -->
+<h2>&#128269; Verify This Review Yourself</h2>
+
+<div class="code-block">
+  <div class="cmd">$ vitest run --reporter=verbose</div>
+  <div class="comment">→ Current test pass/fail state</div>
+  <div style="height:6px"></div>
+  <div class="cmd">$ grep -rn "HACK\|DEBUG" apps/worker-life/src/tools/finance/recharge.ts</div>
+  <div class="comment">→ Confirm bypass gates still present</div>
+  <div style="height:6px"></div>
+  <div class="cmd">$ grep -rn "coming_soon\|not implemented\|501\|NotImplemented" apps/ hermes-agent/</div>
+  <div class="comment">→ Find all stubs</div>
+  <div style="height:6px"></div>
+  <div class="cmd">$ npx tsc --noEmit</div>
+  <div class="comment">→ Type safety check</div>
+</div>
+
+<hr class="separator">
+
+<div class="footer">
+  naija-agent-core · commit 3baed21 · reviewed 2026-07-02<br>
+  Full markdown: ~/.commandcode/plans/wealth-formula-review.md
+</div>
+
+</body>
+</html>

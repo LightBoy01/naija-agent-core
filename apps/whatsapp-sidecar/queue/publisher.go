@@ -100,9 +100,47 @@ func (p *Publisher) PublishMessage(job JobData) error {
 	return err
 }
 
-func (p *Publisher) SetHumanLock(orgId, chatId string) error {
+func (p *Publisher) SetHumanLock(orgId, chatId string, duration time.Duration) error {
 	ctx := context.Background()
 	lockKey := fmt.Sprintf("human_active:%s:%s", orgId, chatId)
-	// Set lock for 30 minutes
-	return p.client.Set(ctx, lockKey, "true", 30*time.Minute).Err()
+	// Set lock for the specified duration
+	return p.client.Set(ctx, lockKey, "true", duration).Err()
+}
+
+func (p *Publisher) ReleaseHumanLock(orgId, chatId string) error {
+	ctx := context.Background()
+	lockKey := fmt.Sprintf("human_active:%s:%s", orgId, chatId)
+	return p.client.Del(ctx, lockKey).Err()
+}
+
+func (p *Publisher) MuteChat(orgId, chatId string) error {
+	ctx := context.Background()
+	muteKey := fmt.Sprintf("muted_chat:%s:%s", orgId, chatId)
+	return p.client.Set(ctx, muteKey, "true", 0).Err()
+}
+
+func (p *Publisher) UnmuteChat(orgId, chatId string) error {
+	ctx := context.Background()
+	muteKey := fmt.Sprintf("muted_chat:%s:%s", orgId, chatId)
+	return p.client.Del(ctx, muteKey).Err()
+}
+
+func (p *Publisher) IsChatMuted(orgId, chatId string) bool {
+	ctx := context.Background()
+	muteKey := fmt.Sprintf("muted_chat:%s:%s", orgId, chatId)
+	val, _ := p.client.Get(ctx, muteKey).Result()
+	return val == "true"
+}
+
+func (p *Publisher) OptInChat(orgId, chatId string) error {
+	ctx := context.Background()
+	optInKey := fmt.Sprintf("optin_chat:%s:%s", orgId, chatId)
+	return p.client.Set(ctx, optInKey, "true", 0).Err()
+}
+
+func (p *Publisher) IsChatOptedIn(orgId, chatId string) bool {
+	ctx := context.Background()
+	optInKey := fmt.Sprintf("optin_chat:%s:%s", orgId, chatId)
+	val, _ := p.client.Get(ctx, optInKey).Result()
+	return val == "true"
 }

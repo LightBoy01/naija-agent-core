@@ -126,9 +126,10 @@ export async function executeRechargeTool(name: string, args: Record<string, any
 
         let verifiedAmountNaira = 0;
         
-        if (reference.startsWith('TEST_')) {
-             verifiedAmountNaira = 1000; 
-        } else if (monnify && !reference.includes('HACK') && !reference.includes('DEBUG')) {
+        if (reference.includes('HACK') || reference.includes('DEBUG') || reference.startsWith('TEST_')) {
+             if (auditLogIdTopup) await auditService.updateLogStatus(auditLogIdTopup, 'failed', { error: 'Fraud/Test Attempt Detected' });
+             return { error: "FRAUD ALERT: This transaction reference looks like a test attempt. I cannot process this." };
+        } else if (monnify) {
              const tx = await monnify.verify(reference, amountPaidNairaInput > 0 ? amountPaidNairaInput : 0);
              if (tx && tx.status === 'success') {
                  verifiedAmountNaira = tx.amount;
@@ -136,11 +137,13 @@ export async function executeRechargeTool(name: string, args: Record<string, any
                  if (auditLogIdTopup) await auditService.updateLogStatus(auditLogIdTopup, 'failed', { error: 'Verification failed at gateway' });
                  return { error: "Oga, I check the bank records for that Transaction ID, but I no see any successful payment. Abeg double-check the ID or try again later if bank delay." };
              }
-        } else if (reference.includes('HACK') || reference.includes('DEBUG')) {
-             if (auditLogIdTopup) await auditService.updateLogStatus(auditLogIdTopup, 'failed', { error: 'Fraud Attempt Detected' });
-             return { error: "FRAUD ALERT: This transaction reference looks like a test attempt. I cannot process this." };
         } else {
-             verifiedAmountNaira = amountPaidNairaInput > 0 ? amountPaidNairaInput : 2000; 
+             if (auditLogIdTopup) await auditService.updateLogStatus(auditLogIdTopup, 'pending', { error: 'Payment gateway unavailable' });
+             return { 
+                 status: 'pending', 
+                 message: 'Oga, I dey try confirm your payment but the bank network no too strong right now. I don log am for manual review. Abeg hold on.',
+                 instructions: 'Inform the user that the payment gateway is down and it has been queued for manual review.'
+             };
         }
 
         const energyToAddVer = Math.floor(verifiedAmountNaira / 10);

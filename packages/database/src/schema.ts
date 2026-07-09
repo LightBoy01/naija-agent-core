@@ -108,6 +108,26 @@ export const transactions = pgTable('transactions', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+// --- Disputes (Chargebacks & Refunds) ---
+export const disputes = pgTable('disputes', {
+  id: varchar('id', { length: 128 }).primaryKey(),
+  orgId: varchar('org_id', { length: 64 }).references(() => organizations.id).notNull(),
+  transactionId: varchar('transaction_id', { length: 128 }).references(() => transactions.id),
+  reference: varchar('reference', { length: 255 }).notNull(), // Gateway Ref
+  amount: decimal('amount', { precision: 20, scale: 2 }).notNull(),
+  currency: varchar('currency', { length: 10 }).default('NGN').notNull(),
+  status: varchar('status', { length: 50 }).default('open').notNull(), // 'open', 'won', 'lost', 'refunded'
+  reason: text('reason'),
+  evidence: jsonb('evidence'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => {
+  return {
+    orgIdIdx: index('disputes_org_id_idx').on(table.orgId),
+    referenceIdx: index('disputes_reference_idx').on(table.reference),
+  };
+});
+
 // --- Semantic Memory (Long-term Facts) ---
 export const memories = pgTable('memories', {
   id: varchar('id', { length: 128 }).primaryKey(),

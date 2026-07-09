@@ -48,3 +48,25 @@ export const redactPII = (text: string): string => {
 
   return redacted;
 };
+
+/**
+ * Recursively redacts PII from tool arguments.
+ */
+export const redactToolArguments = (args: any): any => {
+  if (typeof args === 'string') {
+    return redactPII(args);
+  }
+  if (Array.isArray(args)) {
+    return args.map(redactToolArguments);
+  }
+  if (args !== null && typeof args === 'object') {
+    const redactedObj: Record<string, any> = {};
+    for (const key in args) {
+      if (Object.prototype.hasOwnProperty.call(args, key)) {
+        redactedObj[key] = redactToolArguments(args[key]);
+      }
+    }
+    return redactedObj;
+  }
+  return args;
+};

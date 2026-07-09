@@ -106,7 +106,7 @@ export const OrgLoadInterceptor: Interceptor = {
         ctx.tenantPaymentProvider = getProvider('mock', 'sk_test_beta_sandbox');
     } else {
         ctx.tenantPaymentProvider = org.config?.payment
-          ? getProvider(org.config.payment.provider, org.config.payment.secretKey)
+          ? getProvider(org.config.payment.provider, org.config.payment.secretKey, org.config.payment.redirectUrl)
           : ctx.globalPaymentProvider;
     }
 

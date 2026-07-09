@@ -16,6 +16,7 @@ export interface PaymentProvider {
   verify(reference: string, amount: number): Promise<Transaction | null>;
   createPaymentLink(orgId: string, email: string, amountNaira: number): Promise<string | null>;
   payout?(args: { amount: number, bankCode: string, accountNumber: string, reference: string, narration?: string }): Promise<{ success: boolean; message: string; reference?: string }>;
+  refund?(transactionReference: string, amountNaira?: number, reason?: string): Promise<{ success: boolean; message: string; refundReference?: string }>;
 }
 
 
@@ -48,14 +49,14 @@ export class MockProvider implements PaymentProvider {
 
 export { PaystackProvider, MonnifyProvider };
 
-export function getProvider(type: 'paystack' | 'monnify' | 'mock', secretKey?: string): PaymentProvider {
+export function getProvider(type: 'paystack' | 'monnify' | 'mock', secretKey?: string, redirectUrl?: string): PaymentProvider {
   if (type === 'paystack') {
     if (!secretKey) throw new Error('Paystack Secret Key required');
     return new PaystackProvider(secretKey);
   }
   if (type === 'monnify') {
     if (!secretKey) throw new Error('Monnify Secret Key required (Format: API_KEY:SECRET_KEY)');
-    return new MonnifyProvider(secretKey);
+    return new MonnifyProvider(secretKey, redirectUrl);
   }
   return new MockProvider();
 }

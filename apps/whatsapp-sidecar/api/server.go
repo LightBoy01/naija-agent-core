@@ -25,7 +25,8 @@ func NewServer(mgr *manager.Manager) *Server {
 
 func (s *Server) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 	if s.apiKey == "" {
-		return true // Allow if not configured (dev mode)
+		http.Error(w, "Server improperly configured: API key missing", http.StatusInternalServerError)
+		return false
 	}
 	key := r.Header.Get("X-API-Key")
 	if key != s.apiKey {

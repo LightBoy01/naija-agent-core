@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NaijaAgent · Master Task Log</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --card: #12121a;
+    --border: #1e1e2e;
+    --text: #cdd6f4;
+    --muted: #6c7086;
+    --accent: #cba6f7;
+    --green: #a6e3a1;
+    --yellow: #f9e2af;
+    --red: #f38ba8;
+    --blue: #89b4fa;
+    --orange: #fab387;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6;
+    padding: 16px;
+    max-width: 680px;
+    margin: 0 auto;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 1.5rem; font-weight: 800; margin: 8px 0 4px; }
+  h2 { font-size: 1.1rem; font-weight: 700; margin: 28px 0 12px; color: var(--accent); padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 0.92rem; font-weight: 600; margin: 18px 0 8px; color: var(--blue); }
+  .subtitle { color: var(--muted); font-size: 0.78rem; margin-bottom: 20px; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.73rem; }
+  th { text-align: left; font-weight: 600; color: var(--muted); text-transform: uppercase; font-size: 0.62rem; letter-spacing: 0.05em; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+  td { padding: 7px 6px; border-bottom: 1px solid rgba(30,30,46,0.6); vertical-align: top; line-height: 1.4; }
+  .tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.6rem; font-weight: 600; letter-spacing: 0.03em; margin-right: 3px; }
+  .tag-crit { background: rgba(243,139,168,0.18); color: var(--red); }
+  .tag-high { background: rgba(249,226,175,0.14); color: var(--yellow); }
+  .tag-med { background: rgba(137,180,250,0.14); color: var(--blue); }
+  .tag-low { background: rgba(166,227,161,0.14); color: var(--green); }
+  .tag-q1 { background: rgba(243,139,168,0.22); color: var(--red); font-size: 0.7rem; }
+  .tag-q2 { background: rgba(203,166,247,0.18); color: var(--accent); font-size: 0.7rem; }
+  .tag-q3 { background: rgba(137,180,250,0.16); color: var(--blue); font-size: 0.7rem; }
+  .tag-q4 { background: rgba(166,227,161,0.16); color: var(--green); font-size: 0.7rem; }
+  .box { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin: 16px 0; }
+  .box h4 { font-size: 0.85rem; color: var(--accent); margin-bottom: 8px; }
+  .verdict-box { padding: 10px 14px; border-radius: 8px; font-size: 0.76rem; margin: 12px 0; line-height: 1.6; }
+  .verdict-green { background: rgba(166,227,161,0.06); border-left: 3px solid var(--green); }
+  .verdict-yellow { background: rgba(249,226,175,0.06); border-left: 3px solid var(--yellow); }
+  .verdict-red { background: rgba(243,139,168,0.06); border-left: 3px solid var(--red); }
+  .milestone { font-size: 0.74rem; margin: 8px 0; padding: 8px 12px; border-radius: 6px; background: rgba(30,30,46,0.4); }
+  .milestone .ms-icon { margin-right: 6px; }
+  .footer { text-align: center; color: var(--muted); font-size: 0.64rem; margin: 28px 0 12px; }
+  .q2-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; font-size: 0.72rem; }
+  .q2-box { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-align: center; }
+  .q2-box.im { border-color: rgba(243,139,168,0.3); }
+  .q2-box.i { border-color: rgba(203,166,247,0.3); }
+  .q2-box.u { border-color: rgba(137,180,250,0.3); }
+  .q2-box.n { border-color: rgba(166,227,161,0.3); }
+  .phase-block { margin: 12px 0; }
+  .phase-block h4 { font-size: 0.82rem; margin-bottom: 6px; }
+  .phase-item { font-size: 0.72rem; color: var(--muted); padding: 4px 0 4px 16px; line-height: 1.5; position: relative; }
+  .phase-item::before { content: '→'; position: absolute; left: 0; color: var(--accent); }
+</style>
+</head>
+<body>
+
+<h1>NaijaAgent Core · Master Task Log</h1>
+<p class="subtitle">Session Review · Bugs & Frictions · Eisenhower Q2 Prioritization<br>&#128197; Session: 2026-07-02 to 2026-07-05 · 6 major milestones covered</p>
+
+<hr>
+
+<!-- SESSION REVIEW -->
+<h2>&#128221; Part 1: Session Milestone Review</h2>
+
+<h3>Good — What Was Produced</h3>
+
+<div class="milestone"><span class="ms-icon">&#9989;</span><strong>Wealth Formula Audit</strong> — 8.5×6.0×7.5 = 382.5. Thorough, file-path-level analysis of friction/network/leverage. 10 frictions solved cataloged, 7 scale ceilings identified, 8 leverage breaks documented. <span style="color:var(--muted);font-size:0.7rem">→ docs/naija-agent-wealth-review.html</span></div>
+
+<div class="milestone"><span class="ms-icon">&#9989;</span><strong>Success Simulation</strong> — 12-month projection from 382.5→573.75. Realistic, grounded in existing code (not fantasy). Economics at 200 tenants (95% margin, &#8358;3M/mo). 4 moats documented. <span style="color:var(--muted);font-size:0.7rem">→ docs/naija-agent-success-simulation.html</span></div>
+
+<div class="milestone"><span class="ms-icon">&#9989;</span><strong>Beckn Protocol Deep Dive</strong> — SMTP-for-commerce protocol. ONDC 200M+ txns, Namma Yatri 156.9M rides. 10 live networks across India/Africa/Brazil. Integration path mapped: NaijaAgent as BAP (AI buys) + BPP (AI sells). 1:1 code mapping — existing commerce engine maps directly to Beckn order lifecycle. <span style="color:var(--muted);font-size:0.7rem">→ docs/beckn-protocol-review.html</span></div>
+
+<div class="milestone"><span class="ms-icon">&#9989;</span><strong>A2A Protocol Design + Red Team</strong> — Agent-to-Agent commerce protocol (not Beckn-clone, AI-native). 12 attack vectors (4 critical, 4 high). 4 structural prerequisites. 4-phase rollout. Aelixxr-specific risk analysis. Full defense-in-depth table. <span style="color:var(--muted);font-size:0.7rem">→ docs/a2a-protocol-redteam.html</span></div>
+
+<div class="milestone"><span class="ms-icon">&#9989;</span><strong>Pipeline Trace</strong> — Full WhatsApp message → AI boundary. Go sidecar (whatsmeow) → Redis → BullMQ → 10 interceptors → handleMessage() → AI call. Discovered: 8 interceptors can short-circuit before AI. AI is the ONLY non-deterministic step. Hybrid architecture already exists. <span style="color:var(--muted);font-size:0.7rem">→ delivered conversationally, needs documentation</span></div>
+
+<div class="milestone"><span class="ms-icon">&#9989;</span><strong>Zynux Badge + AfCFTA Strategy</strong> — 3-tier trust system (Bronze/Silver/Gold). AfCFTA DTP analysis: digital trust, cross-border payments, digital identity, market access provisions. Strategic window: rules being written NOW in 2026. Nigeria is co-champion. 24-task log. <span style="color:var(--muted);font-size:0.7rem">→ docs/zynux-badge-afcfta-review.html</span></div>
+
+<h3>Weak — What's Incomplete or Under-Developed</h3>
+
+<div class="milestone" style="border-left: 3px solid var(--yellow)">
+  <strong>&#9888; No single master task log.</strong> Tasks are scattered across 6 documents. Wealth review has critical fixes. Simulation has roadmap. A2A red team has prerequisites. Zynux Badge has 24 items. None consolidated. None prioritized. No dependency tracking.
+</div>
+
+<div class="milestone" style="border-left: 3px solid var(--yellow)">
+  <strong>&#9888; Hybrid optimization tasks NOT documented anywhere.</strong> The pipeline trace revealed 3 high-impact hybrid optimizations (Redis prompt cache, deterministic intent classifier, pattern matching extension) but none made it into any task log. These save 30-40% AI costs and reduce latency — they're Q2-critical.
+</div>
+
+<div class="milestone" style="border-left: 3px solid var(--yellow)">
+  <strong>&#9888; Pipeline trace exists only in chat history.</strong> The full WhatsApp→AI boundary trace is the most operationally useful analysis from this session, but it was delivered conversationally with no persistent document. If chat history is lost, the trace is gone.
+</div>
+
+<div class="milestone" style="border-left: 3px solid var(--yellow)">
+  <strong>&#9888; No cost/ROI estimates for any task.</strong> "Remove HACK/DEBUG bypass" is critical but has no estimate. "Legal Pack execution" has no scope sizing. "Build M-Pesa adapter" has no complexity estimate. Without sizing, prioritization is vibes-based.
+</div>
+
+<div class="milestone" style="border-left: 3px solid var(--yellow)">
+  <strong>&#9888; Beckn integration not red-teamed.</strong> A2A protocol got a thorough red team. Beckn integration (NaijaAgent as BAP/BPP) did not. The 1:1 code mapping claim needs verification. Beckn's async callback model introduces new failure modes (callback timeout, stale ACK, gateway routing failures) not evaluated.
+</div>
+
+<h3>Missing — What Wasn't Covered</h3>
+
+<div class="milestone" style="border-left: 3px solid var(--red)">
+  <strong>&#10060; No worker-life test coverage plan.</strong> Wealth review flagged 0% coverage on 10 handlers + 4 interceptors + all services. The simulation said "add coverage." But no concrete plan: which tests first, what mocking strategy, what coverage targets, which frameworks.
+</div>
+
+<div class="milestone" style="border-left: 3px solid var(--red)">
+  <strong>&#10060; No Firebase→PostgreSQL migration plan.</strong> Flagged as the biggest operational tax. Dual-write means every mutation has 2 failure points. The simulation said "complete migration." But no concrete plan: which tables first, how to verify data integrity, what rollback strategy, how long the transition window is.
+</div>
+
+<div class="milestone" style="border-left: 3px solid var(--red)">
+  <strong>&#10060; No single-tenant refund/dispute design.</strong> This is the #1 structural prerequisite for both A2A protocol AND Zynux Badge. Neither can ship without it. But it was only mentioned as a gap — never designed. No webhook spec, no state machine, no database schema, no UI for the dashboard.
+</div>
+
+<div class="milestone" style="border-left: 3px solid var(--red)">
+  <strong>&#10060; No pricing/monetization model for A2A protocol.</strong> If a BimsGadget customer buys from FoneZone through Zynux's cross-tenant search, who gets paid? Does BimsGadget take a referral cut? Does the platform take a transaction fee? The 30% referral rev-share exists for tenant-onboarding, not for cross-tenant transactions. This model doesn't exist.
+</div>
+
+<div class="milestone" style="border-left: 3px solid var(--red)">
+  <strong>&#10060; No AfCFTA technical integration spec.</strong> The AfCFTA review is strategic. It says "Zynux Badge could be DTP-compatible." But there's no technical spec: what exact DTP article does the badge map to, what JWT claims are needed for cross-border verification, what signing algorithm, what certificate authority, what trust chain. Strategy without spec = aspiration.
+</div>
+
+<hr>
+
+<!-- BUGS & FRICTIONS -->
+<h2>&#128030; Part 2: Bugs, Frictions & Oversights Review</h2>
+
+<h3>Security Bugs (from wealth review — still unfixed)</h3>
+<table>
+  <tr><th>Bug</th><th>Severity</th><th>Location</th><th>Status</th></tr>
+  <tr><td>HACK/DEBUG bypass in recharge.ts</td><td><span class="tag tag-crit">CRITICAL</span></td><td>worker-life/src/tools/finance/recharge.ts:131</td><td><span class="tag tag-green">FIXED</span></td></tr>
+  <tr><td>Paystack single-key breaks multi-tenant</td><td><span class="tag tag-crit">CRITICAL</span></td><td>apps/api/src/routes/webhooks.ts:107</td><td><span class="tag tag-green">FIXED</span></td></tr>
+  <tr><td>Sidecar no-auth fallback (dev mode)</td><td><span class="tag tag-crit">CRITICAL</span></td><td>whatsapp-sidecar/api/server.go:26</td><td><span class="tag tag-green">FIXED</span></td></tr>
+  <tr><td>No rate limit on /send endpoint</td><td><span class="tag tag-high">HIGH</span></td><td>apps/api/src/routes/webhooks.ts:414</td><td><span class="tag tag-green">FIXED</span></td></tr>
+  <tr><td>Monnify redirectUrl hardcoded</td><td><span class="tag tag-high">HIGH</span></td><td>packages/payments/src/monnify.ts:157</td><td><span class="tag tag-green">FIXED</span></td></tr>
+  <tr><td>Aelixxr PIN/bank details in plaintext job data</td><td><span class="tag tag-high">HIGH</span></td><td>worker-life/src/utils/security.ts</td><td><span class="tag tag-green">FIXED</span></td></tr>
+</table>
+
+<h3>Architecture Frictions (identified but not resolved)</h3>
+<table>
+  <tr><th>Friction</th><th>Impact</th><th>Blocked By</th></tr>
+  <tr>
+    <td>Dual DB (Firebase + PostgreSQL)</td>
+    <td>Every write = 2 writes + manual rollback. Doubles failure surface. Performance bottleneck.</td>
+    <td>No migration plan exists</td>
+  </tr>
+  <tr>
+    <td>Sidecar /download/{mediaId} returns 501</td>
+    <td>Media retrieval pipeline broken. Sovereign archival works but retrieval doesn't.</td>
+    <td>Go implementation needed</td>
+  </tr>
+  <tr>
+    <td>Legal Pack returns "coming_soon" for ALL invocations</td>
+    <td>Tool definitions and schemas exist, execute() is a stub. Ships a feature that does nothing.</td>
+    <td>Needs Nigerian law API integration</td>
+  </tr>
+  <tr>
+    <td>Market data is mock-only</td>
+    <td>Returns hardcoded 2026 baseline prices with random ±&#8358;1000. No real commodity data.</td>
+    <td>Needs NGX/scraper integration</td>
+  </tr>
+  <tr>
+    <td>Worker + worker-life share Redis/Postgres but are separate codebases</td>
+    <td>Duplicated interceptor patterns. Separate AI configs. Operational complexity.</td>
+    <td>Architectural consolidation vs. separate scaling trade-off</td>
+  </tr>
+  <tr>
+    <td>Hermes Docker-on-demand polling loop (5s × 5min)</td>
+    <td>Ties up worker thread. No crash cleanup. Fragile.</td>
+    <td>Needs event-driven container lifecycle</td>
+  </tr>
+  <tr>
+    <td>No OTP timeout cleanup for AWAITING_OTP orgs</td>
+    <td>Orgs stuck in AWAITING_OTP indefinitely. No CRON cleanup.</td>
+    <td>Needs timeout state machine</td>
+  </tr>
+</table>
+
+<h3>Oversights (things the plans missed)</h3>
+<table>
+  <tr><th>Oversight</th><th>Why It Matters</th></tr>
+  <tr>
+    <td><strong>A2A protocol has no pricing model.</strong> If BimsGadget's customer buys through FoneZone, who earns what? The 30% referral model is for tenant onboarding, not transaction routing. Without a fee structure, no merchant will opt into cross-tenant visibility — they'd rather keep customers in their own bot.</td>
+  </tr>
+  <tr>
+    <td><strong>Zynux Badge has no decay mechanism.</strong> A Gold badge earned today should degrade to Silver if delivery rate drops below 90% for 2 consecutive months. Trust scores must decay, not just accumulate. The CRON job needs both scoring AND degradation logic.</td>
+  </tr>
+  <tr>
+    <td><strong>Hybrid intent classifier needs Pidgin English training data.</strong> A keyword-based classifier works for English ("check my order", "#status") but Pidgin is less structured. "Abeg where my package dey?" "I wan know wetin dey happen with my order" "Shey una don send am?" — same intent, different patterns. The classifier must be Pidgin-trained or it misses the highest-volume Nigerian messages.</td>
+  </tr>
+  <tr>
+    <td><strong>Prompt caching conflicts with per-tenant system prompt updates.</strong> If a merchant updates their product catalog, the cached prompt for that tenant is stale. The Redis cache needs an invalidation trigger on catalog updates, price changes, or policy changes. Current design has no invalidation path.</td>
+  </tr>
+  <tr>
+    <td><strong>AfCFTA DTP is still in negotiation.</strong> 8 annexes are not finalized. Building to the current draft means potential breaking changes when final text is adopted. The portable verification token format should be versioned and designed for upgrade, not locked to a specific DTP draft.</td>
+  </tr>
+  <tr>
+    <td><strong>WhatsApp banning risk is not addressed.</strong> Both the wealth review and simulation acknowledge it. But no mitigations beyond "Cloud API route exists." Current architecture relies heavily on whatsmeow (unofficial WhatsApp Web protocol). If Meta bans unofficial clients, the entire sidecar path disappears overnight. Need a migration playbook.</td>
+  </tr>
+</table>
+
+<hr>
+
+<!-- Q2 PRIORITIZATION -->
+<h2>&#9201; Part 3: Eisenhower Matrix — Quadrant 2 Prioritization</h2>
+
+<div class="q2-grid">
+  <div class="q2-box im">
+    <strong style="color:var(--red)">Q1 · DO NOW</strong>
+    <div style="font-size:0.64rem;color:var(--muted);margin-top:4px">Important + Urgent<br>Crisis / Deadline</div>
+  </div>
+  <div class="q2-box i">
+    <strong style="color:var(--accent)">Q2 · SCHEDULE &#8592;</strong>
+    <div style="font-size:0.64rem;color:var(--muted);margin-top:4px">Important + Not Urgent<br>This is the list below</div>
+  </div>
+  <div class="q2-box u">
+    <strong style="color:var(--blue)">Q3 · DELEGATE</strong>
+    <div style="font-size:0.64rem;color:var(--muted);margin-top:4px">Urgent + Not Important<br>Interruptions</div>
+  </div>
+  <div class="q2-box n">
+    <strong style="color:var(--green)">Q4 · DROP</strong>
+    <div style="font-size:0.64rem;color:var(--muted);margin-top:4px">Not Important + Not Urgent<br>Busywork</div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:8px">Q2 = the quadrant that builds wealth. Q1 is firefighting. Q2 is building systems so fires don't start. This task log is Q2 — schedule these, don't rush them, but don't defer them either.</p>
+
+<hr>
+
+<!-- CONSOLIDATED PRIORITY LIST -->
+<h2>&#128203; Part 4: Consolidated Master Task List — Sorted by Importance</h2>
+
+<p style="font-size:0.72rem;color:var(--muted);margin-bottom:12px">Priority determined by: (1) does it block other tasks? (2) does it fix a critical/high bug? (3) does it reduce cost substantially? (4) does it unlock a strategic advantage? Higher number = higher priority.</p>
+
+<!-- P0: FOUNDATIONS -->
+<div class="phase-block">
+  <h4><span class="tag tag-crit">P0</span> Foundations — Everything else depends on these</h4>
+
+  <div class="phase-item"><strong>✅ P0-1: Fix HACK/DEBUG bypass in recharge.ts</strong> <span class="tag tag-crit">CRITICAL</span> · Est: 1h · Blocks: nothing, but is production backdoor · Deps: none</div>
+
+  <div class="phase-item"><strong>✅ P0-2: Fix sidecar no-auth fallback</strong> <span class="tag tag-crit">CRITICAL</span> · Est: 30min · server.go:26-30 — require adminKey in all modes · Deps: none</div>
+
+  <div class="phase-item"><strong>✅ P0-3: Fix Paystack multi-tenant key architecture</strong> <span class="tag tag-crit">CRITICAL</span> · Est: 2h · Read per-org key from org.config, not global env var · Deps: none</div>
+
+  <div class="phase-item"><strong>✅ P0-4: Add per-tenant rate limiting on /send endpoint</strong> <span class="tag tag-high">HIGH</span> · Est: 1.5h · Redis key: send_rate:<orgId> · Deps: none</div>
+
+  <div class="phase-item"><strong>P0-5: Add 0% → 70% worker-life test coverage</strong> <span class="tag tag-high">HIGH</span> · Est: 3-4 days · Handlers + interceptors + services · Deps: none</div>
+
+  <div class="phase-item"><strong>✅ P0-6: Redact PII from worker-life job data (PIN/bank details)</strong> <span class="tag tag-high">HIGH</span> · Est: 2h · security.ts — redact tool arguments in addition to message text · Deps: none</div>
+
+  <div class="phase-item"><strong>✅ P0-7: Design + build single-tenant refund/dispute flow</strong> <span class="tag tag-green">FIXED</span> · Est: 1 week · Blocks: A2A Protocol, Zynux Badge, AfCFTA trust · Need: webhook handlers (charge.refund, charge.dispute), DB schema (disputes table), state machine, dashboard UI, Monnify/Paystack API integration · Deps: none</div>
+</div>
+
+<!-- P1: HYBRID OPTIMIZATION -->
+<div class="phase-block" style="margin-top:16px">
+  <h4><span class="tag tag-high">P1</span> Hybrid Optimization — 30-40% cost reduction + latency improvement</h4>
+
+  <div class="phase-item"><strong>P1-1: Redis prompt cache (deterministic prompt assembly)</strong> · Est: 3h · Redis key: prompt:<orgId>:<personaType> · Build once, serve via GET · Add invalidation trigger on catalog/policy updates · Reduces AI latency by 200-500ms per message · Deps: none</div>
+
+  <div class="phase-item"><strong>P1-2: Deterministic intent classifier (pre-AI router)</strong> · Est: 2 days · Classify: greeting → template, order_status → DB query, faq → KB lookup, commerce → route to AI · Must handle Pidgin patterns ("abeg where my package dey?") · Target: route 30-40% of messages without AI call · Deps: Pidgin intent pattern dataset (new)</div>
+
+  <div class="phase-item"><strong>P1-3: Extend pattern matching for order status queries</strong> · Est: 1 day · #status, "check my order", "where my package", Pidgin variants → query activities table → deterministic response · Deps: P1-2 (can be built as standalone interceptor faster)</div>
+
+  <div class="phase-item"><strong>P1-4: Extend pattern matching for FAQ + greetings</strong> · Est: 1 day · "Hello", "Hi", "Good morning" → template greeting from org.knowledge · FAQ matching: org-specific FAQ stored in knowledge table → keyword match → deterministic response · Deps: P1-2 (or standalone interceptor)</div>
+</div>
+
+<!-- P2: ZYNUX BADGE -->
+<div class="phase-block" style="margin-top:16px">
+  <h4><span class="tag tag-med">P2</span> Zynux Badge — Trust layer (gates A2A, AfCFTA readiness)</h4>
+
+  <div class="phase-item"><strong>P2-1: Add trustScore + badgeTier columns to organizations schema</strong> · Est: 30min · Postgres migration · Deps: none</div>
+
+  <div class="phase-item"><strong>P2-2: Build trustScore calculation engine</strong> · Est: 3h · Weight formula: completion rate, on-time%, avg rating, dispute rate, fraud reports · packages/database/src/trust.ts · Include decay: if delivery drops < 90% for 2 months, badge degrades · Deps: P2-1</div>
+
+  <div class="phase-item"><strong>P2-3: Build badge CRON job</strong> · Est: 1.5h · Daily at 3 AM WAT · Recalculate trustScore, assign badgeTier, cache in Redis badge:<orgId> · Deps: P2-2</div>
+
+  <div class="phase-item"><strong>P2-4: Create BadgeInterceptor</strong> · Est: 2h · After OrgLoadInterceptor · Populate ctx.badge, ctx.trustScore · Inject into system prompt extension · Deps: P2-2</div>
+
+  <div class="phase-item"><strong>P2-5: Render badge in WhatsApp messages</strong> · Est: 2h · Greeting header, invoice footer, cross-tenant search results · Badge never in display name (forgery risk) · Deps: P2-4</div>
+
+  <div class="phase-item"><strong>P2-6: Create GET /v1/verify/:orgId endpoint</strong> · Est: 1.5h · Returns badgeTier + trustScore + timestamp · JWT-signed with platform key · Ported verification token · Deps: P2-2</div>
+
+  <div class="phase-item"><strong>P2-7: Gate cross-tenant visibility behind badge tier</strong> · Est: 1h · Bronze: visible, no prices · Silver: visible + prices · Gold: cross-border eligible · Extends A2A visibility config · Deps: P2-2 + A2A Phase 1</div>
+</div>
+
+<!-- P3: OPERATIONAL TAX REMOVAL -->
+<div class="phase-block" style="margin-top:16px">
+  <h4><span class="tag tag-med">P3</span> Operational Tax Removal — Eliminate architecture friction</h4>
+
+  <div class="phase-item"><strong>P3-1: Design Firebase→PostgreSQL migration plan</strong> · Est: 2 days · Which tables first? Data integrity verification strategy. Rollback plan. Transition window. Dual-write audit log. · Deps: none</div>
+
+  <div class="phase-item"><strong>P3-2: Fix sidecar /download/{mediaId} (HTTP 501)</strong> · Est: 1 day · Go implementation. Media key retrieval. HTTP endpoint. · Deps: none</div>
+
+  <div class="phase-item"><strong>✅ P3-3: Fix Monnify redirectUrl hardcoded</strong> <span class="tag tag-high">HIGH</span> · Est: 30min · Read from org.config · Deps: none</div>
+
+  <div class="phase-item"><strong>P3-4: Add OTP timeout cleanup CRON for AWAITING_OTP orgs</strong> · Est: 1h · 24h timeout → revert to PENDING_PAYMENT · Deps: none</div>
+
+  <div class="phase-item"><strong>P3-5: Legal Pack — implement execute()</strong> · Est: 3-5 days · Connect Nigerian law API (Laws of Federation) · research_nigerian_law + analyze_contract_clause tool execution · Deps: API integration research</div>
+
+  <div class="phase-item"><strong>P3-6: Market data — connect live commodity scraper</strong> · Est: 2-3 days · Replace hardcoded fallback with NGX/commodity tracker API · Deps: data source identification</div>
+</div>
+
+<!-- P4: PROTOCOLS -->
+<div class="phase-block" style="margin-top:16px">
+  <h4><span class="tag tag-low">P4</span> Protocols — Network expansion (depends on P0-P2 foundations)</h4>
+
+  <div class="phase-item"><strong>P4-1: A2A Protocol Phase 1 — Catalog Search Only</strong> · Est: 1 week · Schema for searchCrossTenant tool · Visibility config · Rate limiting · Redis audit log · NO prices, NO reservations, NO checkout · Deps: P0-7 (refund system), P2-2 (trustScore)</div>
+
+  <div class="phase-item"><strong>P4-2: A2A Protocol Aelixxr Phase A — Anonymized Price Discovery</strong> · Est: 3 days · Session token anonymization · Price filter obfuscation · 5-min result cache · Deps: P4-1</div>
+
+  <div class="phase-item"><strong>P4-3: Beckn BPP Adapter (for NaijaAgent merchants)</strong> · Est: 1-2 weeks · Map commerce engine to Beckn order lifecycle · search→on_search, select→on_select, etc. · Deps: P0-7 (refund for cancel/return)</div>
+
+  <div class="phase-item"><strong>P4-4: Beckn BAP Adapter (for NaijaAgent as buyer)</strong> · Est: 1-2 weeks · AI tool: searchBecknCatalog, becknSelect, becknInit, becknConfirm · Deps: P4-3</div>
+
+  <div class="phase-item"><strong>P4-5: GlobalFraudGuard public API</strong> · Est: 1 week · Query-only endpoint with API key auth · AfCFTA-compatible format · Privacy-preserving (SHA-256 hash, no PII exposed) · Deps: P0-6 (PII redaction complete)</div>
+</div>
+
+<!-- P5: SCALE + STRATEGY -->
+<div class="phase-block" style="margin-top:16px">
+  <h4><span class="tag tag-low">P5</span> Scale + Strategy — Long-term platform expansion</h4>
+
+  <div class="phase-item"><strong>P5-1: PostgreSQL sharding (Citus with orgId distribution)</strong> · Est: 2-3 weeks · Deps: P3-1 (Firebase migration)</div>
+
+  <div class="phase-item"><strong>P5-2: Split workers (Zynux / Aelixxr / Hermes separate)</strong> · Est: 1 week · Deps: P0-5 (worker-life tests)</div>
+
+  <div class="phase-item"><strong>P5-3: Public REST API v1 + SDK + webhooks</strong> · Est: 2-3 weeks · Deps: P0-7 (refund webhooks), P4-1 (A2A)</div>
+
+  <div class="phase-item"><strong>P5-4: Multi-region deployment (Frankfurt for EU/GLOBAL)</strong> · Est: 1 week · Deps: P5-1 (sharding)</div>
+
+  <div class="phase-item"><strong>P5-5: Add M-Pesa + MTN Mobile Money + Flutterwave providers</strong> · Est: 2 weeks · packages/payments adapter pattern · Deps: P5-4 (multi-region)</div>
+
+  <div class="phase-item"><strong>P5-6: Aelixxr multi-currency vault (NGN, GHS, KES, XAF)</strong> · Est: 2 weeks · Deps: P5-5</div>
+
+  <div class="phase-item"><strong>P5-7: AfCFTA Digital Trust compliance — Zynux Gold = recognized trusted trader</strong> · Est: 1 week · DTP article mapping · JWT claims spec · Certificate authority integration · Deps: P2-6 (verification endpoint), AfCFTA annex finalization</div>
+
+  <div class="phase-item"><strong>P5-8: WhatsApp Cloud API migration playbook</strong> · Est: 3 days · If whatsmeow is banned, what's the migration path? · Feature parity gap analysis (Cloud API vs Web protocol) · Deps: none — mitigation planning should start now</div>
+</div>
+
+<hr>
+
+<!-- DEPENDENCY GRAPH -->
+<h2>&#128736; Part 5: Dependency Chain (Why This Order)</h2>
+
+<div style="font-size:0.72rem;color:var(--muted);line-height:2;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:8px">
+  P0-7 (refund system) <span style="color:var(--accent)">→</span><br>
+  &nbsp;&nbsp;P2-2 (trustScore) <span style="color:var(--accent)">→</span> P2-4 (badge) <span style="color:var(--accent)">→</span> P4-1 (A2A Phase 1) <span style="color:var(--accent)">→</span> P4-5 (FraudGuard API)<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--accent)">→</span> P4-3 (Beckn BPP) <span style="color:var(--accent)">→</span> P4-4 (Beckn BAP)<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--accent)">→</span> P5-3 (Public API) <span style="color:var(--accent)">→</span> P5-5 (pan-African payments)<br>
+  <br>
+  P0-1 to P0-4 (security fixes) <span style="color:var(--accent)">→</span> parallel, no dependencies, do first<br>
+  P1-1 to P1-4 (hybrid optimizations) <span style="color:var(--accent)">→</span> parallel to P0, low dependency<br>
+  P3-1 to P3-6 (operational tax) <span style="color:var(--accent)">→</span> parallel to P0/P1, mostly independent<br>
+  P5-8 (WhatsApp migration playbook) <span style="color:var(--accent)">→</span> start now, no dependencies
+</div>
+
+<div class="verdict-box verdict-green" style="margin-top:16px">
+  <strong>&#9989; The critical path is P0-7 → P2-2 → P4-1.</strong> The single-tenant refund/dispute system is the #1 bottleneck. Nothing in P2, P4, or P5 that involves financial transactions can ship without it. The 3 security fixes (P0-1 through P0-3) should be done first because they're critical, fast, and unblock everything else. Hybrid optimizations (P1) can ship in parallel and deliver immediate cost/latency wins while foundational work proceeds.
+</div>
+
+<hr>
+
+<!-- DOCS INVENTORY -->
+<h2>&#128451; Part 6: Session Documentation Inventory</h2>
+
+<table>
+  <tr><th>Document</th><th>Location</th><th>Size</th><th>Status</th></tr>
+  <tr><td>Wealth Formula Audit</td><td>docs/naija-agent-wealth-review.html</td><td>24KB</td><td><span class="tag tag-green">COMPLETE</span></td></tr>
+  <tr><td>Success Simulation</td><td>docs/naija-agent-success-simulation.html</td><td>22KB</td><td><span class="tag tag-green">COMPLETE</span></td></tr>
+  <tr><td>Beckn Protocol Review</td><td>docs/beckn-protocol-review.html</td><td>23KB</td><td><span class="tag tag-green">COMPLETE</span></td></tr>
+  <tr><td>A2A Protocol Red Team</td><td>docs/a2a-protocol-redteam.html</td><td>37KB</td><td><span class="tag tag-green">COMPLETE</span></td></tr>
+  <tr><td>Zynux Badge + AfCFTA</td><td>docs/zynux-badge-afcfta-review.html</td><td>28KB</td><td><span class="tag tag-green">COMPLETE</span></td></tr>
+  <tr><td>Master Task Log (this doc)</td><td>docs/master-task-log.html</td><td>new</td><td><span class="tag tag-yellow">JUST CREATED</span></td></tr>
+  <tr><td>Pipeline Trace (WhatsApp→AI)</td><td>Not documented</td><td>—</td><td><strong><span class="tag tag-red">MISSING</span></strong> — needs creation</td></tr>
+  <tr><td>Beckn Red Team</td><td>Not documented</td><td>—</td><td><strong><span class="tag tag-red">MISSING</span></strong> — flagged as gap above</td></tr>
+  <tr><td>Refund/Dispute System Design</td><td>Not documented</td><td>—</td><td><strong><span class="tag tag-red">MISSING</span></strong> — P0-7 prerequisite</td></tr>
+  <tr><td>Firebase→PG Migration Plan</td><td>Not documented</td><td>—</td><td><strong><span class="tag tag-red">MISSING</span></strong> — P3-1 needed</td></tr>
+  <tr><td>Worker-Life Test Coverage Plan</td><td>Not documented</td><td>—</td><td><strong><span class="tag tag-red">MISSING</span></strong> — P0-5 needed</td></tr>
+</table>
+
+<hr>
+
+<div class="footer">
+  NaijaAgent Core · Master Task Log<br>
+  Session: 2026-07-02 to 2026-07-05 · 6 milestones · 42 consolidated tasks · 5 priority tiers<br>
+  Methodology: Eisenhower Q2 · Sorted by importance (dependency chain, criticality, cost impact, strategic unlock)
+</div>
+
+</body>
+</html>

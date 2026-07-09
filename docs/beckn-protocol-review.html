@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Beckn Protocol · Deep Dive</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --card: #12121a;
+    --border: #1e1e2e;
+    --text: #cdd6f4;
+    --muted: #6c7086;
+    --accent: #cba6f7;
+    --green: #a6e3a1;
+    --yellow: #f9e2af;
+    --red: #f38ba8;
+    --blue: #89b4fa;
+    --orange: #fab387;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6;
+    padding: 16px;
+    max-width: 680px;
+    margin: 0 auto;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 1.5rem; font-weight: 800; margin: 8px 0 4px; letter-spacing: -0.02em; }
+  h2 { font-size: 1.1rem; font-weight: 700; margin: 28px 0 12px; color: var(--accent); padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 0.92rem; font-weight: 600; margin: 16px 0 8px; color: var(--blue); }
+  .subtitle { color: var(--muted); font-size: 0.8rem; margin-bottom: 20px; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.76rem; }
+  th { text-align: left; font-weight: 600; color: var(--muted); text-transform: uppercase; font-size: 0.64rem; letter-spacing: 0.05em; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+  td { padding: 8px 6px; border-bottom: 1px solid rgba(30,30,46,0.6); vertical-align: top; line-height: 1.45; }
+  td:first-child { font-weight: 600; }
+
+  .box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin: 16px 0;
+  }
+  .box h4 { font-size: 0.85rem; color: var(--accent); margin-bottom: 8px; }
+
+  .tag { display: inline-block; padding: 2px 7px; border-radius: 5px; font-size: 0.64rem; font-weight: 600; letter-spacing: 0.03em; margin-right: 4px; }
+  .tag-green { background: rgba(166,227,161,0.15); color: var(--green); }
+  .tag-blue { background: rgba(137,180,250,0.15); color: var(--blue); }
+  .tag-orange { background: rgba(250,179,135,0.15); color: var(--orange); }
+  .tag-purple { background: rgba(203,166,247,0.15); color: var(--accent); }
+  .tag-red { background: rgba(243,139,168,0.15); color: var(--red); }
+
+  .flow { display: grid; grid-template-columns: repeat(5,1fr); gap: 4px; margin: 12px 0; text-align: center; }
+  .flow-step {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 4px;
+    font-size: 0.68rem;
+    line-height: 1.3;
+  }
+  .flow-step strong { font-size: 0.75rem; color: var(--accent); display: block; }
+  .flow-arrow { text-align: center; color: var(--muted); line-height: 32px; font-size: 1rem; }
+
+  .metric-row {
+    display: grid;
+    grid-template-columns: repeat(2,1fr);
+    gap: 10px;
+    margin: 12px 0;
+  }
+  .metric {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+  }
+  .metric-val { font-size: 1.3rem; font-weight: 800; color: var(--green); }
+  .metric-label { font-size: 0.66rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+
+  .comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 12px 0;
+  }
+  .col {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 0.74rem;
+  }
+  .col h4 { font-size: 0.8rem; margin-bottom: 6px; }
+  .vs { text-align: center; font-weight: 800; color: var(--accent); align-self: center; font-size: 1.1rem; }
+
+  .quote {
+    border-left: 2px solid var(--accent);
+    padding: 8px 14px;
+    margin: 12px 0;
+    font-style: italic;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  .insight { font-size: 0.78rem; color: var(--muted); line-height: 1.7; margin: 8px 0; }
+  .footer { text-align: center; color: var(--muted); font-size: 0.66rem; margin: 28px 0 12px; }
+  .highlight { background: rgba(203,166,247,0.1); padding: 1px 4px; border-radius: 3px; color: var(--accent); }
+  .num-stat { font-weight: 800; color: var(--green); }
+</style>
+</head>
+<body>
+
+<h1>Beckn Protocol — Deep Dive</h1>
+<p class="subtitle">The open commerce protocol layer. What it is, how it works, who's using it, and why it matters.</p>
+
+<!-- BIG IDEA -->
+<div class="box">
+  <h4>&#128268; The One-Liner</h4>
+  <p style="font-size:0.8rem;color:var(--text);line-height:1.7">
+    Beckn is to commerce what <strong>SMTP is to email</strong> — an open protocol that lets any buyer app discover and transact with any seller platform, without both parties being on the same platform. It decouples the <em>demand side</em> (consumer apps) from the <em>supply side</em> (business platforms), making commerce interoperable by default.
+  </p>
+</div>
+
+<div class="comparison">
+  <div class="col">
+    <h4 style="color:var(--red)">Platform-Centric (Today)</h4>
+    <ul style="list-style:none;padding:0;font-size:0.72rem;color:var(--muted);line-height:1.7">
+      <li>&#10060; Buyer and seller must be on <strong>same platform</strong></li>
+      <li>&#10060; Platform controls discovery, pricing, and rules</li>
+      <li>&#10060; Vendor lock-in — can't take your catalog elsewhere</li>
+      <li>&#10060; Each platform = separate integration</li>
+    </ul>
+  </div>
+  <div class="vs">VS</div>
+  <div class="col">
+    <h4 style="color:var(--green)">Beckn (Protocol-Centric)</h4>
+    <ul style="list-style:none;padding:0;font-size:0.72rem;color:var(--muted);line-height:1.7">
+      <li>&#10004; Any buyer app can find any seller</li>
+      <li>&#10004; Network is neutral — no gatekeeper</li>
+      <li>&#10004; Multi-home your catalog across apps</li>
+      <li>&#10004; One integration = entire network</li>
+    </ul>
+  </div>
+</div>
+
+<hr>
+
+<!-- HOW IT WORKS -->
+<h2>How It Works</h2>
+
+<h3>The 4 Roles</h3>
+<table>
+  <tr><th>Role</th><th>What It Is</th><th>Example</th></tr>
+  <tr>
+    <td><span class="tag tag-blue">BAP</span> Beckn App Platform</td>
+    <td>Consumer-facing app. Searches, browses, places orders.</td>
+    <td>Zomato, Amazon, any shopping app</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-green">BPP</span> Beckn Provider Platform</td>
+    <td>Business-side platform. Publishes catalog, fulfills orders.</td>
+    <td>Restaurant POS, store inventory system</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-orange">BG</span> Beckn Gateway</td>
+    <td>Routes search requests to relevant BPPs. Like DNS for commerce.</td>
+    <td>Network-level router</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-purple">Registry</span></td>
+    <td>Directory of all participants. Who's on the network, what they offer.</td>
+    <td>Central participant DB</td>
+  </tr>
+</table>
+
+<h3>The Transaction Flow (Order Lifecycle)</h3>
+<div style="overflow-x:auto">
+<div style="display:flex;gap:4px;min-width:500px;font-size:0.68rem;text-align:center;margin:12px 0">
+  <div style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 4px;line-height:1.3"><strong style="font-size:0.75rem;color:var(--accent);display:block">search</strong>Discovery<br>Find providers, browse catalogs</div>
+  <div style="text-align:center;color:var(--muted);line-height:32px">→</div>
+  <div style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 4px;line-height:1.3"><strong style="font-size:0.75rem;color:var(--accent);display:block">select</strong>Order<br>Choose items, get quote</div>
+  <div style="text-align:center;color:var(--muted);line-height:32px">→</div>
+  <div style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 4px;line-height:1.3"><strong style="font-size:0.75rem;color:var(--accent);display:block">init</strong>Order<br>Add billing, shipping, payment</div>
+  <div style="text-align:center;color:var(--muted);line-height:32px">→</div>
+  <div style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 4px;line-height:1.3"><strong style="font-size:0.75rem;color:var(--accent);display:block">confirm</strong>Fulfillment<br>Confirm order, track, cancel</div>
+  <div style="text-align:center;color:var(--muted);line-height:32px">→</div>
+  <div style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 4px;line-height:1.3"><strong style="font-size:0.75rem;color:var(--accent);display:block">rating</strong>Post-Fulfill<br>Rate, support, return</div>
+</div>
+</div>
+
+<div class="box">
+  <h4>&#9889; Critical Design Choice: Asynchronous + Server-to-Server</h4>
+  <p style="font-size:0.74rem;color:var(--muted);line-height:1.7">
+    Every API call gets an immediate ACK (acknowledgment), then the actual response comes as a <strong>callback</strong> to an <code>on_</code> endpoint later. Example: BAP calls <code>/search</code> on BG → BG replies ACK → BG calls <code>/on_search</code> back on BAP with results. This means:
+    <br>&#8226; Commerce works like real life — a hotel takes 24h to confirm, an order takes hours
+    <br>&#8226; No blocking. No timeout hell. No dropped connections losing orders.
+    <br>&#8226; The client app is free to render however it wants — the protocol only specifies the data shape
+  </p>
+</div>
+
+<h3>Layered Architecture</h3>
+<table>
+  <tr><th>Layer</th><th>What It Contains</th></tr>
+  <tr><td><span class="tag tag-purple">Specification</span></td><td>Core APIs, Schema, Domain Taxonomies, Communication Rules, Auth</td></tr>
+  <tr><td><span class="tag tag-blue">Transaction</span></td><td>Order lifecycle APIs: search→select→init→confirm→status→track→cancel→update→rating→support</td></tr>
+  <tr><td><span class="tag tag-green">Infrastructure</span></td><td>Registry (participant lookup), Gateway (routing), Authentication (signing/verification)</td></tr>
+  <tr><td><span class="tag tag-orange">Domain</span></td><td>Sector-specific taxonomies: Mobility, Retail, Logistics, Healthcare, Food & Beverage, Energy, Education</td></tr>
+</table>
+
+<hr>
+
+<!-- LIVE NETWORKS -->
+<h2>Who's Actually Using It</h2>
+
+<div class="metric-row">
+  <div class="metric">
+    <div class="metric-val">200M+</div>
+    <div class="metric-label">Total ONDC Transactions</div>
+  </div>
+  <div class="metric">
+    <div class="metric-val">15M+</div>
+    <div class="metric-label">Peak Monthly Orders</div>
+  </div>
+  <div class="metric">
+    <div class="metric-val">156.9M+</div>
+    <div class="metric-label">Namma Yatri Rides</div>
+  </div>
+  <div class="metric">
+    <div class="metric-val">167K+</div>
+    <div class="metric-label">Retail Sellers on ONDC</div>
+  </div>
+</div>
+
+<h3>Live Networks (as of 2026)</h3>
+<table>
+  <tr><th>Network</th><th>Country</th><th>Sector</th><th>Scale</th></tr>
+  <tr>
+    <td><strong>ONDC</strong></td>
+    <td>India</td>
+    <td><span class="tag tag-blue">All commerce</span></td>
+    <td>200M+ txns, 167K+ sellers, 15M+/mo peak</td>
+  </tr>
+  <tr>
+    <td><strong>Namma Yatri</strong></td>
+    <td>India</td>
+    <td><span class="tag tag-orange">Mobility</span></td>
+    <td>156.9M+ rides booked</td>
+  </tr>
+  <tr>
+    <td><strong>Unified Health Interface</strong></td>
+    <td>India</td>
+    <td><span class="tag tag-red">Healthcare</span></td>
+    <td>Ayushman Bharat Digital Mission backbone</td>
+  </tr>
+  <tr>
+    <td><strong>Unified Energy Interface</strong></td>
+    <td>India</td>
+    <td><span class="tag tag-orange">Energy</span></td>
+    <td>EV charging, grid transactions</td>
+  </tr>
+  <tr>
+    <td><strong>ONEST</strong></td>
+    <td>India</td>
+    <td><span class="tag tag-purple">Education</span></td>
+    <td>Learning + livelihood transactions</td>
+  </tr>
+  <tr>
+    <td><strong>Open Gambia Network</strong></td>
+    <td>Gambia</td>
+    <td><span class="tag tag-blue">Commerce</span></td>
+    <td>First African Beckn network — live since Dec 2023</td>
+  </tr>
+  <tr>
+    <td><strong>OpenKochi</strong></td>
+    <td>India</td>
+    <td><span class="tag tag-orange">Mobility</span></td>
+    <td>Multimodal Kochi metro transport</td>
+  </tr>
+  <tr>
+    <td><strong>Vriddhi Open Nepal</strong></td>
+    <td>Nepal</td>
+    <td><span class="tag tag-blue">Commerce</span></td>
+    <td>Tourism + agriculture</td>
+  </tr>
+  <tr>
+    <td><strong>Belem Open Network</strong></td>
+    <td>Brazil</td>
+    <td><span class="tag tag-blue">City commerce</span></td>
+    <td>City-wide digital services</td>
+  </tr>
+  <tr>
+    <td><strong>Vistaar</strong></td>
+    <td>India</td>
+    <td><span class="tag tag-green">Agriculture</span></td>
+    <td>Government-orchestrated farmer network</td>
+  </tr>
+</table>
+
+<div class="box">
+  <h4>&#9888; The Reality Check</h4>
+  <p style="font-size:0.74rem;color:var(--muted);line-height:1.7">
+    ONDC's retail orders <em>dropped</em> from <span class="num-stat">6.5M/mo (Oct 2024)</span> to <span class="num-stat">4.6M/mo (Feb 2025)</span> — a 30% decline driven by food delivery and grocery pullback. Mobility (rides) grew to dominate total transaction volume. The network is real and massive, but retail commerce adoption has been harder than mobility. Beckn is <em>not</em> a guaranteed success — it needs network incentives and a compelling consumer experience layer to win.
+  </p>
+</div>
+
+<hr>
+
+<!-- RELEVANCE TO NAIJA-AGENT -->
+<h2>&#129309; Relevance to NaijaAgent Core</h2>
+
+<div class="box">
+  <h4>They're Complementary, Not Competitive</h4>
+  <p style="font-size:0.78rem;color:var(--muted);line-height:1.7">
+    NaijaAgent Core is an <strong>AI merchant layer</strong> sitting on WhatsApp — it replaces the human who runs the store, verifies payments, and manages customers. Beckn is a <strong>commerce routing layer</strong> — it replaces the need for buyer and seller to be on the same platform.<br><br>
+    These stack. A NaijaAgent bot could <em>be</em> a Beckn participant — either as a consumer app (BAP) discovering products for its customers, or as a provider platform (BPP) exposing its merchant's catalog to any Beckn-enabled buyer app. The AI handles the conversation; Beckn handles the commerce routing.
+  </p>
+</div>
+
+<h3>Two Integration Paths for NaijaAgent</h3>
+
+<table>
+  <tr><th>Path</th><th>Role</th><th>What It Enables</th></tr>
+  <tr>
+    <td><strong>NaijaAgent as BAP</strong><br><span class="tag tag-blue">AI buys for you</span></td>
+    <td>Consumer app</td>
+    <td>A customer asks "find me the cheapest Samsung charger in Lagos" → Zynux AI searches Beckn network across all participating stores → returns prices and availability from multiple merchants → customer picks → AI places the order. The customer never leaves WhatsApp but accessed 100+ stores.</td>
+  </tr>
+  <tr>
+    <td><strong>NaijaAgent as BPP</strong><br><span class="tag tag-green">AI sells everywhere</span></td>
+    <td>Provider platform</td>
+    <td>A merchant's catalog (already in NaijaAgent's knowledge base) gets published to Beckn. Any Beckn-enabled buyer app anywhere can discover and order from them. The merchant's AI handles fulfillment confirmations, payment verification, and status updates — all through the protocol's async callbacks.</td>
+  </tr>
+</table>
+
+<h3>What This Changes</h3>
+
+<p class="insight">
+<strong>Without Beckn:</strong> A NaijaAgent merchant is an island. Their catalog lives in WhatsApp conversations. The only way to discover them is knowing their WhatsApp number. Each integration (logistics, payments, inventory) is custom-built.
+</p>
+<p class="insight">
+<strong>With Beckn:</strong> A NaijaAgent merchant becomes <em>discoverable by any Beckn-enabled app</em>. Logistics providers, payment gateways, and inventory systems plug in through standard APIs. The AI agent becomes the <strong>orchestrator</strong> across an interoperable commerce network rather than a closed-loop chatbot.
+</p>
+
+<hr>
+
+<!-- STRATEGIC ANALYSIS -->
+<h2>&#128200; Strategic Analysis</h2>
+
+<h3>Why Beckn Matters for Nigerian Commerce</h3>
+<table>
+  <tr><th>Dynamic</th><th>How Beckn Helps</th></tr>
+  <tr>
+    <td>Fragmented seller landscape</td>
+    <td>Thousands of small merchants across WhatsApp, Instagram, Facebook — Beckn makes them all discoverable in one query</td>
+  </tr>
+  <tr>
+    <td>Platform lock-in</td>
+    <td>Jumia/Konga control discovery and take 15-25% commission. Beckn removes the gatekeeper — merchants own their catalog</td>
+  </tr>
+  <tr>
+    <td>Payment fragmentation</td>
+    <td>Paystack, Monnify, bank transfers, USSD — Beckn's payment schema standardizes how payment terms are communicated</td>
+  </tr>
+  <tr>
+    <td>Logistics chaos</td>
+    <td>Every merchant negotiates delivery separately. Beckn's fulfillment API standardizes shipping quotes, tracking, and status</td>
+  </tr>
+  <tr>
+    <td>Trust deficit</td>
+    <td>No shared rating system. Beckn's rating/feedback API creates portable seller reputation</td>
+  </tr>
+</table>
+
+<h3>Why ONDC's Retail Drop Matters for NaijaAgent</h3>
+<div class="box">
+  <h4>The Lesson</h4>
+  <p style="font-size:0.76rem;color:var(--muted);line-height:1.7">
+    ONDC's retail decline (6.5M → 4.6M monthly orders) happened because <strong>the protocol layer alone doesn't create demand</strong>. Consumers don't care about protocols — they care about experience. A bare Beckn implementation gives you interoperability. NaijaAgent gives you the <em>AI-powered experience layer</em> that makes interoperability actually usable: natural language commerce, automated verification, and Pidgin English support.<br><br>
+    The winning formula isn't "Beckn in Nigeria." It's <strong>"Beckn + AI agent" in Nigeria</strong> — where Beckn provides the commerce rails and NaijaAgent provides the human interface.
+  </p>
+</div>
+
+<h3>The Timing</h3>
+<table>
+  <tr><th>Factor</th><th>Signal</th></tr>
+  <tr>
+    <td>Beckn core spec</td>
+    <td><span class="tag tag-green">Mature</span> v1.1.1 (Jan 2025), stable API</td>
+  </tr>
+  <tr>
+    <td>African presence</td>
+    <td><span class="tag tag-orange">Early</span> Open Gambia Network only, no Nigerian Beckn network yet</td>
+  </tr>
+  <tr>
+    <td>Google Cloud partnership</td>
+    <td><span class="tag tag-green">Strong</span> Beckn Onix (Nov 2025) makes deployment trivial</td>
+  </tr>
+  <tr>
+    <td>Nigerian government interest</td>
+    <td><span class="tag tag-red">Unknown</span> No public Nigerian Beckn initiative. India had DPIIT gov backing</td>
+  </tr>
+  <tr>
+    <td>NaijaAgent readiness</td>
+    <td><span class="tag tag-orange">Medium</span> Commerce engine exists (cart, order lifecycle, payments, logistics) but no Beckn adapter</td>
+  </tr>
+</table>
+
+<hr>
+
+<!-- CONCRETE NEXT STEPS -->
+<h2>&#128640; Concrete Integration Path (If You Want It)</h2>
+
+<h3>Phase 1: Beckn BPP Adapter (2-4 weeks)</h3>
+<div class="box">
+  <p style="font-size:0.74rem;color:var(--muted);line-height:1.7">
+    Create a <span class="highlight">Beckn BPP adapter</span> that wraps NaijaAgent's existing commerce engine around Beckn's protocol. This maps directly to existing code:
+    <br><br>
+    <strong>search → on_search:</strong> Query org's <code>products</code> table → return Catalog with Items
+    <br>
+    <strong>select → on_select:</strong> Zynux's existing <code>add_to_cart</code> logic → return Quotation
+    <br>
+    <strong>init → on_init:</strong> Zynux's checkout flow → return Order with payment terms
+    <br>
+    <strong>confirm → on_confirm:</strong> Zynux's <code>confirm_order</code> → return confirmed Order
+    <br>
+    <strong>status → on_status:</strong> Read from existing order status in <code>activities</code> table
+    <br>
+    <strong>cancel → on_cancel:</strong> Zynux's <code>cancel_order</code> → return canceled Order
+    <br>
+    <strong>track → on_track:</strong> Existing logistics integration → return Tracking
+    <br>
+    <strong>rating → on_rating:</strong> Existing <code>collect_customer_feedback</code> → return Feedback
+    <br><br>
+    The entire commerce engine already maps 1:1 to Beckn's order lifecycle. This is an adapter, not a rewrite.
+  </p>
+</div>
+
+<h3>Phase 2: NaijaAgent as BAP (2-4 weeks)</h3>
+<div class="box">
+  <p style="font-size:0.74rem;color:var(--muted);line-height:1.7">
+    Add AI tool definitions that let Zynux search the Beckn network:
+    <br><br>
+    <code>searchBecknCatalog(query, location, category)</code> → calls <code>search</code> API on gateway → returns multi-merchant results → AI ranks and presents to customer in Pidgin English
+    <br>
+    <code>becknSelect(itemId, providerId)</code> → creates selection
+    <br>
+    <code>becknInit(order)</code> → submits billing/fulfillment
+    <br>
+    <code>becknConfirm(orderId)</code> → confirms
+    <br><br>
+    This unlocks: "Boss, I found 12 stores selling iPhone chargers. BimsGadget has it for ₦5,500 with free delivery. FoneZone has it for ₦4,800 but delivery is ₦1,000. Which one you want?" — all from WhatsApp, across merchants who've never met.
+  </p>
+</div>
+
+<hr>
+
+<!-- SUMMARY -->
+<div class="box" style="border-color:var(--accent)">
+  <h4>&#128161; Bottom Line</h4>
+  <p style="font-size:0.78rem;color:var(--text);line-height:1.7">
+    Beckn is a <strong>commerce protocol layer</strong> — like SMTP for email, HTTP for the web. It standardizes how buyer apps discover seller platforms and complete transactions. It's real (200M+ transactions on ONDC), it's in Africa (Gambia), and it's getting Google Cloud investment.<br><br>
+    For NaijaAgent Core specifically: Beckn is the <strong>perfect complement</strong>. NaijaAgent solves the AI merchant layer (WhatsApp-native, Pidgin English, fraud detection, payment verification). Beckn solves the commerce discovery and routing layer. Combined, you get <strong>AI-powered interoperable commerce</strong> — where a customer on WhatsApp can discover and buy from any Beckn-enabled store in Nigeria, with the AI handling all the complexity.<br><br>
+    The 1:1 mapping between NaijaAgent's existing commerce engine and Beckn's order lifecycle means the integration cost is low. The strategic value is high: it turns NaijaAgent from a closed-loop WhatsApp bot into a node on an open commerce network.
+  </p>
+</div>
+
+<hr>
+
+<div class="footer">
+  Research compiled 2026-07-02<br>
+  Sources: becknprotocol.io · github.com/beckn · opendata.ondc.org · yourstory.com · deccanfounders.com
+</div>
+
+</body>
+</html>

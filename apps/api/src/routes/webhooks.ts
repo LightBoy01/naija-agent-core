@@ -107,28 +107,52 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
     const signature = request.headers['x-paystack-signature'] as string;
     const rawBody = (request as any).rawBody as string;
 
-    if (!process.env.PAYSTACK_SECRET_KEY) {
+    const payload = request.body as any;
+    const { reference, amount, metadata } = payload?.data || {};
+    const orgId = metadata?.orgId;
+
+    if (!orgId) {
+      logger.warn({ reference }, '⚠️ Received Paystack top-up without orgId metadata.');
+      return reply.status(200).send('OK'); // Acknowledge anyway
+    }
+
+    const org = await getOrgById(orgId);
+    const paystackKey = (org?.config as any)?.payment?.paystackSecretKey || process.env.PAYSTACK_SECRET_KEY;
+
+    if (!paystackKey) {
       return reply.status(500).send('Paystack secret key not configured');
     }
 
-    const paystack = getProvider('paystack', process.env.PAYSTACK_SECRET_KEY) as any;
+    const paystack = getProvider('paystack', paystackKey) as any;
     
     if (!paystack.verifyWebhookSignature(rawBody, signature)) {
       logger.warn('❌ Invalid Paystack Webhook Signature!');
       return reply.status(403).send('Invalid Signature');
     }
 
-    const payload = request.body as any;
-    if (payload.event !== 'charge.success') {
-      return reply.status(200).send('Ignored');
+    if (payload.event === 'charge.dispute.create') {
+      const { createDispute } = await import('@naija-agent/database');
+      await createDispute(orgId, reference, amount / 100, 'NGN', payload.data?.reason || 'Dispute Created');
+      logger.info({ orgId, reference }, '🚨 [PAYSTACK] Dispute Created');
+      return reply.status(200).send('OK');
     }
 
-    const { reference, amount, metadata } = payload.data;
-    const orgId = metadata?.orgId;
+    if (payload.event === 'charge.dispute.resolve') {
+      const { resolveDispute } = await import('@naija-agent/database');
+      await resolveDispute(reference, payload.data?.status === 'resolved' ? 'won' : 'lost');
+      logger.info({ orgId, reference }, '🏁 [PAYSTACK] Dispute Resolved');
+      return reply.status(200).send('OK');
+    }
 
-    if (!orgId) {
-      logger.warn({ reference }, '⚠️ Received Paystack top-up without orgId metadata.');
-      return reply.status(200).send('OK'); // Acknowledge anyway
+    if (payload.event === 'charge.refund.processed' || payload.event === 'refund.processed') {
+      const { resolveDispute } = await import('@naija-agent/database');
+      await resolveDispute(reference, 'refunded');
+      logger.info({ orgId, reference }, '💸 [PAYSTACK] Refund Processed');
+      return reply.status(200).send('OK');
+    }
+
+    if (payload.event !== 'charge.success') {
+      return reply.status(200).send('Ignored');
     }
 
     try {
@@ -226,11 +250,32 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
       return reply.status(500).send('Monnify secret key not found');
     }
 
-    const monnify = getProvider('monnify', monnifyKey) as any;
+    const monnify = getProvider('monnify', monnifyKey, org.config?.payment?.redirectUrl) as any;
     
     if (!monnify.verifyWebhookSignature(rawBody, signature)) {
       logger.warn('❌ Invalid Monnify Webhook Signature!');
       return reply.status(403).send('Invalid Signature');
+    }
+
+    if (payload.eventType === 'DISPUTE_LOGGED' || payload.eventType === 'DISPUTE') {
+      const { createDispute } = await import('@naija-agent/database');
+      await createDispute(orgId, reference, amountPaid, 'NGN', payload.eventData?.reason || 'Dispute Created');
+      logger.info({ orgId, reference }, '🚨 [MONNIFY] Dispute Created');
+      return reply.status(200).send('OK');
+    }
+
+    if (payload.eventType === 'DISPUTE_RESOLVED') {
+      const { resolveDispute } = await import('@naija-agent/database');
+      await resolveDispute(reference, payload.eventData?.status === 'resolved' ? 'won' : 'lost');
+      logger.info({ orgId, reference }, '🏁 [MONNIFY] Dispute Resolved');
+      return reply.status(200).send('OK');
+    }
+
+    if (payload.eventType === 'REFUND_COMPLETED' || payload.eventType === 'REFUND') {
+      const { resolveDispute } = await import('@naija-agent/database');
+      await resolveDispute(reference, 'refunded');
+      logger.info({ orgId, reference }, '💸 [MONNIFY] Refund Processed');
+      return reply.status(200).send('OK');
     }
 
     if (payload.eventType !== 'SUCCESSFUL_TRANSACTION') {
@@ -452,6 +497,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
       templateName: z.string().optional(),
       languageCode: z.string().default('en_US'),
       phoneId: z.string().optional(), 
+      orgId: z.string().optional(),
     });
 
     const result = schema.safeParse(request.body);
@@ -459,7 +505,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
       return reply.status(400).send(result.error);
     }
 
-    const { to, text, templateName, languageCode, phoneId } = result.data;
+    const { to, text, templateName, languageCode, phoneId, orgId: providedOrgId } = result.data;
     
     if (!text && !templateName) {
       return reply.status(400).send('Either text or templateName is required');
@@ -471,10 +517,25 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
        return reply.status(400).send('phoneId is required');
     }
 
+    let actualOrgId = providedOrgId;
+    if (!actualOrgId) {
+      const org = await getOrgByPhoneId(effectivePhoneId);
+      actualOrgId = org?.id || 'system';
+    }
+
+    // Rate Limiting (max 60 per minute per tenant)
+    const rateKey = `send_rate:${actualOrgId}`;
+    const rateCount = await redisConnection.incr(rateKey);
+    if (rateCount === 1) await redisConnection.expire(rateKey, 60);
+    if (rateCount > 60) {
+      logger.warn({ orgId: actualOrgId, count: rateCount }, 'Outbound rate limit exceeded');
+      return reply.status(429).send('Rate limit exceeded');
+    }
+
     const jobData: JobData = {
       type: templateName ? 'template' : 'text',
       phoneId: effectivePhoneId,
-      orgId: 'system', 
+      orgId: actualOrgId, 
       from: to, 
       messageId: `OUT-${Date.now()}`,
       timestamp: Date.now(),

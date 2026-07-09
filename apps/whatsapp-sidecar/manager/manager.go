@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"strings"
 	"time"
 
 	"go.mau.fi/whatsmeow"
@@ -231,6 +232,30 @@ func (m *Manager) createEventHandler(orgID string) whatsmeow.EventHandler {
 		case *events.LoggedOut:
 			m.log.Warnf("🔌 Session logged out for %s: reason=%s", orgID, v.Reason)
 			m.withdrawClient(orgID)
+		case *events.PairSuccess:
+			m.log.Infof("🎉 Successfully paired %s! Scheduling Welcome Message...", orgID)
+			go func() {
+				time.Sleep(10 * time.Second)
+				welcomeText := "🎉 *Connection Successful! Zynux is now live.*\n\n" +
+					"Privacy is your right. By default, I will NEVER reply to people saved in your contacts.\n\n" +
+					"*Your Steering Wheel Commands:*\n" +
+					"- `#pause`: Puts me to sleep for 24 hours.\n" +
+					"- `#resume`: Wakes me back up instantly.\n" +
+					"- `#mute`: Permanently bans me from a specific chat.\n" +
+					"- `#unmute`: Reverses a mute.\n" +
+					"- `#optin`: Forces me to talk to a saved VIP contact.\n\n" +
+					"*Save this message!*"
+				
+				if m.clients[orgID].Store.ID != nil {
+					me := m.clients[orgID].Store.ID.ToNonAD().String()
+					err := m.SendMessage(orgID, me, welcomeText)
+					if err != nil {
+						m.log.Errorf("Failed to send Welcome Message for %s: %v", orgID, err)
+					}
+				} else {
+					m.log.Errorf("Could not send Welcome Message for %s: Store.ID is nil after 10s.", orgID)
+				}
+			}()
 		case *events.StreamReplaced:
 			m.log.Warnf("🔌 Session stream replaced for %s — another client paired with same phone", orgID)
 			m.withdrawClient(orgID)
@@ -276,13 +301,66 @@ func (m *Manager) handleMessage(orgID string, evt *events.Message) {
 	// Detect Human Intervention
 	if evt.Info.IsFromMe {
 		chatId := evt.Info.Chat.ToNonAD().String()
-		m.log.Infof("🤫 [HUMAN AWARE] Boss sent a message to %s. Pausing AI for 30 mins.", chatId)
-		_ = m.publisher.SetHumanLock(orgID, chatId)
+		text := evt.Message.GetConversation()
+		if text == "" && evt.Message.GetExtendedTextMessage() != nil {
+			text = evt.Message.GetExtendedTextMessage().GetText()
+		}
+		
+		textLower := strings.ToLower(strings.TrimSpace(text))
+		
+		if textLower == "#resume" || textLower == "#ai take over" || textLower == "#unmute" || textLower == "#optin" {
+			m.log.Infof("🟢 [HUMAN AWARE] Boss explicitly handed control back for %s. AI Resumed.", chatId)
+			_ = m.publisher.ReleaseHumanLock(orgID, chatId)
+			if textLower == "#unmute" {
+				_ = m.publisher.UnmuteChat(orgID, chatId)
+				m.log.Infof("🔊 [PRIVACY] Boss permanently unmuted AI for chat %s.", chatId)
+			}
+			if textLower == "#optin" {
+				_ = m.publisher.OptInChat(orgID, chatId)
+				m.log.Infof("✅ [PRIVACY] Boss explicitly opted-in saved contact %s.", chatId)
+			}
+		} else if textLower == "#pause" {
+			m.log.Infof("🛑 [HUMAN AWARE] Boss explicitly paused AI for %s (24 hours).", chatId)
+			_ = m.publisher.SetHumanLock(orgID, chatId, 24 * time.Hour)
+		} else if textLower == "#mute" {
+			m.log.Infof("🔇 [PRIVACY] Boss permanently muted AI for chat %s.", chatId)
+			_ = m.publisher.MuteChat(orgID, chatId)
+		} else if textLower == "#help" {
+			m.log.Infof("ℹ️ [HELP] Boss requested command list in chat %s.", chatId)
+			helpText := "*Your Steering Wheel Commands:*\n" +
+				"- `#pause`: Puts me to sleep for 24 hours in this chat.\n" +
+				"- `#resume`: Wakes me back up instantly.\n" +
+				"- `#mute`: Permanently bans me from this chat.\n" +
+				"- `#unmute`: Reverses a mute.\n" +
+				"- `#optin`: Forces me to talk to a saved VIP contact."
+			
+			me := m.clients[orgID].Store.ID.ToNonAD().String()
+			_ = m.SendMessage(orgID, me, helpText)
+		} else {
+			m.log.Infof("🤫 [HUMAN AWARE] Boss sent a message to %s. Pausing AI for 5 mins (Sliding Window).", chatId)
+			_ = m.publisher.SetHumanLock(orgID, chatId, 5 * time.Minute)
+		}
 		return
 	}
 
 	// 1. Map whatsmeow message to JobData
 	from := evt.Info.Sender.ToNonAD().String()
+	
+	if m.publisher.IsChatMuted(orgID, from) {
+		m.log.Infof("🔇 [PRIVACY] Dropping incoming message from permanently muted chat %s.", from)
+		return
+	}
+
+	contact, err := m.clients[orgID].Store.Contacts.GetContact(context.Background(), evt.Info.Sender)
+	isSavedContact := false
+	if err == nil && contact.Found && (contact.FullName != "" || contact.FirstName != "") {
+		isSavedContact = true
+	}
+
+	if isSavedContact && !m.publisher.IsChatOptedIn(orgID, from) {
+		m.log.Infof("🛡️ [PRIVACY] Silently dropping message from SAVED CONTACT %s (Not opted-in).", from)
+		return
+	}
 	
 	text := evt.Message.GetConversation()
 	if text == "" && evt.Message.GetExtendedTextMessage() != nil {
@@ -362,7 +440,7 @@ func (m *Manager) handleMessage(orgID string, evt *events.Message) {
 	}
 
 	// 2. Publish to Redis
-	err := m.publisher.PublishMessage(job)
+	err = m.publisher.PublishMessage(job)
 	if err != nil {
 		m.log.Errorf("Failed to publish message for %s: %v", orgID, err)
 	}

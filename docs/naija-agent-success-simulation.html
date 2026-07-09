@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NaijaAgent · Success Simulation</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --card: #12121a;
+    --border: #1e1e2e;
+    --text: #cdd6f4;
+    --muted: #6c7086;
+    --accent: #cba6f7;
+    --green: #a6e3a1;
+    --yellow: #f9e2af;
+    --red: #f38ba8;
+    --blue: #89b4fa;
+    --score-glow: #f5c2e7;
+    --orange: #fab387;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6;
+    padding: 16px;
+    max-width: 680px;
+    margin: 0 auto;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin: 8px 0 4px;
+    letter-spacing: -0.02em;
+  }
+  h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 28px 0 12px;
+    color: var(--accent);
+    letter-spacing: -0.01em;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 0.92rem;
+    font-weight: 600;
+    margin: 16px 0 8px;
+    color: var(--blue);
+  }
+  .subtitle { color: var(--muted); font-size: 0.8rem; margin-bottom: 20px; }
+  .separator {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 20px 0;
+  }
+  .score-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 16px 0 20px;
+  }
+  .score-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 10px;
+    text-align: center;
+  }
+  .score-label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .score-val {
+    font-size: 2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--score-glow), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.03em;
+  }
+  .formula {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    text-align: center;
+    font-size: 0.88rem;
+    margin: 16px 0;
+    color: var(--muted);
+    letter-spacing: -0.01em;
+  }
+  .formula strong { color: var(--text); font-size: 1.4rem; }
+  .formula .mult { color: var(--accent); }
+  .formula .eq { color: var(--yellow); font-size: 1.3rem; font-weight: 700; }
+  .formula .arrow { color: var(--muted); font-size: 1rem; margin: 0 4px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 0.76rem;
+  }
+  th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-size: 0.64rem;
+    letter-spacing: 0.05em;
+    padding: 8px 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 8px 6px;
+    border-bottom: 1px solid rgba(30,30,46,0.6);
+    vertical-align: top;
+    line-height: 1.45;
+  }
+  .timeline { position: relative; padding-left: 24px; margin: 16px 0; }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 8px;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background: var(--border);
+  }
+  .tl-dot {
+    position: absolute;
+    left: -18px;
+    top: 4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .tl-item {
+    position: relative;
+    margin-bottom: 24px;
+    padding-left: 4px;
+  }
+  .tl-date {
+    font-size: 0.7rem;
+    color: var(--accent);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .tl-title {
+    font-weight: 700;
+    font-size: 0.9rem;
+    margin-bottom: 4px;
+  }
+  .tl-body {
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .metric-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin: 12px 0;
+  }
+  .metric {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+  }
+  .metric-val {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--green);
+  }
+  .metric-label {
+    font-size: 0.66rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: 2px;
+  }
+  .tag {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: 0.64rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    margin-right: 4px;
+  }
+  .tag-green { background: rgba(166,227,161,0.15); color: var(--green); }
+  .tag-blue { background: rgba(137,180,250,0.15); color: var(--blue); }
+  .tag-orange { background: rgba(250,179,135,0.15); color: var(--orange); }
+  .tag-purple { background: rgba(203,166,247,0.15); color: var(--accent); }
+  .big-num {
+    font-size: 2.2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--green), var(--blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-align: center;
+    display: block;
+    margin: 12px 0 4px;
+  }
+  .quote {
+    border-left: 2px solid var(--accent);
+    padding: 8px 14px;
+    margin: 12px 0;
+    font-style: italic;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  .box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin: 16px 0;
+  }
+  .box h4 {
+    font-size: 0.85rem;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.66rem;
+    margin: 28px 0 12px;
+  }
+  .delta { color: var(--green); font-weight: 700; }
+  .delta-neg { color: var(--red); font-weight: 700; }
+</style>
+</head>
+<body>
+
+<h1>NaijaAgent · Success Simulation</h1>
+<p class="subtitle">What happens when the gaps close. A realistic projection from the current 382.5 to the full-potential 573.75.</p>
+
+<!-- SCORE TRANSITION -->
+<div class="formula">
+  <strong style="color:var(--muted)">382.5</strong>
+  <span class="arrow">→</span>
+  <strong>573.75</strong>
+  <br>
+  <span style="font-size:0.72rem">8.5×6.0×7.5 → 9.0×7.5×8.5</span>
+</div>
+
+<div class="score-grid">
+  <div class="score-card">
+    <div class="score-label">Friction Solved</div>
+    <div class="score-val">9.0</div>
+    <div style="font-size:0.62rem;color:var(--green)">↑ from 8.5</div>
+  </div>
+  <div class="score-card">
+    <div class="score-label">Network Scale</div>
+    <div class="score-val">7.5</div>
+    <div style="font-size:0.62rem;color:var(--green)">↑ from 6.0</div>
+  </div>
+  <div class="score-card">
+    <div class="score-label">Leverage</div>
+    <div class="score-val">8.5</div>
+    <div style="font-size:0.62rem;color:var(--green)">↑ from 7.5</div>
+  </div>
+</div>
+
+<hr class="separator">
+
+<h2>The Simulation: NaijaAgent at Full Potential</h2>
+
+<p style="font-size:0.78rem;color:var(--muted);margin-bottom:16px">
+This isn't a fantasy. Every element below is derived from architecture that already exists in the codebase — scaffolding, schemas, tool definitions, region configs, and network-effect primitives. The difference between 382.5 and 573.75 is <em>execution</em>, not invention.
+</p>
+
+<!-- TIMELINE -->
+<div class="timeline">
+
+<div class="tl-item">
+  <div class="tl-dot"></div>
+  <div class="tl-date">Month 0 — Today</div>
+  <div class="tl-title">The Platform Hardens</div>
+  <div class="tl-body">
+    The 5 critical issues are resolved in a 3-week sprint. HACK/DEBUG bypasses stripped from recharge.ts. Sidecar auth becomes mandatory in all modes. Paystack webhook rewritten for per-org key resolution using the existing <code>organizations.config</code> jsonb field. Worker-life gets test coverage: 10 handlers × ~10 tests each, 4 interceptors covered, 70% baseline enforced in CI. Dual-write Firebase eliminated — all writes go to PostgreSQL via Drizzle, Firestore reduced to read-only legacy queries. The entire test suite passes on every push.
+  </div>
+</div>
+
+<div class="tl-item">
+  <div class="tl-dot"></div>
+  <div class="tl-date">Month 1 — The Network Ignites</div>
+  <div class="tl-title">Public API Launches</div>
+  <div class="tl-body">
+    A REST API with API-key auth, webhook subscriptions (transaction.verified, order.status_changed, fraud.reported), and an SDK in TypeScript. Developers can now build on NaijaAgent without touching WhatsApp or AI infrastructure. The first third-party integrations appear: a logistics company builds a delivery-status webhook consumer. A POS hardware vendor builds a cash-payment confirmation integration. The API is versioned at <code>/v1</code> with 12-month deprecation windows. Rate limiting is per-tenant with configurable tiers.
+  </div>
+</div>
+
+<div class="tl-item">
+  <div class="tl-dot"></div>
+  <div class="tl-date">Month 2 — The Viral Loop Activates</div>
+  <div class="tl-title">Referral Network Reaches Escape Velocity</div>
+  <div class="tl-body">
+    With the platform hardened, the 30% rev-share referral system catches fire. A single merchant in Lagos (selling phone accessories via Zynux) refers 7 other businesses in her trading association. Each of those refers 3-5 more. The 365-day tracking window means early referrers are still earning from their original invites while recruiting new ones. The Sovereign dashboard shows 40+ active tenants — up from ~10. Vault total crosses ₦5M in managed funds. GlobalFraudGuard now has 40+ independent reporters, and its precision has measurably improved: false-positive blacklist rate drops below 2%.
+  </div>
+</div>
+
+<div class="tl-item">
+  <div class="tl-dot"></div>
+  <div class="tl-date">Month 3 — The Last Frictions Fall</div>
+  <div class="tl-title">Legal Pack Ships, Market Data Goes Live</div>
+  <div class="tl-body">
+    The Legal Pack's <code>execute()</code> no longer returns "coming_soon." It connects to the Laws of the Federation of Nigeria API and Nigerian case law databases. A merchant types "is it legal to refuse a return after 7 days?" — the AI researches and answers with citations. Market data service drops the hardcoded fallback and connects to a live commodity price scraper. A trader asks "what's the current price of a bag of rice in Kano?" and gets real data within ₦500 accuracy. The sidecar media download endpoint is implemented, completing the sovereign archival pipeline.
+  </div>
+</div>
+
+<div class="tl-item">
+  <div class="tl-dot"></div>
+  <div class="tl-date">Month 4 — Scale Infrastructure Deploys</div>
+  <div class="tl-title">Multi-Region, Multi-Worker, Sharded</div>
+  <div class="tl-body">
+    PostgreSQL moves to Citus with orgId as the distribution column. Workers are split: Zynux workers, Aelixxr workers, and Hermes delegation workers run in separate containers with independent BullMQ queues. A second VPS in Frankfurt handles EU/GLOBAL region tenants. The existing <code>region</code> field on organizations now actually routes traffic. A Ghanaian merchant launches the first non-Nigerian tenant bot — same codebase, different payment rails (to be added), English system prompt. The platform can now handle 200+ tenants without performance degradation.
+  </div>
+</div>
+
+<div class="tl-item">
+  <div class="tl-dot"></div>
+  <div class="tl-date">Month 6 — The Wealth Flywheel</div>
+  <div class="tl-title">3 Dimensions Compounding Together</div>
+  <div class="tl-body">
+    <strong>Friction (9.0):</strong> A merchant running a NaijaAgent bot has replaced: bank app, Excel sheet, POS terminal, receipt printer, delivery booking app, and 2 part-time staff. Their entire business runs through one WhatsApp number. They spend 2 hours/day managing it instead of 10.
+    <br><br>
+    <strong>Network (7.5):</strong> 150+ active tenants. GlobalFraudGuard has blocked 1,200+ unique fraud attempts across the network. A scammer blacklisted by a phone shop in Abuja is automatically blocked from a fashion store in Lagos before they even send a message. The referral program has paid out ₦2.4M in commissions to partners. An anonymous Nigerian developer has built a Shopify-to-Zynux inventory sync tool using the public API.
+    <br><br>
+    <strong>Leverage (8.5):</strong> Total infrastructure cost: €38/mo (3 VPS instances). The platform is processing 50,000+ AI interactions per day at an average cost of ₦1.20 per message — 98% of which routes through free-tier or ultra-low-cost models. The same capability on a traditional SaaS stack (Intercom + Shopify + QuickBooks + manual staff) would cost each merchant ~₦150,000/mo. NaijaAgent charges ₦15,000/mo per tenant — a 10x cost advantage they capture as margin.
+  </div>
+</div>
+
+<div class="tl-item">
+  <div class="tl-dot"></div>
+  <div class="tl-date">Month 12 — The Sovereign Empire</div>
+  <div class="tl-title">Platform Economics at Scale</div>
+  <div class="tl-body">
+    The numbers become self-reinforcing. Each new tenant makes the fraud shield stronger, the benchmark data richer, and the referral network wider — <em>without</em> increasing marginal cost. The infrastructure is containerized and replicable; spinning up a new region is a docker-compose and a DNS record. The platform's defensibility isn't in code (which can be copied) but in three compounding moats: the fraud network (data moat), the referral graph (social moat), and the per-tenant AI tuning (switching-cost moat). A competitor can clone the GitHub repo in an afternoon; they can't clone 150+ fraud reporters, ₦2.4M in partner commissions, and 6 months of per-business AI fine-tuning.
+  </div>
+</div>
+
+</div><!-- end timeline -->
+
+<hr class="separator">
+
+<h2>The Economics at 200 Tenants (Month 12)</h2>
+
+<div class="metric-row">
+  <div class="metric">
+    <div class="metric-val">₦3M</div>
+    <div class="metric-label">Monthly Revenue</div>
+  </div>
+  <div class="metric">
+    <div class="metric-val">₦2.85M</div>
+    <div class="metric-label">Monthly Margin (95%)</div>
+  </div>
+  <div class="metric">
+    <div class="metric-val">€38</div>
+    <div class="metric-label">Infra Cost / Month</div>
+  </div>
+  <div class="metric">
+    <div class="metric-val">₦9M</div>
+    <div class="metric-label">Vault Under Management</div>
+  </div>
+</div>
+
+<table>
+  <tr><th>Line</th><th>Per Tenant</th><th>At 200 Tenants</th></tr>
+  <tr><td>Subscription (₦15,000/mo)</td><td>₦15,000</td><td>₦3,000,000</td></tr>
+  <tr><td>AI inference cost</td><td>₦800</td><td>₦160,000</td></tr>
+  <tr><td>Infrastructure (amortized)</td><td>₦95</td><td>₦19,000</td></tr>
+  <tr><td><strong>Gross margin per tenant</strong></td><td><strong>₦14,105</strong></td><td><strong>₦2,821,000</strong></td></tr>
+  <tr><td>Referral commission (avg)</td><td>₦750</td><td>₦150,000</td></tr>
+  <tr><td><strong>Net monthly profit</strong></td><td></td><td><strong>₦2,671,000</strong></td></tr>
+</table>
+
+<div class="box">
+  <h4>Why 95% margin holds at scale</h4>
+  <p style="font-size:0.76rem;color:var(--muted);line-height:1.6">
+    The CapabilityRouter's free-tier arbitrage (Alibaba Qwen, DeepSeek free tier, Groq free tier, Cloudflare Workers AI) means the <em>majority</em> of AI calls cost zero. Context caching eliminates ~90% of system-prompt tokens for repeat tenant interactions. Per-message micro-billing at 3,300 kobo (₦33) per reply is priced at a 40x markup over actual inference cost. The infrastructure is fixed-cost — adding tenant #201 costs nothing in server fees, only the marginal AI inference. This is the leverage dimension compounding: a 1% increase in free-tier routing is pure margin.
+  </p>
+</div>
+
+<hr class="separator">
+
+<h2>The Moats (Why This Wins)</h2>
+
+<div class="box">
+  <h4><span class="tag tag-green">DATA</span> Fraud Network Moat</h4>
+  <p style="font-size:0.76rem;color:var(--muted);line-height:1.6">
+    GlobalFraudGuard at 150+ tenants has seen 40,000+ unique phone numbers. The G2 consensus rule (2+ orgs must report) means the blacklist has near-zero false positives. A new competitor starting from zero has no fraud data. The first fraudulent transaction they process is one NaijaAgent's network already blocked. This moat compounds daily — every new tenant adds a reporter, every blocked scammer improves precision.
+  </p>
+</div>
+
+<div class="box">
+  <h4><span class="tag tag-blue">SOCIAL</span> Referral Graph Moat</h4>
+  <p style="font-size:0.76rem;color:var(--muted);line-height:1.6">
+    The 30% rev-share with 365-day tracking creates a financial incentive graph. Partners who referred 20+ businesses are earning ₦45,000+/mo in passive commission. They won't leave — and they actively recruit to protect their income stream. The referral graph maps directly onto Nigerian trade associations, market unions, and business networks. A competitor can offer the same product at half price, but they can't replicate the ₦2.4M+ in existing partner earnings.
+  </p>
+</div>
+
+<div class="box">
+  <h4><span class="tag tag-orange">SWITCHING</span> Per-Tenant AI Tuning Moat</h4>
+  <p style="font-size:0.76rem;color:var(--muted);line-height:1.6">
+    Every tenant's AI agent learns over time: product knowledge base, customer interaction patterns, pricing logic, business-specific policies. After 6 months, a merchant's Zynux bot has processed 5,000+ customer interactions and developed a tuned understanding of that specific business. The context cache has their unique system prompt permanently cached. Migrating to a competitor means starting from a blank AI — months of accumulated customer interaction intelligence, lost. The switching cost isn't financial; it's the AI getting dumber for weeks.
+  </p>
+</div>
+
+<div class="box">
+  <h4><span class="tag tag-purple">COST</span> Sovereign Infrastructure Moat</h4>
+  <p style="font-size:0.76rem;color:var(--muted);line-height:1.6">
+    At €38/mo for 200 tenants (€0.19/tenant/month), the infrastructure cost is two orders of magnitude below any VC-funded competitor. A competitor on AWS/Azure/Google Cloud would pay €3-8/tenant/month for equivalent compute. NaijaAgent can price at ₦15,000/mo and maintain 95% margins; a cloud-dependent competitor would need ₦45,000-60,000/mo for the same margin. This isn't a temporary advantage — it's structural, based on the self-hosting architecture and free-tier AI arbitrage that gets <em>better</em> as more providers offer free tiers.
+  </p>
+</div>
+
+<hr class="separator">
+
+<h2>What Breaks This Scenario?</h2>
+
+<table>
+  <tr><th>Risk</th><th>Probability</th><th>Mitigation</th></tr>
+  <tr>
+    <td>WhatsApp bans unofficial API usage</td>
+    <td><span class="tag tag-orange">Medium</span></td>
+    <td>Meta Cloud API route already exists for paying tenants. Sidecar can degrade to Cloud API-only mode.</td>
+  </tr>
+  <tr>
+    <td>Free AI tiers get rate-limited or revoked</td>
+    <td><span class="tag tag-orange">Medium</span></td>
+    <td>Multi-provider failover means no single provider loss kills the platform. CapabilityRouter already rotates through 5+ providers.</td>
+  </tr>
+  <tr>
+    <td>Nigerian payment rails change (Monnify/Paystack)</td>
+    <td><span class="tag tag-blue">Low</span></td>
+    <td>Provider abstraction in packages/payments means adding a new provider is an adapter, not a rewrite.</td>
+  </tr>
+  <tr>
+    <td>Competitor clones the open-source repo</td>
+    <td><span class="tag tag-green">Inevitable</span></td>
+    <td>They can clone the code. They can't clone the fraud network, referral graph, or per-tenant AI tuning. Code is 10% of the moat.</td>
+  </tr>
+  <tr>
+    <td>Single operator burns out (bus factor = 1)</td>
+    <td><span class="tag tag-orange">Medium</span></td>
+    <td>No mitigation exists. This is the biggest existential risk. Documentation and automated operations reduce but don't eliminate it.</td>
+  </tr>
+</table>
+
+<hr class="separator">
+
+<h2>The Gap in One Number</h2>
+
+<span class="big-num">191.25</span>
+<p style="text-align:center;font-size:0.78rem;color:var(--muted);margin-bottom:16px">
+The difference between current (382.5) and potential (573.75).<br>That 191.25 is the value of <em>execution</em>, not invention.
+</p>
+
+<div style="text-align:center;font-size:0.8rem;color:var(--muted);margin-top:8px">
+Every piece needed to close this gap already exists in the codebase:<br>
+scaffolding (Legal Pack), schemas (region routing, per-org Paystack keys),<br>
+primitives (G2 consensus, referral tracking, CapabilityRouter),<br>
+and architecture (composable interceptors, provider abstraction, multi-tenant DB).
+</div>
+
+<hr class="separator">
+
+<h2>Execution Roadmap (First 90 Days)</h2>
+
+<table>
+  <tr><th>Week</th><th>What Gets Done</th><th>Dimension Moved</th></tr>
+  <tr><td>1-3</td><td>Remove HACK/DEBUG, fix sidecar auth, fix Paystack multi-tenant, worker-life tests</td><td>Leverage 7.5→8.0</td></tr>
+  <tr><td>4-6</td><td>Complete Firebase→PG migration, CI with 70% coverage, Legal Pack execute(), market data live</td><td>Friction 8.5→8.8</td></tr>
+  <tr><td>7-9</td><td>Public API v1 + SDK + webhooks, refund/dispute handlers, sidecar media download</td><td>Network 6.0→6.5</td></tr>
+  <tr><td>10-12</td><td>PostgreSQL sharding (Citus), split workers, second-region deployment (Frankfurt)</td><td>Network 6.5→7.5</td></tr>
+</table>
+
+<hr class="separator">
+
+<div class="footer">
+  NaijaAgent Core · Wealth Formula Simulation<br>
+  Current: 8.5×6.0×7.5 = <strong style="color:var(--muted)">382.5</strong> → Potential: 9.0×7.5×8.5 = <strong style="color:var(--green)">573.75</strong><br>
+  Generated 2026-07-02
+</div>
+
+</body>
+</html>

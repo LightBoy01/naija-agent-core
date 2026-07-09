@@ -9,4 +9,5 @@ export * from './products.js';
 export * from './activities.js';
 export * from './stats.js';
 export * from './logs.js';
+export * from './disputes.js';
 export * from 'drizzle-orm';

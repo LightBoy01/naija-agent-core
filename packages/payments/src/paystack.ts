@@ -98,4 +98,35 @@ export class PaystackProvider implements PaymentProvider {
       return null;
     }
   }
+
+  /**
+   * Initiates a refund for a previous transaction
+   */
+  async refund(transactionReference: string, amountNaira?: number, reason?: string): Promise<{ success: boolean; message: string; refundReference?: string }> {
+    try {
+      const payload: any = { transaction: transactionReference };
+      if (amountNaira) payload.amount = Math.round(amountNaira * 100);
+      if (reason) payload.customer_note = reason;
+
+      const response = await axios.post(
+        'https://api.paystack.co/refund',
+        payload,
+        {
+          headers: {
+            Authorization: `Bearer ${this.secretKey}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      return {
+        success: true,
+        message: 'Refund initiated successfully',
+        refundReference: response.data.data?.reference
+      };
+    } catch (error: any) {
+      console.error('Paystack Refund Error:', error.response?.data || error.message);
+      return { success: false, message: error.response?.data?.message || error.message };
+    }
+  }
 }
