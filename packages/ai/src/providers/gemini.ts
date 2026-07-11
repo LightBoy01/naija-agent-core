@@ -233,7 +233,7 @@ export class GeminiProvider implements AIProvider {
     // Prepare current message parts
     const parts = typeof message === 'string' ? [{ text: message }] : (Array.isArray(message) ? message : [message]);
 
-    const result = await chatSession.sendMessage(parts);
+    const result = await chatSession.sendMessage({ message: parts as any });
     
     return {
       text: this.extractText(result),
