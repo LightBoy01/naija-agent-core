@@ -361,8 +361,11 @@ export class WhatsAppService {
 
   async sendTemplate(to: string, templateName: string, languageCode: string = 'en_US'): Promise<string> {
     // --- SOVEREIGN ROUTING ---
-    if (this.phoneId.startsWith('baileys-')) {
-       const orgId = this.phoneId.replace('baileys-', '');
+    const sovereignIds = SystemConfig.SOVEREIGN_IDS as readonly string[];
+    if (this.phoneId.startsWith('baileys-') || sovereignIds.includes(this.phoneId) || !/^\d+$/.test(this.phoneId)) {
+       let orgId = this.phoneId.replace('baileys-', '');
+       const mapped = (SystemConfig.SOVEREIGN_ID_MAP as Record<string, string>)[orgId];
+       if (mapped) orgId = mapped;
        await this.sendToSovereign(orgId, to, `[TEMPLATE: ${templateName}]`);
        return `SOV-TMP-${Date.now()}`;
     }

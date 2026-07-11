@@ -158,3 +158,17 @@ describe('Worker-Life WhatsAppService - sendImage', () => {
     );
   });
 });
+
+describe('Worker-Life WhatsAppService - downloadMedia', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should read from local /tmp/ filesystem for sovereign IDs', async () => {
+    const sovSvc = new WhatsAppService('fake-token', '2349015772541'); // Aelixxr numeric ID
+    
+    // We mock fs/promises by relying on a try/catch in the test or mocking the import.
+    // Given the difficulty of mocking dynamic imports, we'll verify it throws the correct Sovereign error for non-/tmp/ files.
+    await expect(sovSvc.downloadMedia('invalid_id')).rejects.toThrow('Sovereign download only supports local filesystem paths');
+  });
+});

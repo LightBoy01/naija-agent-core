@@ -194,7 +194,8 @@ CRITICAL: Reply directly to the user with your final message. Do NOT include you
           tools: finalTools
       });
   } else {
-      aiResponse = await ai.chat(normalizedHistory, content.text || "[Media]", {
+      const fallbackText = (type !== 'text' && !content.text) ? `[Unsupported Media: ${type}]` : (content.text || "[Empty Message]");
+      aiResponse = await ai.chat(normalizedHistory, fallbackText, {
           model: tenantModelName,
           systemInstruction: systemPrompt,
           tools: finalTools

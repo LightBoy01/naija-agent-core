@@ -165,6 +165,28 @@ export class WhatsAppService {
   }
 
   async downloadMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
+    const targetPhoneId = this.phoneNumberId;
+    const sovereignIds = SystemConfig.SOVEREIGN_IDS as readonly string[];
+
+    if (targetPhoneId.startsWith('baileys-') || sovereignIds.includes(targetPhoneId) || !/^\d+$/.test(targetPhoneId)) {
+        if (mediaId.startsWith('/tmp/')) {
+            try {
+                const fs = await import('fs/promises');
+                const buffer = await fs.readFile(mediaId);
+                let mimeType = 'application/octet-stream';
+                if (mediaId.endsWith('.pdf')) mimeType = 'application/pdf';
+                else if (mediaId.endsWith('.jpg') || mediaId.endsWith('.jpeg')) mimeType = 'image/jpeg';
+                else if (mediaId.endsWith('.mp4')) mimeType = 'video/mp4';
+                else if (mediaId.endsWith('.ogg')) mimeType = 'audio/ogg';
+                return { buffer, mimeType };
+            } catch (err: any) {
+                logger.error({ error: err.message }, 'Sovereign download local file read failed');
+                throw new Error(`Failed to read local media file: ${err.message}`);
+            }
+        }
+        throw new Error('Sovereign download only supports local filesystem paths (/tmp/sidecar-media/). Direct HTTP download is not available.');
+    }
+
     try {
       // 1. Get Media URL
       const metadata = await axios.get(`${this.apiUrl}/${mediaId}`, {

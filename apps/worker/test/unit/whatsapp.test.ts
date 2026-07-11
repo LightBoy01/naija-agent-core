@@ -188,3 +188,24 @@ describe('WhatsAppService - sidecar helpers', () => {
     );
   });
 });
+
+describe('WhatsAppService - sendTemplate', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should route numeric sovereign IDs to sidecar /send instead of Meta Graph API', async () => {
+    const svc = new WhatsAppService('fake-token', '2349015772541'); // Aelixxr numeric ID
+    mockedAxios.post = vi.fn().mockResolvedValue({ data: {} });
+
+    const result = await svc.sendTemplate('2348012345678', 'hello_world', 'en_US');
+    expect(result).toMatch(/^SOV-TMP-/);
+    
+    // Check that it calls sidecar /send and NOT graph.facebook.com
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      expect.stringContaining('/send'),
+      expect.objectContaining({ to: '2348012345678', text: '[TEMPLATE: hello_world]' }),
+      expect.anything(),
+    );
+  });
+});
