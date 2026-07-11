@@ -194,7 +194,8 @@ async function getMultimodalEmbedding(
     });
 
     const result = await response.json() as any;
-    return result.embedding?.values || [];
+    const fullVector = result.embedding?.values || [];
+    return fullVector.slice(0, 768);
   } catch (e: any) {
     logger.error({ error: e.message }, 'Failed to generate multimodal embedding via REST');
     return [];

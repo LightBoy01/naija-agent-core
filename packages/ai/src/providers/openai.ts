@@ -197,7 +197,7 @@ export class OpenAIProvider implements AIProvider {
 
       messages.push({
         role: openAIRole,
-        content: contentParts.length > 0 ? (contentParts.length === 1 && contentParts[0]?.type === 'text' ? contentParts[0].text : contentParts) : undefined,
+        content: contentParts.length > 0 ? (contentParts.length === 1 && contentParts[0]?.type === 'text' ? contentParts[0].text : contentParts) : null,
         tool_calls: toolCalls.length > 0 ? toolCalls : undefined
       });
     }
