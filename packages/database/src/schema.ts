@@ -413,9 +413,7 @@ export const vaultDocuments = pgTable('vault_documents', {
   mimeType: varchar('mime_type', { length: 100 }).notNull(),
   caption: text('caption'),
   tags: jsonb('tags'),
-  embedding: customType<{ data: number[] }>({
-    dataType() { return 'vector(768)'; }
-  })('embedding'),
+  embedding: vector('embedding'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => {
