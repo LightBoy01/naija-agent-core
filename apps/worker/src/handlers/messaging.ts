@@ -179,7 +179,10 @@ CRITICAL: Reply directly to the user with your final message. Do NOT include you
       if ((deps as any).archivedMediaUrl) {
           analysisCaption += `\n\n[SYSTEM: The permanent URL for this uploaded image is: ${(deps as any).archivedMediaUrl}. If you need to save this product, use this exact URL.]`;
       }
-      aiResponse = await ai.analyzeImage(mediaBuffer, mediaMime, analysisCaption, {
+      aiResponse = await ai.chat(normalizedHistory, [
+          { text: analysisCaption },
+          { inlineData: { data: mediaBuffer.toString('base64'), mimeType: mediaMime } }
+      ], {
           model: tenantModelName,
           systemInstruction: systemPrompt,
           tools: finalTools

@@ -79,9 +79,10 @@ export async function chatWithAelixxr(input: ChatInput, systemPrompt: string): P
       ], { model: primaryModel, systemInstruction: systemPrompt, tools });
       result = { text: res.text, functionCalls: res.functionCalls, thinking: res.thinking };
     } else {
-      const res = await ai.analyzeImage(ctx.mediaBuffer, ctx.mediaMime, ctx.message || "Analyze this", {
-        model: primaryModel, systemInstruction: systemPrompt, tools
-      });
+      const res = await ai.chat(normalizedHistory, [
+        { text: ctx.message || "Analyze this image in the context of our conversation." },
+        { inlineData: { data: ctx.mediaBuffer.toString('base64'), mimeType: ctx.mediaMime } }
+      ], { model: primaryModel, systemInstruction: systemPrompt, tools });
       result = { text: res.text, functionCalls: res.functionCalls, thinking: res.thinking };
     }
   } else {
