@@ -77,6 +77,18 @@ export const ADMIN_TOOLS = [
     }
   },
   {
+    name: "reply_to_customer",
+    description: "Sends a direct WhatsApp message to a specific customer on behalf of the business. Use this when the Boss asks you to tell a customer something. (BOSS ONLY)",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        phone: { type: Type.STRING, description: "The customer's phone number." },
+        message: { type: Type.STRING, description: "The message to send." }
+      },
+      required: ["phone", "message"]
+    }
+  },
+  {
     name: "get_business_report",
     description: "Generates a summary of recent sales, activities, and AI recommendations. (BOSS ONLY)",
     parameters: {
@@ -157,6 +169,14 @@ export async function handleAdminTools(name: string, args: any, ctx: HandlerCont
       
       await whatsappService.sendText(from, `✅ Broadcast sent to ${broadcastCount} customers.`);
       return { status: 'success', count: broadcastCount };
+    }
+
+    case 'reply_to_customer': {
+      if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
+      if (!isAuth) return { status: 'error', code: 'AUTH_REQUIRED', message: 'This action is LOCKED. Oga, please type your 4-digit PIN to proceed.' };
+      
+      await whatsappService.sendText(args.phone, args.message);
+      return { status: 'success', message: `✅ Message delivered successfully to ${args.phone}.` };
     }
 
     case 'get_business_report': {

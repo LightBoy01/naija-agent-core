@@ -175,7 +175,7 @@ export class MonnifyProvider implements PaymentProvider {
    * Reserves a dedicated virtual account for a customer.
    * If an account already exists for this reference (e.g. phone number), it returns the existing one.
    */
-  async reserveAccount(reference: string, accountName: string, customerEmail: string, customerName: string): Promise<any | null> {
+  async reserveAccount(reference: string, accountName: string, customerEmail: string, customerName: string, bvn?: string, nin?: string): Promise<any | null> {
     try {
       const contractCode = this.contractCode;
       if (!contractCode) {
@@ -183,9 +183,13 @@ export class MonnifyProvider implements PaymentProvider {
         return null;
       }
 
+      if (!bvn && !nin) {
+        console.warn('⚠️ Monnify V2 reserveAccount requires either a BVN or NIN for KYC compliance. Proceeding without them but it will likely fail in live mode.');
+      }
+
       const token = await this.getAccessToken();
 
-      const payload = {
+      const payload: any = {
         accountReference: reference, // Use phone number or unique user ID
         accountName: accountName,
         currencyCode: 'NGN',
@@ -194,6 +198,9 @@ export class MonnifyProvider implements PaymentProvider {
         customerName: customerName,
         getAllAvailableBanks: true
       };
+      
+      if (bvn) payload.bvn = bvn;
+      if (nin) payload.nin = nin;
 
       const response = await fetch(`${this.baseUrl}/api/v2/bank-transfer/reserved-accounts`, {
         method: 'POST',

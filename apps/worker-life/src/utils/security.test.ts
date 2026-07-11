@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 import { redactPII, redactToolArguments } from './security.js';
 
 describe('Security Redaction', () => {

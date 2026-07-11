@@ -1,6 +1,7 @@
 import { getDb } from './db.js';
-import { organizations, systemLogs, networkMetadata } from './schema.js';
+import { organizations, systemLogs, networkMetadata, transactions, users, referrals } from './schema.js';
 import { eq, sql, and } from 'drizzle-orm';
+import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 
 export async function createTenant(data: {
@@ -105,32 +106,7 @@ export async function registerTrialInterest(data: {
   });
 }
 
-export async function topupTenant(tenantId: string, amount: number, reference: string) {
-  const db = getDb();
-  await db.transaction(async (tx) => {
-    await tx.update(organizations)
-      .set({ 
-        balanceKobo: sql`${organizations.balanceKobo} + ${amount}`,
-        lifetimeDepositsKobo: sql`${organizations.lifetimeDepositsKobo} + ${amount}`
-      })
-      .where(eq(organizations.id, tenantId));
-    
-    await tx.update(networkMetadata)
-      .set({ totalVaultKobo: sql`${networkMetadata.totalVaultKobo} + ${amount}` })
-      .where(eq(networkMetadata.key, 'global'));
 
-    const now = new Date();
-    const activeRefs = await tx.select().from(referrals).where(
-      sql`${referrals.referredOrgId} = ${tenantId} AND ${referrals.status} = 'active' AND ${referrals.expiresAt} > ${now}`
-    );
-    if (activeRefs.length > 0) {
-      const commission = Math.floor(amount * 0.30);
-      await tx.update(referrals)
-        .set({ commissionEarnedKobo: sql`${referrals.commissionEarnedKobo} + ${commission}` })
-        .where(eq(referrals.id, activeRefs[0].id));
-    }
-  });
-}
 
 export async function getActiveOrganizations() {
   const db = getDb();
@@ -337,7 +313,6 @@ export async function findOrgByAdminPhone(phone: string) {
 }
 
 // Transaction Logic
-import { transactions } from './schema.js';
 
 export async function findPendingTransaction(orgId: string, reference: string) {
   const db = getDb();
@@ -350,8 +325,9 @@ export async function confirmTransaction(orgId: string, reference: string, amoun
   await db.update(transactions)
     .set({ status: 'success' })
     .where(sql`${transactions.orgId} = ${orgId} AND ${transactions.reference} = ${reference}`);
-  // Also topup the org balance based on the payment
-  await topupTenant(orgId, amountPaidKobo, reference);
+  
+  const { topupOrg } = await import('./db.js');
+  await topupOrg(orgId, amountPaidKobo / 100, reference);
 }
 
 export async function getOrganizationsBySector(sector: string, capability?: string) {
@@ -368,8 +344,6 @@ export async function getOrganizationsBySector(sector: string, capability?: stri
 }
 
 // --- Referral Logic ---
-import { referrals } from './schema.js';
-import crypto from 'crypto';
 
 import { parseAndFormatPhone } from '@naija-agent/types';
 
@@ -391,6 +365,17 @@ export async function isRegisteredPartner(phone: string): Promise<boolean> {
 export async function createReferral(referrerPhone: string, referredOrgId: string) {
   const db = getDb();
   const normalized = parseAndFormatPhone(referrerPhone) || referrerPhone;
+  
+  // Self-Referral Block (Red Team Mitigation)
+  const org = await db.select().from(organizations).where(eq(organizations.id, referredOrgId));
+  if (org.length > 0) {
+    const adminPhone = (org[0].config as any)?.adminPhone;
+    if (adminPhone && (parseAndFormatPhone(adminPhone) || adminPhone) === normalized) {
+      console.warn(`[FRAUD GUARD] Blocked self-referral attempt. Admin ${normalized} tried to refer their own org ${referredOrgId}`);
+      return; // Silently fail to prevent wash trading
+    }
+  }
+
   const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // 1 year from now
   await db.insert(referrals).values({
     id: `ref_${crypto.randomBytes(8).toString('hex')}`,
@@ -413,43 +398,112 @@ export async function getPartnerStats(referrerPhone: string) {
   const now = new Date();
 
   for (const ref of partnerReferrals) {
-    totalEarnedKobo += ref.commissionEarnedKobo || 0;
     if (ref.status === 'active' && ref.expiresAt && new Date(ref.expiresAt) > now) {
       activeCount++;
+    }
+    totalEarnedKobo += ref.commissionEarnedKobo;
+  }
+
+  // Calculate cleared commissions (older than 7 days)
+  const clearedThreshold = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const pendingCommissions = await db.select().from(transactions).where(
+    sql`${transactions.userId} = ${referrerPhone} AND ${transactions.type} = 'commission_pending' AND ${transactions.status} = 'pending'`
+  );
+  
+  let totalClearedKobo = 0;
+  let totalPendingKobo = 0;
+  for (const tx of pendingCommissions) {
+    if (new Date(tx.createdAt) < clearedThreshold) {
+      totalClearedKobo += Math.round(parseFloat(tx.amount as unknown as string) * 100);
+    } else {
+      totalPendingKobo += Math.round(parseFloat(tx.amount as unknown as string) * 100);
     }
   }
 
   return {
     totalReferrals: partnerReferrals.length,
     activeReferrals: activeCount,
-    totalEarnedKobo
+    totalEarnedKobo,
+    totalClearedKobo,
+    totalPendingKobo
   };
 }
 
-export async function processMatureReferrals() {
+export async function settleMatureReferrals() {
   const db = getDb();
   const now = new Date();
-  
+
   const matureRefs = await db.select()
     .from(referrals)
     .where(
       sql`${referrals.expiresAt} <= ${now} AND ${referrals.status} = 'active' AND ${referrals.commissionEarnedKobo} > 0`
     );
-  
+
   for (const ref of matureRefs) {
     await db.update(referrals)
       .set({ status: 'expired' })
       .where(eq(referrals.id, ref.id));
   }
-  
+
   return matureRefs;
 }
+
+export async function claimCommissions(partnerPhone: string) {
+  const db = getDb();
+  const clearedThreshold = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  
+  return await db.transaction(async (tx) => {
+    // 1. Find all cleared pending commissions for this partner
+    const pendingCommissions = await tx.select().from(transactions).where(
+      sql`${transactions.userId} = ${partnerPhone} AND ${transactions.type} = 'commission_pending' AND ${transactions.status} = 'pending' AND ${transactions.createdAt} < ${clearedThreshold}`
+    );
+    
+    if (pendingCommissions.length === 0) {
+      return { success: false, message: 'No cleared commissions available to claim.', amountClaimed: 0 };
+    }
+    
+    // 2. Sum them up and mark them as cleared
+    let totalToClaimKobo = 0;
+    const txIdsToUpdate = [];
+    
+    for (const commissionTx of pendingCommissions) {
+      const amountKobo = Math.round(parseFloat(commissionTx.amount as unknown as string) * 100);
+      totalToClaimKobo += amountKobo;
+      txIdsToUpdate.push(commissionTx.id);
+    }
+    
+    // Mark old records as cleared
+    for (const id of txIdsToUpdate) {
+       await tx.update(transactions)
+         .set({ status: 'success', type: 'commission_cleared' })
+         .where(eq(transactions.id, id));
+    }
+    
+    // 3. Add to Vault Balance
+    await tx.update(users)
+      .set({ vaultBalanceKobo: sql`${users.vaultBalanceKobo} + ${totalToClaimKobo}` })
+      .where(eq(users.phone, partnerPhone));
+      
+    // 4. Record the sweeping payout transaction
+    await tx.insert(transactions).values({
+      id: `payout_${crypto.randomUUID()}`,
+      userId: partnerPhone,
+      type: 'commission_payout',
+      amount: (totalToClaimKobo / 100).toFixed(2),
+      currency: 'NGN',
+      status: 'success',
+      reference: `sweep_${crypto.randomUUID()}`
+    });
+    
+    return { success: true, message: `Successfully claimed ${totalToClaimKobo / 100} NGN to vault.`, amountClaimed: totalToClaimKobo };
+  });
+}
+
 
 export async function insertBetaFeedback(orgId: string, userPhone: string, content: string) {
   const db = getDb();
   // Ensure we have betaFeedback imported from schema
   const { betaFeedback } = await import('./schema.js');
-  const crypto = await import('crypto');
   
   await db.insert(betaFeedback).values({
     id: `bf_${crypto.randomBytes(8).toString('hex')}`,

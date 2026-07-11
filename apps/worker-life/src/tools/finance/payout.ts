@@ -71,11 +71,11 @@ export async function executePayoutTool(name: string, args: Record<string, any>,
         const withdrawAmountKobo = withdrawAmountNaira * 100;
         const withdrawContext = await lifeMemory.getContext(args.userId);
         if (!withdrawContext.pin) {
-            await setUserPin(args.userId, args.pin);
-            logger.info({ userId: args.userId }, '🔐 User set their initial PIN during withdrawal');
-        } else {
-            const isPinValid = await verifyUserPin(args.userId, args.pin);
-            if (!isPinValid) {
+            return { error: 'Oga, you never set your Vault PIN. Abeg use the set_vault_pin tool to set your PIN first before you fit withdraw money.' };
+        }
+        
+        const isPinValid = await verifyUserPin(args.userId, args.pin);
+        if (!isPinValid) {
                 const errorMsg = await handlePinFailure(args.userId, withdrawContext);
                 await auditService.logVaultAction({
                     userId: args.userId,
@@ -91,7 +91,6 @@ export async function executePayoutTool(name: string, args: Record<string, any>,
             if ((withdrawContext.pinAttempts ?? 0) > 0) {
                 await lifeMemory.updateContext(args.userId, { pinAttempts: 0 });
             }
-        }
 
         const auditLogIdW = await auditService.logVaultAction({
             userId: args.userId,
@@ -134,8 +133,15 @@ export async function executePayoutTool(name: string, args: Record<string, any>,
             }
         } catch (e: any) {
             logger.error({ error: e.message, userId: args.userId }, 'Failed withdraw_vault_funds');
-            if (auditLogIdW) await auditService.updateLogStatus(auditLogIdW, 'failed', { error: e.message });
-            return { error: "I encountered a serious error trying to process your withdrawal. Please contact support." };
+            if (auditLogIdW) await auditService.updateLogStatus(auditLogIdW, 'failed', { error: 'API Error: ' + e.message });
+            
+            // If the circuit breaker is open, the request never reached Monnify. Safe to refund.
+            if (e.message.includes('Circuit')) {
+                await lifeMemory.addVaultBalance(args.userId, totalToDeductKobo, 'rollback_' + Date.now(), 'refund');
+                return { error: 'The bank network is currently down. I have refunded your ₦' + (totalToDeductKobo / 100) + ' back to your Vault. Please try again later.' };
+            }
+            
+            return { error: "I encountered a serious network error trying to process your withdrawal. Your payout is pending manual review. Please contact support." };
         }
 
       default:

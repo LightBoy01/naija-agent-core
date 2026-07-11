@@ -90,7 +90,6 @@ import {
   deleteProduct, 
   searchProducts 
 } from '@naija-agent/database';
-import { FieldValue } from 'firebase-admin/firestore';
 
 export async function handleInventoryTools(name: string, args: any, ctx: HandlerContext): Promise<any> {
   const { orgId, isVisionContext, from, whatsappService } = ctx;

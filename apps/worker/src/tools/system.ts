@@ -212,7 +212,6 @@ export const SYSTEM_TOOLS = [
 
 import { 
   createTenant, 
-  topupTenant, 
   getActiveOrganizations, 
   logSystemEvent, 
   getOrgStats, 
@@ -335,7 +334,8 @@ export async function handleSystemTools(name: string, args: any, ctx: HandlerCon
 
     case 'topup_tenant':
       if (!isAdmin) return { status: 'error', code: 'UNAUTHORIZED' };
-      await topupTenant(args.tenantId, args.amount, args.reference);
+      const { topupOrg: topupOrgSystem } = await import('@naija-agent/database');
+      await topupOrgSystem(args.tenantId, args.amount, args.reference);
       return { status: 'success', message: `Tenant ${args.tenantId} topped up by ${args.amount}.` };
 
     case 'broadcast_to_bosses': {

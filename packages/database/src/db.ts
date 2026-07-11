@@ -82,31 +82,6 @@ export async function deductOrgBalance(orgId: string, amountKobo: number): Promi
       await tx.update(organizations)
         .set({ balanceKobo: newBalance })
         .where(eq(organizations.id, orgId));
-
-      // --- 30% RevShare Logic ---
-      const now = new Date();
-      const activeReferrals = await tx.select()
-        .from(referrals)
-        .where(
-          sql`${referrals.referredOrgId} = ${orgId} AND ${referrals.status} = 'active' AND ${referrals.expiresAt} > ${now}`
-        );
-
-      if (activeReferrals.length > 0) {
-        const ref = activeReferrals[0];
-        const revShareKobo = Math.floor(amountKobo * 0.3);
-
-        if (revShareKobo > 0) {
-          // Increment the referral's tracked earnings
-          await tx.update(referrals)
-            .set({ commissionEarnedKobo: sql`${referrals.commissionEarnedKobo} + ${revShareKobo}` })
-            .where(eq(referrals.id, ref.id));
-            
-          // Add to partner's Vault (if they exist)
-          await tx.update(users)
-            .set({ vaultBalanceKobo: sql`${users.vaultBalanceKobo} + ${revShareKobo}` })
-            .where(eq(users.phone, ref.referrerPhone));
-        }
-      }
     });
     return newBalance;
   } catch (e) {
@@ -154,6 +129,38 @@ export async function topupOrg(orgId: string, amountNaira: number, reference: st
         status: 'success',
         reference: reference
       });
+
+      // 5. RevShare Logic (30% on Topup)
+      const now = new Date();
+      const activeReferrals = await tx.select()
+        .from(referrals)
+        .where(
+          sql`${referrals.referredOrgId} = ${orgId} AND ${referrals.status} = 'active' AND ${referrals.expiresAt} > ${now}`
+        );
+
+      if (activeReferrals.length > 0) {
+        const activeRef = activeReferrals[0];
+        const commissionKobo = Math.floor(amountKobo * 0.30);
+        
+        if (commissionKobo > 0) {
+          // Accrue on the referral
+          await tx.update(referrals)
+            .set({ commissionEarnedKobo: sql`${referrals.commissionEarnedKobo} + ${commissionKobo}` })
+            .where(eq(referrals.id, activeRef.id));
+            
+          // Escrow the commission in the transactions ledger (7-day hold will apply before claim)
+          await tx.insert(transactions).values({
+            id: `com_acc_${randomUUID()}`,
+            userId: activeRef.referrerPhone,
+            orgId: orgId,
+            type: 'commission_pending',
+            amount: (commissionKobo / 100).toFixed(2),
+            currency: 'NGN',
+            status: 'pending',
+            reference: `com_${reference}`
+          });
+        }
+      }
     });
 
     return { newBalance: newBalance! };

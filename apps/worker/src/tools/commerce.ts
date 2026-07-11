@@ -53,6 +53,18 @@ export const COMMERCE_TOOLS = [
       },
       required: ["rating", "comment"]
     }
+  },
+  {
+    name: "request_human_support",
+    description: "Escalate the conversation to a human support agent. Use this when the user is frustrated, asks for a human, or encounters a critical error.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        reason: { type: Type.STRING, description: "The reason for requesting human support." },
+        urgency: { type: Type.STRING, format: "enum", enum: ["low", "medium", "high", "critical"], description: "Urgency of the request." }
+      },
+      required: ["reason", "urgency"]
+    }
   }
 ];
 
@@ -65,7 +77,6 @@ import {
   getStaff, 
   checkTransaction, 
   logTransaction, 
-  topupTenant, 
   finalizeSale, 
   logPendingTransaction, 
   logSystemEvent, 
@@ -73,7 +84,7 @@ import {
   removeFromCart, 
   bookSlot 
 } from '@naija-agent/firebase';
-import { syncCartState, getDb, fraudRegistry, eq, sql, and } from '@naija-agent/database';
+import { syncCartState, getDb, fraudRegistry, eq, sql, and, topupOrg } from '@naija-agent/database';
 import crypto from 'crypto';
 import { formatCurrency } from '../utils/currency.js';
 
@@ -295,7 +306,7 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
           });
 
           if (args.purpose === 'refill' && isAdmin) {
-              const refillResult = await topupTenant(orgId, args.amount, args.reference);
+              const refillResult = await topupOrg(orgId, args.amount, args.reference);
               if (refillResult) {
                 const newBalanceFormatted = formatCurrency(refillResult.newBalance / 100, currency.locale, currency.code);
                 return { 
@@ -545,6 +556,26 @@ export async function handleCommerceTools(name: string, args: any, ctx: HandlerC
         : "Thank you for the feedback. We will use this to improve our service! 🙏";
         
       return { status: 'success', message: responseMsg };
+    }
+
+    case 'request_human_support': {
+      logger.info({ reason: args.reason, urgency: args.urgency }, '🚨 Escalating to human support');
+      const alertMsg = `🆘 *CUSTOMER SUPPORT ESCALATION: ${args.urgency.toUpperCase()}*\n\n*Customer:* ${from}\n*Reason:* ${args.reason}\n\nOga, this customer needs human help! Please reply to them via the Web Dashboard or WhatsApp.`;
+      
+      try {
+        if (orgConfig?.adminPhone) {
+          await whatsappService.sendText(orgConfig.adminPhone, alertMsg);
+        } else if (orgConfig?.commandCenterGroupId) {
+          await whatsappService.sendText(orgConfig.commandCenterGroupId, alertMsg);
+        }
+      } catch (e: any) {
+        logger.error({ error: e.message }, 'Failed to send escalation to admin');
+      }
+      
+      return {
+          status: 'Escalated',
+          message: 'I have notified my Boss about your issue. They will review it and reach out to you shortly!'
+      };
     }
 
     default:

@@ -59,6 +59,18 @@ export const SYSTEM_TOOLS = [
         },
         required: ['sentiment', 'feedbackType']
       }
+    },
+    {
+      name: 'request_human_support',
+      description: 'Escalate the conversation to a human support agent. Use this when the user is frustrated, asks for a human, or encounters a critical error (like a failed payout or locked PIN).',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          reason: { type: Type.STRING, description: 'The reason for requesting human support.' },
+          urgency: { type: Type.STRING, enum: ['low', 'medium', 'high', 'critical'], format: "enum", description: 'Urgency of the request.' }
+        },
+        required: ['reason', 'urgency']
+      }
     }
 ];
 
@@ -225,6 +237,25 @@ export async function executeSystemTool(name: string, args: Record<string, any>,
 
           await lifeMemory.updateContext(userId, updates);
           return { status: 'success', message: 'Oga, I don carry your feedback go store. I go adjust for you next time!' };
+
+      case 'request_human_support': {
+          logger.info({ reason: args.reason, urgency: args.urgency }, '🚨 Escalating to human support');
+          const uid = args.userId;
+          const masterPhone = process.env.MASTER_ADMIN_PHONE || SystemConfig.CONTACTS.MASTER_ADMIN_PHONE;
+          
+          const alertMsg = `🆘 *SUPPORT ESCALATION: ${args.urgency.toUpperCase()}*\n\n*User:* ${uid}\n*Reason:* ${args.reason}\n\nOga, this user needs human help. Please reply to them via the Sovereign Dashboard or WhatsApp!`;
+          
+          try {
+             await whatsappService.sendText(masterPhone, alertMsg);
+          } catch (e: any) {
+             logger.error({ error: e.message }, 'Failed to send escalation to Boss');
+          }
+          
+          return {
+              status: 'Escalated',
+              message: 'I have notified the human support team. They will review your issue and reach out to you shortly!'
+          };
+      }
 
       default:
         throw new Error('Unknown System tool: ' + name);

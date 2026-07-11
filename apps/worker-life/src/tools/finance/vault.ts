@@ -39,6 +39,17 @@ export const VAULT_TOOL_DEFINITIONS = [
         },
         required: ['action']
       }
+    },
+    {
+      name: 'set_vault_pin',
+      description: 'Sets or updates the user\'s 4-digit Vault PIN. Call this when a user asks to set their PIN for the first time.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          pin: { type: Type.STRING, description: 'The new 4-digit PIN the user wants to set.' }
+        },
+        required: ['pin']
+      }
     }
 ];
 
@@ -53,11 +64,11 @@ export async function executeVaultTool(name: string, args: Record<string, any>, 
         const amountKobo = amountNairaInput * 100;
         const userContext = await lifeMemory.getContext(args.userId);
         if (!userContext.pin) {
-            await setUserPin(args.userId, args.pin);
-            logger.info({ userId: args.userId }, '🔐 User set their initial PIN');
-        } else {
-            const isPinValid = await verifyUserPin(args.userId, args.pin);
-            if (!isPinValid) {
+            return { error: "Oga, you never set your Vault PIN. Abeg use the set_vault_pin tool to set your PIN first before you fit convert energy." };
+        }
+        
+        const isPinValid = await verifyUserPin(args.userId, args.pin);
+        if (!isPinValid) {
                 const errorMsg = await handlePinFailure(args.userId, userContext);
                 await auditService.logVaultAction({
                     userId: args.userId,
@@ -73,7 +84,6 @@ export async function executeVaultTool(name: string, args: Record<string, any>, 
             if ((userContext.pinAttempts ?? 0) > 0) {
                 await lifeMemory.updateContext(args.userId, { pinAttempts: 0 });
             }
-        }
 
         const energyToAdd = Math.floor(amountNairaInput / 10);
         
@@ -140,6 +150,29 @@ export async function executeVaultTool(name: string, args: Record<string, any>, 
         } catch (error: any) {
           logger.error({ error: error.message, userId: args.userId }, 'Failed to fetch financial statement');
           return { error: "I had trouble checking the ledger. Please try again in a moment." };
+        }
+
+      case 'set_vault_pin':
+        try {
+            const contextPin = await lifeMemory.getContext(args.userId);
+            if (contextPin.pin) {
+                 return { error: 'Oga, you already have a Vault PIN set. Contact support if you want to reset it.' };
+            }
+            
+            if (!/^\d{4}$/.test(args.pin)) {
+                return { error: 'PIN must be exactly 4 digits.' };
+            }
+
+            await setUserPin(args.userId, args.pin);
+            logger.info({ userId: args.userId }, '🔐 User explicitly set their initial PIN');
+            return {
+                status: 'success',
+                message: 'Your Vault PIN has been successfully set! You can now use it to make withdrawals and conversions.',
+                instructions: 'Inform the user their PIN is set securely and they can now proceed with their financial transactions.'
+            };
+        } catch (e: any) {
+            logger.error({ error: e.message, userId: args.userId }, 'Failed to set Vault PIN');
+            return { error: 'Failed to set your Vault PIN. Please try again.' };
         }
 
       default:

@@ -50,12 +50,7 @@ export const CONTENT_TOOLS = [
   }
 ];
 
-import { 
-  saveKnowledge, 
-  deleteKnowledge, 
-  queryEntity 
-} from '@naija-agent/firebase';
-import { deductOrgBalance } from '@naija-agent/database';
+import { saveKnowledge, deleteKnowledge, deductOrgBalance } from '@naija-agent/database';
 import { formatCurrency } from '../utils/currency.js';
 import { SystemConfig } from '@naija-agent/types';
 
@@ -71,56 +66,7 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
       await deleteKnowledge(orgId, args.key);
       return { status: 'success', code: 'DELETED', key: args.key };
 
-    case 'search_documents': {
-      try {
-        const { GoogleGenAI } = await import('@google/genai');
-        const genAI = new GoogleGenAI({
-           apiKey: process.env.GEMINI_API_KEY || '',
-           httpOptions: {
-              baseUrl: 'https://aiplatform.googleapis.com',
-              apiVersion: 'v1/publishers/google'
-           }
-        });
 
-        // 1. Semantic Keyword Extraction
-        const keywordPrompt = `
-        Convert this user query into 5 specific search keywords for a document search.
-        Query: "${args.query}"
-        Output format: JSON Array of strings. Example: ["receipt", "school", "fees", "january", "2024"]
-        `;
-        
-        const result = await genAI.models.generateContent({
-           model: SystemConfig.MODELS.ZYNUX_FALLBACK,
-           contents: keywordPrompt
-        });
-        const text = result.text || "";
-        const jsonMatch = text?.match(/\[.*\]/);
-        
-        if (!jsonMatch) return { status: 'error', message: 'I could not understand the search query.' };
-        const keywords = JSON.parse(jsonMatch[0]);
-
-        // 2. Firestore Query
-        const docs = await queryEntity(orgId, 'vault', [['keywords', 'array-contains-any', keywords]]);
-        
-        if (docs.length === 0) {
-           return { status: 'success', message: `I searched for *${keywords.join(', ')}* but found no documents.` };
-        }
-
-        // 3. Format Results
-        const results = docs.map((d: any) => 
-           `- *${d.summary}* (${d.date || 'No Date'}) [${d.category}]`
-        ).join('\n');
-
-        return { 
-           status: 'success', 
-           message: `🔎 Found ${docs.length} documents for "${args.query}":\n\n${results}` 
-        };
-
-      } catch (e: any) {
-        logger.error({ error: e.message }, 'Document Search Failed');
-        return { status: 'error', message: 'The document search engine is temporarily down.' };
-      }
-    }
 
     case 'web_search': {
       try {

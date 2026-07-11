@@ -15,3 +15,30 @@ export async function getAllKnowledge(orgId: string): Promise<Record<string, str
   }
   return result;
 }
+
+export async function saveKnowledge(orgId: string, key: string, content: string, imageUrl?: string): Promise<void> {
+  const db = getDb();
+  const slug = `${orgId}_${key.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  
+  await db.insert(knowledge).values({
+    slug,
+    orgId,
+    key,
+    content,
+    imageUrl: imageUrl || null,
+    updatedAt: new Date()
+  }).onConflictDoUpdate({
+    target: knowledge.slug,
+    set: {
+      content,
+      imageUrl: imageUrl || null,
+      updatedAt: new Date()
+    }
+  });
+}
+
+export async function deleteKnowledge(orgId: string, key: string): Promise<void> {
+  const db = getDb();
+  const slug = `${orgId}_${key.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  await db.delete(knowledge).where(eq(knowledge.slug, slug));
+}
