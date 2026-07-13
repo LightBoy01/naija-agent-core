@@ -16,7 +16,7 @@ export interface Transaction {
 export interface PaymentProvider {
   verify(reference: string, amount: number): Promise<Transaction | null>;
   createPaymentLink(orgId: string, email: string, amountNaira: number): Promise<string | null>;
-  payout?(args: { amount: number, bankCode: string, accountNumber: string, reference: string, narration?: string }): Promise<{ success: boolean; message: string; reference?: string }>;
+  payout?(args: { amount: number, bankCode: string, accountNumber: string, reference: string, narration?: string, accountName?: string }): Promise<{ success: boolean; message: string; reference?: string }>;
   refund?(transactionReference: string, amountNaira?: number, reason?: string): Promise<{ success: boolean; message: string; refundReference?: string }>;
 }
 

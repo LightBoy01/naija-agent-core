@@ -135,10 +135,10 @@ export class PocketFiProvider implements PaymentProvider {
     }
   }
 
-  async payout(args: { amount: number, bankCode: string, accountNumber: string, reference?: string, accountName: string }): Promise<{ success: boolean; message: string; reference?: string }> {
+  async payout(args: { amount: number, bankCode: string, accountNumber: string, reference?: string, accountName?: string }): Promise<{ success: boolean; message: string; reference?: string }> {
     try {
       const response = await this.api.post('/payout/send', {
-        account_name: args.accountName,
+        account_name: args.accountName || 'PocketFi User',
         account_number: args.accountNumber,
         bank_code: args.bankCode,
         amount: args.amount.toString()
