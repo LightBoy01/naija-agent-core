@@ -1,5 +1,6 @@
 import { PaystackProvider } from './paystack';
 import { MonnifyProvider } from './monnify';
+import { PocketFiProvider } from './pocketfi';
 
 export interface Transaction {
   reference: string;
@@ -47,9 +48,15 @@ export class MockProvider implements PaymentProvider {
   }
 }
 
-export { PaystackProvider, MonnifyProvider };
+export { PaystackProvider, MonnifyProvider, PocketFiProvider };
 
-export function getProvider(type: 'paystack' | 'monnify' | 'mock', secretKey?: string, redirectUrl?: string): PaymentProvider {
+export function getProvider(
+  type: 'paystack' | 'monnify' | 'pocketfi' | 'mock', 
+  secretKey?: string, 
+  redirectUrl?: string, 
+  businessId?: string, 
+  isLive: boolean = false
+): PaymentProvider {
   if (type === 'paystack') {
     if (!secretKey) throw new Error('Paystack Secret Key required');
     return new PaystackProvider(secretKey);
@@ -57,6 +64,10 @@ export function getProvider(type: 'paystack' | 'monnify' | 'mock', secretKey?: s
   if (type === 'monnify') {
     if (!secretKey) throw new Error('Monnify Secret Key required (Format: API_KEY:SECRET_KEY)');
     return new MonnifyProvider(secretKey, redirectUrl);
+  }
+  if (type === 'pocketfi') {
+    if (!secretKey || !businessId) throw new Error('PocketFi Secret Key and Business ID required');
+    return new PocketFiProvider(secretKey, businessId, isLive, redirectUrl);
   }
   return new MockProvider();
 }

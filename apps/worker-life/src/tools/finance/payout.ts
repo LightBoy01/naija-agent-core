@@ -3,7 +3,7 @@ import { logger } from '../../utils/logger.js';
 import { lifeMemory } from '../../services/lifeMemory.js';
 import { verifyUserPin, setUserPin } from '@naija-agent/firebase';
 import { auditService } from '../../services/auditService.js';
-import { monnify } from '../../services/monnifyClient.js';
+import { pocketfi } from '../../services/pocketfiClient.js';
 import { monnifyBreaker } from '../../services/circuitBreaker.js';
 import { handlePinFailure } from './vault.js';
 
@@ -29,9 +29,10 @@ export const PAYOUT_TOOL_DEFINITIONS = [
           amountNaira: { type: Type.NUMBER, description: 'Amount to withdraw.' },
           bankCode: { type: Type.STRING, description: 'The bank code resolved from get_banks or resolve_bank_account.' },
           accountNumber: { type: Type.STRING, description: 'The 10-digit account number.' },
+          accountName: { type: Type.STRING, description: 'The confirmed name of the account holder.' },
           pin: { type: Type.STRING, description: 'The user\'s 4-digit PIN.' }
         },
-        required: ['amountNaira', 'bankCode', 'accountNumber', 'pin']
+        required: ['amountNaira', 'bankCode', 'accountNumber', 'accountName', 'pin']
       }
     }
 ];
@@ -39,23 +40,23 @@ export const PAYOUT_TOOL_DEFINITIONS = [
 export async function executePayoutTool(name: string, args: Record<string, any>, jobId?: string): Promise<any> {
     switch (name) {
       case 'resolve_bank_account':
-        if (!monnify) return { error: "Monnify is not configured for bank resolution." };
+        if (!pocketfi) return { error: "PocketFi is not configured for bank resolution." };
         try {
-            const banks = await monnify.getBanks();
+            const banks = await pocketfi.getBanks();
             const userBank = args.bankName.toLowerCase();
             const matchedBank = banks.find(b => b.name.toLowerCase().includes(userBank) || userBank.includes(b.name.toLowerCase()));
 
             if (!matchedBank) return { error: 'I no fit find any bank wey get name like "' + args.bankName + '". Abeg check the name well.' };
 
-            const accountName = await monnify.resolveAccount(matchedBank.code, args.accountNumber);
-            if (!accountName) return { error: 'I search for account ' + args.accountNumber + ' for ' + matchedBank.name + ', but I no see anything. Abeg verify the account number.' };
+            const resolveRes = await pocketfi.verifyBankAccount(args.accountNumber, matchedBank.code);
+            if (!resolveRes.success) return { error: 'I search for account ' + args.accountNumber + ' for ' + matchedBank.name + ', but I no see anything. Abeg verify the account number.' };
 
             return {
                 status: 'success',
-                accountName,
+                accountName: resolveRes.accountName,
                 bankName: matchedBank.name,
                 bankCode: matchedBank.code,
-                instructions: 'Tell the user that you\'ve confirmed the account belongs to **' + accountName + '** at **' + matchedBank.name + '**. Ask them to provide their PIN to authorize the withdrawal.'
+                instructions: 'Tell the user that you\'ve confirmed the account belongs to **' + resolveRes.accountName + '** at **' + matchedBank.name + '**. Ask them to provide their PIN to authorize the withdrawal.'
             };
         } catch (e: any) {
             logger.error({ error: e.message }, 'Failed resolve_bank_account');
@@ -63,7 +64,7 @@ export async function executePayoutTool(name: string, args: Record<string, any>,
         }
 
       case 'withdraw_vault_funds':
-        if (!monnify) return { error: "Monnify is not configured for withdrawals." };
+        if (!pocketfi) return { error: "PocketFi is not configured for withdrawals." };
 
         const withdrawAmountNaira = Number(args.amountNaira);
         if (isNaN(withdrawAmountNaira) || withdrawAmountNaira < 500) return { error: "Minimum withdrawal amount is ₦500." };
@@ -110,12 +111,12 @@ export async function executePayoutTool(name: string, args: Record<string, any>,
                 return { error: 'Oga, you no get enough money for your Vault for this ₦' + withdrawAmountNaira + ' withdrawal + ₦50 fee.' };
             }
 
-            const payoutRes = await monnifyBreaker.execute(() => monnify!.payout({
+            const payoutRes = await monnifyBreaker.execute(() => pocketfi!.payout({
                 amount: withdrawAmountNaira,
                 bankCode: args.bankCode,
                 accountNumber: args.accountNumber,
-                reference: 'withdraw_' + args.userId + '_' + Date.now(),
-                narration: 'Aelixxr Withdrawal: ' + args.userId
+                accountName: args.accountName,
+                reference: 'withdraw_' + args.userId + '_' + Date.now()
             }));
 
             if (payoutRes.success) {

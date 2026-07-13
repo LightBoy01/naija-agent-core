@@ -50,6 +50,29 @@ export const VAULT_TOOL_DEFINITIONS = [
         },
         required: ['pin']
       }
+    },
+    {
+      name: 'request_pin_reset',
+      description: 'Initiates a self-serve PIN reset by sending an OTP to the user\'s WhatsApp. Call this when the user forgets their PIN and wants to reset it.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          reason: { type: Type.STRING, description: 'Always pass "forgot_pin"' }
+        },
+        required: ['reason']
+      }
+    },
+    {
+      name: 'confirm_pin_reset',
+      description: 'Confirms a PIN reset by verifying the OTP sent to the user\'s WhatsApp and setting the new PIN.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          otp: { type: Type.STRING, description: 'The 6-digit OTP provided by the user.' },
+          newPin: { type: Type.STRING, description: 'The new 4-digit PIN the user wants to set.' }
+        },
+        required: ['otp', 'newPin']
+      }
     }
 ];
 
@@ -173,6 +196,57 @@ export async function executeVaultTool(name: string, args: Record<string, any>, 
         } catch (e: any) {
             logger.error({ error: e.message, userId: args.userId }, 'Failed to set Vault PIN');
             return { error: 'Failed to set your Vault PIN. Please try again.' };
+        }
+
+      case 'request_pin_reset':
+        try {
+            const { pocketfi } = await import('../../services/pocketfiClient.js');
+            if (!pocketfi) return { error: 'PocketFi is not configured. Cannot send OTP.' };
+            
+            const otp = Math.floor(100000 + Math.random() * 900000).toString();
+            const expiry = Date.now() + 10 * 60000; // 10 minutes
+            await lifeMemory.updateContext(args.userId, { resetOtp: otp, resetOtpExpiry: expiry });
+            
+            const res = await pocketfi.sendWhatsAppOTP(args.userId, otp);
+            if (res.success) {
+                return {
+                    status: 'success',
+                    message: 'OTP sent successfully via PocketFi.',
+                    instructions: 'Tell the user that an OTP has been sent to their WhatsApp. Ask them to provide the OTP along with their new 4-digit PIN to confirm the reset.'
+                };
+            } else {
+                return { error: 'Failed to send OTP: ' + res.message };
+            }
+        } catch (e: any) {
+            logger.error({ error: e.message, userId: args.userId }, 'Failed request_pin_reset');
+            return { error: 'I encountered an error trying to send the OTP. Please try again later.' };
+        }
+
+      case 'confirm_pin_reset':
+        try {
+            const context = await lifeMemory.getContext(args.userId);
+            if (!context.resetOtp || !context.resetOtpExpiry || Date.now() > context.resetOtpExpiry) {
+                return { error: 'Your OTP has expired or was not requested. Please request a new PIN reset.' };
+            }
+            if (context.resetOtp !== args.otp) {
+                return { error: 'The OTP you provided is incorrect. Please check and try again.' };
+            }
+            if (!/^\d{4}$/.test(args.newPin)) {
+                return { error: 'PIN must be exactly 4 digits.' };
+            }
+
+            await setUserPin(args.userId, args.newPin);
+            await lifeMemory.updateContext(args.userId, { resetOtp: null, resetOtpExpiry: null, pinAttempts: 0, pinLockUntil: null });
+            
+            logger.info({ userId: args.userId }, '🔐 User successfully reset their PIN via OTP');
+            return {
+                status: 'success',
+                message: 'Your Vault PIN has been successfully reset! You can now use it.',
+                instructions: 'Inform the user their new PIN is set securely and their Vault is fully accessible.'
+            };
+        } catch (e: any) {
+            logger.error({ error: e.message, userId: args.userId }, 'Failed confirm_pin_reset');
+            return { error: 'Failed to reset your Vault PIN. Please try again.' };
         }
 
       default:

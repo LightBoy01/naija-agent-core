@@ -1,7 +1,7 @@
 import { Type } from '@google/genai';
 import { logger } from '../../utils/logger.js';
 import { whatsappService } from '../../services/whatsapp.js';
-import { monnify } from '../../services/monnifyClient.js';
+import { pocketfi } from '../../services/pocketfiClient.js';
 import { auditService } from '../../services/auditService.js';
 import { lifeMemory } from '../../services/lifeMemory.js';
 import { SystemConfig } from '@naija-agent/types';
@@ -55,18 +55,22 @@ export async function executeRechargeTool(name: string, args: Record<string, any
         };
 
       case 'get_recharge_details':
-        if (monnify) {
-            const vaultRef = 'aelixxr_vault_' + args.userId;
-            const accName = 'Aelixxr Vault ' + args.userId.slice(-4);
-            const res = await monnify.reserveAccount(vaultRef, accName, 'aelixxr_' + args.userId + '@naijaagent.hq', 'User ' + args.userId);
+        if (pocketfi) {
+            // Frictionless Onboarding: 'saveheaven' doesn't require NIN/BVN
+            const res = await pocketfi.createVirtualAccount(
+                'aelixxr_' + args.userId + '@naijaagent.hq',
+                'Aelixxr',
+                'Vault ' + args.userId.slice(-4),
+                args.userId,
+                'saveheaven'
+            );
             
-            if (res && res.accounts && res.accounts.length > 0) {
-                const acc = res.accounts[0];
+            if (res && res.success) {
                 return {
                     status: 'success',
-                    accountNumber: acc.accountNumber,
-                    bankName: acc.bankName,
-                    accountName: acc.accountName,
+                    accountNumber: res.accountNumber,
+                    bankName: res.bankName,
+                    accountName: res.accountName,
                     instructions: 'Tell the user that this is their dedicated Aelixxr Vault Account. Any transfer to this account will update their Vault Balance automatically. They can then ask you to "convert vault to energy" or use it to pay bills.'
                 };
             }
@@ -129,8 +133,8 @@ export async function executeRechargeTool(name: string, args: Record<string, any
         if (reference.includes('HACK') || reference.includes('DEBUG') || reference.startsWith('TEST_')) {
              if (auditLogIdTopup) await auditService.updateLogStatus(auditLogIdTopup, 'failed', { error: 'Fraud/Test Attempt Detected' });
              return { error: "FRAUD ALERT: This transaction reference looks like a test attempt. I cannot process this." };
-        } else if (monnify) {
-             const tx = await monnify.verify(reference, amountPaidNairaInput > 0 ? amountPaidNairaInput : 0);
+        } else if (pocketfi) {
+             const tx = await pocketfi.verify(reference, amountPaidNairaInput > 0 ? amountPaidNairaInput : 0);
              if (tx && tx.status === 'success') {
                  verifiedAmountNaira = tx.amount;
              } else {

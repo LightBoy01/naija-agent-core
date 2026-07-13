@@ -316,7 +316,105 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
     return reply.status(200).send('OK');
   });
 
-  // 3c. Webhook Ingestion (WhatsApp)
+  // 3c. Webhook Ingestion (PocketFi)
+  fastify.post('/webhook/pocketfi', async (request, reply) => {
+    const signature = request.headers['http_pocketfi_signature'] as string;
+    const rawBody = (request as any).rawBody as string;
+    const secret = process.env.POCKETFI_SECRET_KEY;
+
+    if (!signature || !secret || !rawBody) {
+      return reply.status(400).send({ message: 'Missing signature, secret key, or body' });
+    }
+
+    const hashkey = crypto.createHmac('sha512', secret).update(rawBody).digest('hex');
+
+    const digest = Buffer.from(hashkey, 'utf8');
+    const checksum = Buffer.from(signature, 'utf8');
+    
+    // RED TEAM FIX: Constant-time comparison to prevent Timing Attacks
+    if (digest.length !== checksum.length || !crypto.timingSafeEqual(digest, checksum)) {
+      logger.warn('❌ Invalid PocketFi Webhook Signature!');
+      return reply.status(400).send({ message: 'Invalid signature' });
+    }
+
+    const payload = request.body as any;
+    const reference = payload?.transaction?.reference;
+    const amountPaid = payload?.order?.amount;
+
+    if (!reference || !amountPaid) {
+      return reply.status(400).send({ message: 'Invalid payload structure' });
+    }
+
+    logger.info({ amountPaid, reference }, '🏦 [POCKETFI] Webhook Received');
+
+    // 1. Check for Aelixxr Vault Deposit (Automated Virtual Account)
+    if (reference.startsWith('aelixxr_vault_')) {
+        const userPhone = reference.replace('aelixxr_vault_', '').split('_')[0];
+        logger.info({ phone: userPhone, amountPaid, reference }, '🏦 [POCKETFI] Automated Vault Deposit Detected');
+        
+        try {
+            // RED TEAM FIX: BullMQ job idempotency handled downstream in handleVaultDeposit
+            await lifeQueue.add('life-vault-deposit', {
+                userPhone,
+                amountPaid,
+                reference
+            }, { removeOnComplete: true, attempts: 5, backoff: { type: 'exponential', delay: 2000 } });
+            return reply.status(200).send({ message: 'success' });
+        } catch (err: any) {
+            if (err.message === 'DUPLICATE_REFERENCE') {
+               logger.info({ reference }, '⏭️ [POCKETFI] Duplicate vault deposit ignored.');
+               return reply.status(200).send({ message: 'success' });
+            } else {
+               logger.error({ reference, error: err.message }, '❌ PocketFi Vault deposit processing error');
+               return reply.status(500).send({ message: 'Internal Server Error' });
+            }
+        }
+    }
+
+    // 2. Otherwise handle standard Checkout Topups (e.g. refill_ORGID_1234)
+    let orgId: string | undefined = undefined;
+    if (reference.startsWith('refill_')) {
+       orgId = reference.split('_')[1];
+    }
+
+    if (!orgId) {
+      logger.warn({ reference }, '⚠️ Received PocketFi webhook without recognizable orgId in reference.');
+      return reply.status(200).send({ message: 'success' });
+    }
+
+    try {
+      const result = await topupOrgSql(orgId, amountPaid, reference);
+      if (result) {
+        logger.info({ orgId, amount: amountPaid, reference }, `✅ [POCKETFI] Processed top-up.`);
+        const org = await getOrgById(orgId);
+        
+        if ((org?.config as any)?.adminPhone) {
+          const currency = (org.config as any)?.currency || { code: 'NGN', symbol: '₦', locale: 'en-NG' };
+          const formattedAmount = formatCurrency(amountPaid, currency.locale, currency.code);
+          const formattedBalance = formatCurrency(result.newBalance / 100, currency.locale, currency.code);
+
+          const notificationMsg = `✅ *AI Credit Refill Successful (PocketFi)!*\n\nOga, your account has been credited with *${formattedAmount}*.\n\nYour new balance is *${formattedBalance}*.`;
+
+          const notificationJob: JobData = {
+            type: 'text',
+            orgId: 'system',
+            phoneId: org.whatsappPhoneId ?? '',
+            from: (org.config as any).adminPhone,
+            messageId: `BR-${Date.now()}`,
+            timestamp: Date.now(),
+            content: { text: notificationMsg }
+          };
+          await whatsappQueue.add('process-message', notificationJob, { removeOnComplete: true });
+        }
+      }
+    } catch (e: any) {
+      if (e.message !== 'DUPLICATE_REFERENCE') logger.error({ reference, error: e.message }, '❌ PocketFi processing error');
+    }
+
+    return reply.status(200).send({ message: 'success' });
+  });
+
+  // 3d. Webhook Ingestion (WhatsApp)
   fastify.post('/webhook', async (request, reply) => {
     logger.debug('📝 [DEBUG] Webhook Hit!');
     const signature = request.headers['x-hub-signature-256'] as string;

@@ -71,6 +71,18 @@ export const SYSTEM_TOOLS = [
         },
         required: ['reason', 'urgency']
       }
+    },
+    {
+      name: 'verify_user_kyc',
+      description: 'Verifies the user\'s identity using their NIN or BVN via PocketFi. Call this if the user wants to upgrade their Vault limits or requests a PalmPay account which strictly requires KYC.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          idType: { type: Type.STRING, enum: ['NIN', 'BVN'], description: 'The type of ID to verify.' },
+          idNumber: { type: Type.STRING, description: 'The 11-digit NIN or BVN.' }
+        },
+        required: ['idType', 'idNumber']
+      }
     }
 ];
 
@@ -255,6 +267,36 @@ export async function executeSystemTool(name: string, args: Record<string, any>,
               status: 'Escalated',
               message: 'I have notified the human support team. They will review your issue and reach out to you shortly!'
           };
+      }
+
+      case 'verify_user_kyc': {
+          const { idType, idNumber } = args;
+          const { pocketfi } = await import('../services/pocketfiClient.js');
+          if (!pocketfi) return { error: "PocketFi KYC is not configured." };
+          
+          logger.info({ idType, userId: args.userId }, '🔐 Verifying User KYC');
+          
+          let res;
+          if (idType === 'NIN') {
+             res = await pocketfi.verifyNIN(idNumber);
+          } else if (idType === 'BVN') {
+             res = await pocketfi.verifyBVN(idNumber);
+          } else {
+             return { error: 'Invalid ID Type. Must be NIN or BVN.' };
+          }
+
+          if (res.success) {
+             // Save KYC status in Life Memory Context
+             await lifeMemory.updateContext(args.userId, { kycStatus: 'verified', kycData: res.data });
+             return {
+                 status: 'success',
+                 message: 'Identity verification successful.',
+                 data: res.data,
+                 instructions: 'Inform the user that their identity has been successfully verified, and their Vault limits have been upgraded!'
+             };
+          } else {
+             return { error: 'Verification failed: ' + res.message };
+          }
       }
 
       default:
