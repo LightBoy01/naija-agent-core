@@ -159,6 +159,10 @@ export class UserService {
       const pending = pendingResult[0];
       if (pending) {
         await sqlDb.transaction(async (tx) => {
+          // 🛡️ SECURITY: Lock the referral row to prevent P2P double-spend race condition
+          const lockedRef = await tx.select().from(referrals).where(sql`${referrals.id} = ${pending.id}` as any).for('update');
+          if (lockedRef.length === 0 || lockedRef[0].status !== 'pending') return; // Already claimed by a concurrent process!
+
           await tx.update(referrals)
             .set({ status: 'rewarded', completedAt: new Date() })
             .where(sql`${referrals.id} = ${pending.id}` as any);

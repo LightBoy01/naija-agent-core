@@ -18,6 +18,7 @@ export class PocketFiProvider implements PaymentProvider {
 
     this.api = axios.create({
       baseURL,
+      timeout: 30000,
       headers: {
         Authorization: `Bearer ${this.secretKey}`,
         'Content-Type': 'application/json',

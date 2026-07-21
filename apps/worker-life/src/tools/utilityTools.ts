@@ -5,6 +5,9 @@ import { lifeMemory } from '../services/lifeMemory.js';
 import { monnify } from '../services/monnifyClient.js';
 import { monnifyBreaker } from '../services/circuitBreaker.js';
 import { auditService } from '../services/auditService.js';
+import { PeyflexProvider } from '@naija-agent/payments';
+
+const peyflex = new PeyflexProvider(process.env.PEYFLEX_API_TOKEN || '');
 
 const handlePinFailure = async (userId: string, context: any): Promise<string> => {
     const attempts = (context.pinAttempts || 0) + 1;
@@ -63,6 +66,27 @@ export const UTILITY_TOOLS = [
 export async function executeUtilityTool(name: string, args: Record<string, any>, jobId?: string): Promise<any> {
     switch (name) {
       case 'get_utility_products':
+        if (args.category === 'AIRTIME') {
+            return {
+                status: 'success',
+                billers: [
+                    { name: 'MTN Airtime', billerCode: 'PEYFLEX_AIRTIME_MTN' },
+                    { name: 'Airtel Airtime', billerCode: 'PEYFLEX_AIRTIME_AIRTEL' },
+                    { name: 'Glo Airtime', billerCode: 'PEYFLEX_AIRTIME_GLO' },
+                    { name: '9Mobile Airtime', billerCode: 'PEYFLEX_AIRTIME_9MOBILE' }
+                ]
+            };
+        }
+        if (args.category === 'DATA') {
+            return {
+                status: 'success',
+                billers: [
+                    { name: 'MTN Data', billerCode: 'PEYFLEX_DATA_MTN' },
+                    { name: 'Airtel Data', billerCode: 'PEYFLEX_DATA_AIRTEL' }
+                ]
+            };
+        }
+
         if (!monnify) return { error: "Monnify is not configured for utility vending." };
         try {
             if (args.billerCode) {
@@ -78,6 +102,15 @@ export async function executeUtilityTool(name: string, args: Record<string, any>
         }
 
       case 'validate_utility_customer':
+        if (args.productCode.startsWith('PEYFLEX_')) {
+            return { 
+                status: 'success', 
+                customerName: args.customerId, 
+                validationReference: 'direct_' + Date.now(),
+                instructions: 'Ask the user to confirm their PIN to process the top-up for ' + args.customerId + '.'
+            };
+        }
+
         if (!monnify) return { error: "Monnify is not configured for validation." };
         try {
             const res = await monnify.validateUtilityCustomer(args.productCode, args.customerId);
@@ -101,8 +134,11 @@ export async function executeUtilityTool(name: string, args: Record<string, any>
 
         const vendAmountNaira = Number(args.amountNaira);
         const vendAmountKobo = vendAmountNaira * 100;
-        const totalToDeductKobo = vendAmountKobo + 10000; // ₦100 convenience fee = 10000 Kobo
-
+        
+        // Zero-fee for Airtime/Data, 100 NGN fee for Electricity/TV
+        const isZeroFee = args.productCode.includes('AIRTIME') || args.productCode.includes('DATA');
+        const convenienceFeeKobo = isZeroFee ? 0 : 10000;
+        const totalToDeductKobo = vendAmountKobo + convenienceFeeKobo;
         const userContext = await lifeMemory.getContext(args.userId);
         if (!userContext.pin) {
             await setUserPin(args.userId, args.pin);
@@ -141,16 +177,32 @@ export async function executeUtilityTool(name: string, args: Record<string, any>
             const newBalanceKobo = await lifeMemory.deductVaultBalance(args.userId, totalToDeductKobo);
             if (newBalanceKobo === null) {
                 if (auditLogId) await auditService.updateLogStatus(auditLogId, 'failed', { error: 'Insufficient Vault Funds' });
-                return { error: 'Oga, you no get enough money for your Vault for this ₦' + vendAmountNaira + ' purchase + ₦100 fee.' };
+                const feeMsg = convenienceFeeKobo > 0 ? ` + ₦${convenienceFeeKobo / 100} fee` : '';
+                return { error: 'Oga, you no get enough money for your Vault for this ₦' + vendAmountNaira + ' purchase' + feeMsg + '.' };
             }
 
-            const vendRes = await monnifyBreaker.execute(() => monnify!.vendUtility({
-                productCode: args.productCode,
-                customerId: args.customerId,
-                amount: vendAmountNaira,
-                reference: 'vend_' + args.userId + '_' + Date.now(),
-                validationReference: args.validationReference
-            }));
+            let vendRes;
+            if (args.productCode.startsWith('PEYFLEX_')) {
+                // e.g. PEYFLEX_AIRTIME_MTN => split => ['', 'AIRTIME', 'MTN']
+                const parts = args.productCode.split('_');
+                const type = parts[1].toLowerCase() as 'airtime' | 'data';
+                const network = parts[2];
+                vendRes = await peyflex.purchaseAirtimeData(network, vendAmountNaira, type, args.customerId);
+                // Map peyflex response to match standard monnify response structure expected below
+                if (vendRes.success) {
+                    vendRes = { success: true, responseBody: { reference: vendRes.data?.reference || 'peyflex_' + Date.now() } };
+                } else {
+                    vendRes = { success: false, message: vendRes.message || 'Peyflex API error' };
+                }
+            } else {
+                vendRes = await monnifyBreaker.execute(() => monnify!.vendUtility({
+                    productCode: args.productCode,
+                    customerId: args.customerId,
+                    amount: vendAmountNaira,
+                    reference: 'vend_' + args.userId + '_' + Date.now(),
+                    validationReference: args.validationReference
+                }));
+            }
 
             if (vendRes.success) {
                 if (auditLogId) await auditService.updateLogStatus(auditLogId, 'success', { vendReference: vendRes.responseBody?.reference, newBalanceKobo });

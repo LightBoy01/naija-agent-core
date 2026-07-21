@@ -39,6 +39,10 @@ export class MonnifyProvider implements PaymentProvider {
     return expectedSignature === signature;
   }
 
+  private async fetchWithTimeout(url: string, options: any = {}) {
+    return fetch(url, { ...options, signal: options.signal || AbortSignal.timeout(30000) });
+  }
+
   private async getAccessToken(): Promise<string> {
     if (this.accessToken && Date.now() < this.tokenExpiresAt) {
       return this.accessToken;
@@ -47,7 +51,7 @@ export class MonnifyProvider implements PaymentProvider {
     const auth = Buffer.from(`${this.apiKey}:${this.secretKey}`).toString('base64');
     
     try {
-      const response = await fetch(`${this.baseUrl}/api/v1/auth/login`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/auth/login`, {
         method: 'POST',
         headers: {
           'Authorization': `Basic ${auth}`
@@ -78,7 +82,7 @@ export class MonnifyProvider implements PaymentProvider {
       // Monnify requires URI encoding for query params
       const encodedRef = encodeURIComponent(reference);
       
-      const response = await fetch(`${this.baseUrl}/api/v2/transactions/${encodedRef}`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v2/transactions/${encodedRef}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -150,7 +154,7 @@ export class MonnifyProvider implements PaymentProvider {
       };
 
       // Note: Monnify "Initialize Transaction" returns a checkout URL
-      const response = await fetch(`${this.baseUrl}/api/v1/merchant/transactions/init-transaction`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/merchant/transactions/init-transaction`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -202,7 +206,7 @@ export class MonnifyProvider implements PaymentProvider {
       if (bvn) payload.bvn = bvn;
       if (nin) payload.nin = nin;
 
-      const response = await fetch(`${this.baseUrl}/api/v2/bank-transfer/reserved-accounts`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v2/bank-transfer/reserved-accounts`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -228,7 +232,7 @@ export class MonnifyProvider implements PaymentProvider {
   async getBanks(): Promise<any[]> {
     try {
       const token = await this.getAccessToken();
-      const response = await fetch(`${this.baseUrl}/api/v1/banks`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/banks`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -242,7 +246,7 @@ export class MonnifyProvider implements PaymentProvider {
   async resolveAccount(bankCode: string, accountNumber: string): Promise<string | null> {
     try {
       const token = await this.getAccessToken();
-      const response = await fetch(`${this.baseUrl}/api/v1/disbursements/account/validate?accountNumber=${accountNumber}&bankCode=${bankCode}`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/disbursements/account/validate?accountNumber=${accountNumber}&bankCode=${bankCode}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -277,7 +281,7 @@ export class MonnifyProvider implements PaymentProvider {
         sourceAccountNumber: this.walletAccountNumber
       };
 
-      const response = await fetch(`${this.baseUrl}/api/v2/disbursements/single`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v2/disbursements/single`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -302,7 +306,7 @@ export class MonnifyProvider implements PaymentProvider {
   async getBillers(categoryCode: string): Promise<any[]> {
     try {
       const token = await this.getAccessToken();
-      const response = await fetch(`${this.baseUrl}/api/v1/vas/bills-payment/billers?categoryCode=${categoryCode}`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/vas/bills-payment/billers?categoryCode=${categoryCode}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -316,7 +320,7 @@ export class MonnifyProvider implements PaymentProvider {
   async getBillerProducts(billerCode: string): Promise<any[]> {
     try {
       const token = await this.getAccessToken();
-      const response = await fetch(`${this.baseUrl}/api/v1/vas/bills-payment/biller-products?billerCode=${billerCode}`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/vas/bills-payment/biller-products?billerCode=${billerCode}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -330,7 +334,7 @@ export class MonnifyProvider implements PaymentProvider {
   async validateUtilityCustomer(productCode: string, customerId: string): Promise<any | null> {
     try {
       const token = await this.getAccessToken();
-      const response = await fetch(`${this.baseUrl}/api/v1/vas/bills-payment/validate-customer`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/vas/bills-payment/validate-customer`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -357,7 +361,7 @@ export class MonnifyProvider implements PaymentProvider {
         validationReference: args.validationReference
       };
 
-      const response = await fetch(`${this.baseUrl}/api/v1/vas/bills-payment/vend`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/vas/bills-payment/vend`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -390,7 +394,7 @@ export class MonnifyProvider implements PaymentProvider {
         payload.refundAmount = amountNaira; // Monnify amount is in Naira
       }
 
-      const response = await fetch(`${this.baseUrl}/api/v1/refunds`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/api/v1/refunds`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

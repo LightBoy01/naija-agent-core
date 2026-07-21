@@ -453,6 +453,9 @@ export async function claimCommissions(partnerPhone: string) {
   const clearedThreshold = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   
   return await db.transaction(async (tx) => {
+    // 🛡️ SECURITY: Lock the user's row first to prevent concurrent double-spend race conditions
+    await tx.select().from(users).where(eq(users.phone, partnerPhone)).for('update');
+
     // 1. Find all cleared pending commissions for this partner
     const pendingCommissions = await tx.select().from(transactions).where(
       sql`${transactions.userId} = ${partnerPhone} AND ${transactions.type} = 'commission_pending' AND ${transactions.status} = 'pending' AND ${transactions.createdAt} < ${clearedThreshold}`

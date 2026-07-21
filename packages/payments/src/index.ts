@@ -1,6 +1,7 @@
 import { PaystackProvider } from './paystack';
 import { MonnifyProvider } from './monnify';
 import { PocketFiProvider } from './pocketfi';
+import { PeyflexProvider } from './peyflex';
 
 export interface Transaction {
   reference: string;
@@ -48,7 +49,7 @@ export class MockProvider implements PaymentProvider {
   }
 }
 
-export { PaystackProvider, MonnifyProvider, PocketFiProvider };
+export { PaystackProvider, MonnifyProvider, PocketFiProvider, PeyflexProvider };
 
 export function getProvider(
   type: 'paystack' | 'monnify' | 'pocketfi' | 'mock', 

@@ -74,7 +74,7 @@ export async function executeCommissionsTool(name: string, args: Record<string, 
         const encodedText = encodeURIComponent(`Hi Zynux, I want to setup my bot. Ref: ${args.userId}`);
         const waLink = `https://wa.me/${masterBotPhone}?text=${encodedText}`;
         
-        return `NaijaAgent Business Onboarding happens entirely on WhatsApp. Here is the frictionless link to give your friends:\n\n${waLink}\n\n"When they click this link, it will open a chat with the NaijaAgent Setup Bot and automatically tell it that you referred them. You will get 30% of every payment they make forever!"`;
+        return `NaijaAgent Business Onboarding happens entirely on WhatsApp. Here is the frictionless link to give your friends:\n\n${waLink}\n\n"When they click this link, it will open a chat with the NaijaAgent Setup Bot and automatically tell it that you referred them. You will get 30% of every payment they make for their first year!"`;
         
       default:
         throw new Error(`Unknown commissions tool: ${name}`);

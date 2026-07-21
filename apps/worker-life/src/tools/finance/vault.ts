@@ -228,7 +228,7 @@ export async function executeVaultTool(name: string, args: Record<string, any>, 
             if (!context.resetOtp || !context.resetOtpExpiry || Date.now() > context.resetOtpExpiry) {
                 return { error: 'Your OTP has expired or was not requested. Please request a new PIN reset.' };
             }
-            if (context.resetOtp !== args.otp) {
+            if (context.resetOtp !== String(args.otp).trim()) {
                 return { error: 'The OTP you provided is incorrect. Please check and try again.' };
             }
             if (!/^\d{4}$/.test(args.newPin)) {
