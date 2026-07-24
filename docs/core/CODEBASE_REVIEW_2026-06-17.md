@@ -1,5 +1,5 @@
 # Naija Agent Core — Codebase Review
-**Date:** 2026-06-17 | **Branch:** master | **Node.js:** v25.8.2 | **TypeScript:** 5.9.3
+**Date:** 2026-07-23 (Updated) | **Branch:** master | **Node.js:** v25.8.2 | **TypeScript:** 5.9.3
 
 ---
 
@@ -78,6 +78,7 @@ naija-agent-core/
 |---|---|
 | **Framework** | BullMQ Worker |
 | **Entry** | `apps/worker/src/index.ts` |
+| **Architecture** | **Triad Architecture** (Loads dynamic prompts via `Zynux.Soul.md`, `Agent.md`) |
 | **Concurrency** | 50, rate-limited to 10 jobs/sec |
 | **Queue** | `whatsapp-queue` |
 | **Dependencies** | `@naija-agent/firebase`, `@naija-agent/payments`, `@naija-agent/storage`, `@naija-agent/types`, `@google/genai`, `axios`, `bcrypt`, `bullmq`, `ioredis`, `libphonenumber-js`, `pino` |
@@ -403,8 +404,8 @@ Both workers use a chain-of-responsibility pipeline. Interceptors execute sequen
 ### 7.3 Sector Pack System
 Industry verticals (Commerce, Health, Property, Legal, Education, Research, Life) are pluggable modules. Each defines entity schemas, workflow state machines, system prompts, and tool sets. `getSectorPack()` returns the right pack for an org's sector.
 
-### 7.4 Dual Database State (Migration in Progress)
-Actively migrating from Firebase Firestore to PostgreSQL (Drizzle ORM with pgvector).
+### 7.4 Intentional Dual Database Writing (Migration Safety)
+The codebase is currently in a "Split-Brain" mode. This is a deliberate safety feature for migrating an active financial/AI application with zero-downtime. Actively migrating from Firebase Firestore to PostgreSQL (Drizzle ORM with pgvector).
 
 | Layer | Database | Status |
 |---|---|---|
@@ -459,23 +460,24 @@ Each tool call has a cost in Kobo defined in `TOOL_COSTS`. Deducted from user ba
 
 ## 10. Current State & Observations
 
-### Git Status (2026-06-17)
+### Git Status (July 2026)
 - Branch: `master`
 - 4 modified `tsbuildinfo` files (build artifacts, not source changes)
-- 3 most recent commits are bug fixes (null chat_id, vault model hardcoding, delegation disconnect)
+- Most recent work focuses on Triad Architecture decoupling and Phase 10 planning.
 
 ### Strengths
 - Clean separation of concerns between packages with clear dependency boundaries
 - Robust error handling with automatic failover at multiple layers (AI providers, storage providers, payment gateways)
 - Pipeline/interceptor architecture is well-structured and extensible
-- Pragmatic dual-write strategy during database migration
-- Zod schemas provide runtime validation at system boundaries
+- Pragmatic dual-write strategy during database migration (safety-first approach)
+- **Triad Architecture (Phase 10):** Successful abstraction of hardcoded TS prompts into markdown (`Soul.md`, `Agent.md`), setting the stage for RAM caching.
+- Documentation hygiene has been improved (`TASK_LIST.md` accurately reflects implementations, dead links removed).
 - WhatsApp sidecar in Go handles multi-tenant sessions natively, bypassing Meta API rate limits
 - Energy credits billing is fine-grained and transparent
 
 ### Technical Debt & Issues
 1. **`.tsbuildinfo` files tracked in git** — These are build artifacts and should be added to `.gitignore`
-2. **Firestore → PostgreSQL migration incomplete** — Dual-writes create consistency risk; no clear migration end-state documented
+2. **The Great Firebase Purge (Pending):** The dual-writing safety net is working, but it needs a hard timeline for when Firebase will be entirely excised from the Node applications.
 3. **`@naija-agent/logistics` is unused** — Not consumed by any app; either dead code or future feature
 4. **`packages/storage` undeclared dependency** — Runtime imports `@naija-agent/firebase` but doesn't declare it in its `package.json`
 5. **No visible test suites** — Vitest is configured but test files were not found in packages; coverage appears absent

@@ -1,4 +1,7 @@
-# EMPIRE ROADMAP: The Future of Sovereign Growth (2026)
+# [DEPRECATED] EMPIRE ROADMAP: The Future of Sovereign Growth (2026)
+
+> [!WARNING]
+> This roadmap is heavily outdated and no longer reflects the current state of the Empire (we are now in Phase 10). Please see [MASTER_STRATEGY_2026.md](MASTER_STRATEGY_2026.md) for the active roadmap and architectural plans.
 
 This document tracks the strategic evolution of the **Naija Agent Empire**. It merges all improvement plans, deferred features, and next-gen objectives into a single, high-signal timeline.
 

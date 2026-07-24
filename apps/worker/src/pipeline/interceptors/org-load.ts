@@ -15,7 +15,7 @@ export const OrgLoadInterceptor: Interceptor = {
     
     // --- RACE CONDITION FALLBACK ---
     // If Go Sidecar booted before Node.js hydrated Redis, it will pass the raw phone number
-    // as the orgId (e.g. "2349015772541"). We must query Firebase to find the mapped ID.
+    // as the orgId (e.g. "2347072139935"). We must query Firebase to find the mapped ID.
     if (!org) {
       const { getDb } = await import('@naija-agent/firebase');
       const db = getDb();

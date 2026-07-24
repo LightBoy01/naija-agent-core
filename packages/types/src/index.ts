@@ -5,8 +5,11 @@ export * from './sector.js';
 export * from './interfaces/index.js';
 export * from './config/index.js';
 export * from './config/prompts.js';
+export * from './config/env.js';
 export * from './utils/phone.js';
 export * from './utils/currency.js';
+export * from './utils/logger.js';
+export * from './utils/prompt-cache.js';
 
 // --- WhatsApp Webhook Schemas (Meta) ---\n
 export const WhatsAppMessageSchema = z.object({

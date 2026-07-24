@@ -19,8 +19,8 @@ async function fixFirebaseSplitBrain() {
   const trueRef = db.collection('organizations').doc('aelixxr-life-companion');
   const trueDoc = await trueRef.get();
   if (trueDoc.exists) {
-      console.log('True aelixxr-life-companion found. Setting botPhone to 2349015772541...');
-      await trueRef.set({ config: { botPhone: '2349015772541' } }, { merge: true });
+      console.log('True aelixxr-life-companion found. Setting botPhone to 2347072139935...');
+      await trueRef.set({ config: { botPhone: '2347072139935' } }, { merge: true });
   }
 
   console.log('Firebase mapping updated successfully!');

@@ -16,8 +16,9 @@
     "start:workers": "node scripts/start-unified-workers.mjs",
     "start:worker": "node apps/worker/dist/index.js",
     "start:worker-life": "node apps/worker-life/dist/index.js",
-    "test": "vitest run",
-    "lint": "eslint .",
+    "typecheck": "tsc -b",
+    "test": "node node_modules/vitest/vitest.mjs run",
+    "lint": "npx eslint . --ignore-pattern '**/dist/**' --ignore-pattern '**/node_modules/**' --ignore-pattern 'apps/web/**' --ignore-pattern 'hermes-agent/**'",
     "format": "prettier --write ."
   },
   "devDependencies": {
@@ -39,8 +40,11 @@
     "typescript-eslint": "^8.60.0",
     "vitest": "^4.1.10"
   },
+  "overrides": {
+    "@rollup/rollup-android-arm64": "4.62.2"
+  },
   "dependencies": {
-    "@google/genai": "^1.50.1",
+    "@google/genai": "^2.7.0",
     "bcrypt": "^6.0.0",
     "bytes": "3.1.2",
     "cookie": "^1.1.1",
@@ -52,6 +56,7 @@
     "iconv-lite": "0.7.2",
     "inherits": "2.0.4",
     "jsonwebtoken": "^9.0.3",
+    "pathe": "^2.0.3",
     "pdf-parse": "^2.4.5",
     "postgres": "^3.4.9",
     "proxy-agent": "^5.0.0",

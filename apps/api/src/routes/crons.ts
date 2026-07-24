@@ -151,9 +151,9 @@ export default async function cronRoutes(fastify: FastifyInstance, opts: CronRou
 
     try {
       logger.info("🕒 Running Referral Settlement CRON...");
-      const { processMatureReferrals } = await import('@naija-agent/database');
+      const { settleMatureReferrals } = await import('@naija-agent/database');
       
-      const processed = await processMatureReferrals();
+      const processed = await settleMatureReferrals();
 
       for (const ref of processed) {
         const formattedBonus = '₦' + (ref.commissionEarnedKobo / 100).toLocaleString();

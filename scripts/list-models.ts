@@ -1,34 +1,36 @@
-const dotenv = require('dotenv');
-const https = require('https');
+import { GoogleGenAI } from '@google/genai';
+import dotenv from 'dotenv';
 
 dotenv.config();
 
-function list() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models?key=' + apiKey;
+async function run() {
+  const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || '';
+  if (!apiKey) {
+    console.error('No API key found!');
+    return;
+  }
 
-  https.get(url, (res) => {
-    let data = '';
-    res.on('data', (chunk) => { data += chunk; });
-    res.on('end', () => {
-      try {
-        const json = JSON.parse(data);
-        console.log('--- Available Gemini 3.1 Models ---');
-        if (!json.models) {
-           console.log('No models found. Response:', data);
-           return;
+  const ai = new GoogleGenAI({ apiKey });
+  
+  try {
+    // We can just fetch the models using fetch to the REST API for simplicity
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    const data = await response.json();
+    if (data.models) {
+      const gemmaModels = data.models.filter((m: any) => m.name.toLowerCase().includes('gemma'));
+      console.log('Available Gemma Models on this API Key:');
+      gemmaModels.forEach((m: any) => {
+        console.log(`- ${m.name}`);
+        if (m.supportedGenerationMethods) {
+           console.log(`  Methods: ${m.supportedGenerationMethods.join(', ')}`);
         }
-        json.models.forEach(m => {
-          if (m.name.includes('3.1')) {
-            console.log(m.name.replace('models/', '') + ' (' + m.displayName + ')');
-          }
-        });
-      } catch (e) {
-        console.error('Error parsing response:', e.message);
-      }
-    });
-  }).on('error', (err) => {
-    console.error('Request error:', err.message);
-  });
+      });
+    } else {
+      console.log('No models found or error:', data);
+    }
+  } catch(e) {
+    console.error('Error fetching models:', e);
+  }
 }
-list();
+
+run();

@@ -195,7 +195,7 @@ describe('WhatsAppService - sendTemplate', () => {
   });
 
   it('should route numeric sovereign IDs to sidecar /send instead of Meta Graph API', async () => {
-    const svc = new WhatsAppService('fake-token', '2349015772541'); // Aelixxr numeric ID
+    const svc = new WhatsAppService('fake-token', '2347072139935'); // Aelixxr numeric ID
     mockedAxios.post = vi.fn().mockResolvedValue({ data: {} });
 
     const result = await svc.sendTemplate('2348012345678', 'hello_world', 'en_US');

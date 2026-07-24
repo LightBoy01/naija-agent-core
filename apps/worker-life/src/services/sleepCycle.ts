@@ -104,10 +104,11 @@ export class SleepCycleService {
             }
 
             const genAI = new GoogleGenAI({
-                apiKey: apiKey,
+                apiKey,
+                vertexai: true,
+                apiVersion: 'v1/publishers/google',
                 httpOptions: {
-                    baseUrl: 'https://aiplatform.googleapis.com',
-                    apiVersion: 'v1/publishers/google'
+                    baseUrl: 'https://aiplatform.googleapis.com'
                 }
             });
 

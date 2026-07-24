@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.195",
-    "@google/genai": "^1.50.1",
+    "@google/genai": "^2.7.0",
     "@naija-agent/database": "^1.0.0",
     "@naija-agent/firebase": "^1.0.0",
     "@naija-agent/storage": "^1.0.0",

@@ -73,12 +73,12 @@ export const SystemConfig = {
         'aelixxr',
         'zynux',
         'naija-agent-master',
-        '2349015772541',
+        '2347072139935',
         '2347011925076',
         '1034379023092936'
     ] as readonly string[],
     SOVEREIGN_ID_MAP: {
-        '2349015772541': 'aelixxr',
+        '2347072139935': 'aelixxr',
         '2347011925076': 'zynux',
         '1034379023092936': 'naija-agent-master',
     } as const,

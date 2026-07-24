@@ -6,10 +6,10 @@ async function seed() {
     
     const orgs = [
         {
-            id: '2349015772541',
+            id: '2347072139935',
             name: 'Sidecar 1',
             isActive: true,
-            whatsappPhoneId: '2349015772541',
+            whatsappPhoneId: '2347072139935',
             config: { adminPhone: '2347011925076' }
         },
         {
@@ -17,7 +17,7 @@ async function seed() {
             name: 'Sidecar 2',
             isActive: true,
             whatsappPhoneId: '2347011925076',
-            config: { adminPhone: '2349015772541' }
+            config: { adminPhone: '2347072139935' }
         }
     ];
 

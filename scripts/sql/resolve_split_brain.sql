@@ -9,7 +9,7 @@ BEGIN
 
     -- 2. Update aelixxr-life-companion phone ID
     UPDATE organizations
-    SET whatsapp_phone_id = '2349015772541'
+    SET whatsapp_phone_id = '2347072139935'
     WHERE id = 'aelixxr-life-companion';
 
     -- 3. Cascade Delete aelixxr and naija-agent-master

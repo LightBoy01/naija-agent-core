@@ -146,6 +146,10 @@ export interface LifeContext {
     sessionExpiry?: FirestoreTimestamp | Date;
     activeAgent?: string;
     hermesSessionId?: string;
+    resetOtp?: string;
+    resetOtpExpiry?: number | Date | FirestoreTimestamp;
+    kycStatus?: string;
+    kycData?: Record<string, unknown>;
 }
 
 export interface FeedbackEvent {

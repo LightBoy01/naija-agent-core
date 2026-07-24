@@ -165,7 +165,7 @@ describe('Worker-Life WhatsAppService - downloadMedia', () => {
   });
 
   it('should read from local /tmp/ filesystem for sovereign IDs', async () => {
-    const sovSvc = new WhatsAppService('fake-token', '2349015772541'); // Aelixxr numeric ID
+    const sovSvc = new WhatsAppService('fake-token', '2347072139935'); // Aelixxr numeric ID
     
     // We mock fs/promises by relying on a try/catch in the test or mocking the import.
     // Given the difficulty of mocking dynamic imports, we'll verify it throws the correct Sovereign error for non-/tmp/ files.

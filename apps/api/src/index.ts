@@ -1,12 +1,13 @@
 import Fastify from 'fastify';
 import fastifyRawBody from 'fastify-raw-body';
+import cors from '@fastify/cors';
 import dotenv from 'dotenv';
-import pino from 'pino';
+dotenv.config();
 
-// Configure Structured Logging
-const logger = pino({
-  level: process.env.LOG_LEVEL || 'info'
-});
+import { getEnv } from '@naija-agent/types';
+const env = getEnv();
+
+import { logger } from '@naija-agent/types';
 
 logger.info('🚀 [VERSION 1.1.0] API Service Starting... (Standardized Logging)');
 
@@ -42,16 +43,19 @@ import { getProvider } from '@naija-agent/payments';
 import { formatCurrency } from './utils/currency.js';
 import cronRoutes from './routes/crons.js';
 import webhookRoutes from './routes/webhooks.js';
-dotenv.config();
-
-// Ensure required environment variables are present
-if (!process.env.WHATSAPP_APP_SECRET) {
-  logger.error('CRITICAL: WHATSAPP_APP_SECRET is not defined in environment variables.');
-  process.exit(1);
-}
 
 const fastify = Fastify({ 
   logger: logger
+});
+
+// CORS — restrict to configured dashboard origin, allow localhost in dev
+const corsOrigins = env.WEB_DASHBOARD_URL
+  ? [env.WEB_DASHBOARD_URL]
+  : ['http://localhost:3000'];
+fastify.register(cors, {
+  origin: corsOrigins,
+  methods: ['GET', 'POST'],
+  credentials: true,
 });
 
 fastify.setErrorHandler((error, request, reply) => {
@@ -172,6 +176,7 @@ redisConnection.on('connect', () => {
 
 const whatsappQueue = new Queue('whatsapp-queue', { connection: redisConnection });
 const lifeQueue = new Queue('life-queue', { connection: redisConnection });
+const deadLetterQueue = new Queue('dead-letter', { connection: redisConnection });
 
 fastify.register(webhookRoutes, { whatsappQueue, lifeQueue, redisConnection, logger });
 
@@ -229,6 +234,9 @@ fastify.post('/sidecar/connect', async (request, reply) => {
   }
 });
 
+// Export for testing
+export { fastify as buildApp };
+
 // Start Server
 const start = async () => {
   try {
@@ -241,4 +249,8 @@ const start = async () => {
   }
 };
 
-start();
+// Only listen when run directly (not when imported by tests)
+const isMainModule = process.argv[1]?.endsWith('index.js') || process.argv[1]?.endsWith('index.ts');
+if (isMainModule) {
+  start();
+}

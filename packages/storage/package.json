@@ -10,7 +10,7 @@
     "@aws-sdk/client-s3": "^3.1057.0",
     "@aws-sdk/s3-request-presigner": "^3.1057.0",
     "@google-cloud/storage": "^7.19.0",
-    "@google/genai": "^1.50.1",
+    "@google/genai": "^2.7.0",
     "ali-oss": "^6.23.0",
     "cloudinary": "^2.9.0",
     "cos-nodejs-sdk-v5": "^2.15.4",

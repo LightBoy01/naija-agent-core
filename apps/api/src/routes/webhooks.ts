@@ -250,7 +250,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
       return reply.status(500).send('Monnify secret key not found');
     }
 
-    const monnify = getProvider('monnify', monnifyKey, org.config?.payment?.redirectUrl) as any;
+    const monnify = getProvider('monnify', monnifyKey, (org.config as any)?.payment?.redirectUrl) as any;
     
     if (!monnify.verifyWebhookSignature(rawBody, signature)) {
       logger.warn('❌ Invalid Monnify Webhook Signature!');

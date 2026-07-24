@@ -13,9 +13,10 @@ export async function POST(req: Request) {
 
     const genAI = new GoogleGenAI({
       apiKey,
+      vertexai: true,
+      apiVersion: 'v1/publishers/google',
       httpOptions: {
         baseUrl: 'https://aiplatform.googleapis.com',
-        apiVersion: 'v1/publishers/google'
       }
     });
 

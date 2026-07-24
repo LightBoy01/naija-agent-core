@@ -3,7 +3,7 @@ const crypto = require('crypto');
 
 async function simulateMessage(target, text) {
     const appSecret = '711ae6c78c19625a35d5e5c6d525fbbb';
-    const phoneId = target === 'aelixxr' ? '2349015772541' : '2347011925076';
+    const phoneId = target === 'aelixxr' ? '2347072139935' : '2347011925076';
     const from = '2347042310893'; // Boss
     const messageId = `TEST-${Date.now()}`;
     

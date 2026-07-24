@@ -11,9 +11,9 @@ async function remap() {
     await db.collection('organizations').doc('aelixxr').set({
         name: 'Aelixxr OS',
         isActive: true,
-        whatsappPhoneId: '2349015772541',
+        whatsappPhoneId: '2347072139935',
         config: { 
-            botPhone: '2349015772541',
+            botPhone: '2347072139935',
             adminPhone: MASTER_ADMIN_PHONE, 
             isMaster: true 
         }
@@ -43,7 +43,7 @@ async function remap() {
     }, { merge: true });
 
     // 3. Clean up the literal phone number documents I incorrectly created earlier
-    await db.collection('organizations').doc('2349015772541').delete();
+    await db.collection('organizations').doc('2347072139935').delete();
     await db.collection('organizations').doc('2347011925076').delete();
 
     console.log("✅ Successfully mapped roles correctly!");

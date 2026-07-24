@@ -17,9 +17,10 @@ export class StudyBuddyService {
         const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || 'mock';
         this.ai = new GoogleGenAI({ 
             apiKey,
+            vertexai: true,
+            apiVersion: 'v1/publishers/google',
             httpOptions: {
-                baseUrl: 'https://aiplatform.googleapis.com',
-                apiVersion: 'v1/publishers/google'
+                baseUrl: 'https://aiplatform.googleapis.com'
             }
         });
     }

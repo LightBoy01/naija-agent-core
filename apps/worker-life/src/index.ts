@@ -1,12 +1,18 @@
 import { Worker, Job, Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import 'dotenv/config';
-import { SystemConfig } from '@naija-agent/types';
+import { SystemConfig, getEnv } from '@naija-agent/types';
+const env = getEnv();
+
 import { logger } from './utils/logger.js';
 import { getLifeTools, getOrchestratorTools } from './tools/index.js';
 import { mcpClient } from './services/mcpClient.js';
 import { promptService } from './services/promptService.js';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // --- AI Abstraction ---
 import { AIOrchestrator, GeminiProvider, OpenAIProvider, AIFactory, GlobalModelRegistry } from '@naija-agent/ai';
@@ -67,6 +73,7 @@ async function getDynamicModels(systemInstruction?: string) {
 
 // --- Queue & Worker ---
 export const lifeQueue = new Queue('life-queue', { connection: redisClient });
+const deadLetterQueue = new Queue('dead-letter', { connection: redisClient });
 
 const worker: Worker = new Worker(
   'life-queue',
@@ -141,8 +148,19 @@ const worker: Worker = new Worker(
   }
 );
 
-worker.on('failed', (job: Job | undefined, err: Error) => {
+worker.on('failed', async (job: Job | undefined, err: Error) => {
   logger.error({ jobId: job?.id, error: err.message }, '❌ Job Failed');
+  if (job && job.attemptsMade >= (job.opts?.attempts ?? 3)) {
+    await deadLetterQueue.add('failed-job', {
+      originalJobId: job.id,
+      originalName: job.name,
+      originalData: job.data,
+      error: err.message,
+      stack: err.stack,
+      failedAt: new Date().toISOString(),
+    });
+    logger.warn({ jobId: job.id, originalName: job.name }, '📤 Moved to dead-letter queue');
+  }
 });
 
 logger.info('🚀 Aelixxr LOS Worker is LIVE and Modular');

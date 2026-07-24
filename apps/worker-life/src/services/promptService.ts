@@ -1,6 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { logger } from '../utils/logger.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export class PromptService {
     private cache: Record<string, string> = {};
@@ -76,7 +80,9 @@ export class PromptService {
                 this.cache[filename] = content;
                 return content;
             }
-        } catch (e) {}
+        } catch (e) {
+            logger.warn({ filename, err: e }, '⚠️ Prompt disk read failed');
+        }
 
         logger.error({ filename, dir: this.promptsDir }, '❌ Prompt not found on disk');
         return '';

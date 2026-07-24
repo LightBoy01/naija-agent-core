@@ -1,33 +1,54 @@
-import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import dotenv from 'dotenv';
 
 dotenv.config();
 
-const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || '';
-console.log("Using API Key:", apiKey.substring(0, 5) + '...');
-const ai = new GoogleGenAI({ apiKey });
-
 async function testSearch(modelName: string) {
-    console.log(`Testing web search with model: ${modelName}...`);
-    try {
-        const response = await ai.models.generateContent({
-            model: modelName,
-            contents: "What is the official exchange rate of Naira to Dollar right now?",
-            config: {
-                tools: [{ googleSearch: {} } as any]
-            }
-        });
-        console.log(`✅ SUCCESS with ${modelName}!`);
-        console.log("Response:", response.text);
-    } catch (error: any) {
-        console.error(`❌ FAILED with ${modelName}:`, error.message);
+  const apiKey = process.env.GEMINI_API_KEY_LOS || process.env.GEMINI_API_KEY || '';
+  if (!apiKey) {
+    console.error('No API key found!');
+    return;
+  }
+
+  let baseUrl = 'https://aiplatform.googleapis.com';
+  let apiVersion = 'v1/publishers/google';
+  if (apiKey.startsWith('AIza')) {
+    baseUrl = 'https://generativelanguage.googleapis.com';
+    apiVersion = 'v1beta';
+  }
+
+  const searchGenAI = new GoogleGenAI({ 
+    apiKey,
+    vertexai: !apiKey.startsWith('AIza'),
+    apiVersion,
+    httpOptions: { baseUrl }
+  });
+
+  console.log(`\nTesting Web Search Grounding with model: ${modelName}`);
+  try {
+    const searchResult = await searchGenAI.models.generateContent({
+      model: modelName,
+      contents: [{ role: 'user', parts: [{ text: 'Search for: current ice water news June 2026. Summarize the key facts.' }] }],
+      config: {
+        tools: [{ googleSearch: {} }] as any
+      }
+    });
+
+    let text = "";
+    if (searchResult.candidates?.[0]?.content?.parts) {
+        text = searchResult.candidates[0].content.parts.filter((p: any) => p.text).map((p: any) => p.text).join("");
+    } else {
+        text = searchResult.text || "";
     }
+    console.log(`✅ Success with ${modelName}:\n`, text.trim().substring(0, 500) + '...');
+  } catch (err: any) {
+    console.error(`❌ Error with ${modelName}:`, err.message);
+  }
 }
 
 async function run() {
-    await testSearch('gemini-3-flash-preview');
-    await testSearch('gemini-3.1-flash-lite-preview');
-    await testSearch('gemini-2.5-flash');
+  await testSearch('models/gemini-3-flash-preview');
+  await testSearch('models/gemma-2-27b-it'); // Testing the Gemma model the user mentioned
 }
 
 run();

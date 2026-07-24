@@ -126,9 +126,10 @@ export async function handleContentTools(name: string, args: any, ctx: HandlerCo
 
         const imageGenAI = new GoogleGenAI({
            apiKey: process.env.GEMINI_API_KEY || '',
+           vertexai: true,
+           apiVersion: 'v1/publishers/google',
            httpOptions: {
-              baseUrl: 'https://aiplatform.googleapis.com',
-              apiVersion: 'v1/publishers/google'
+              baseUrl: 'https://aiplatform.googleapis.com'
            }
         });
 

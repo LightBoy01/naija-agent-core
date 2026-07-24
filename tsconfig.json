@@ -2,8 +2,14 @@
   "files": [],
   "references": [
     { "path": "packages/types" },
+    { "path": "packages/database" },
     { "path": "packages/firebase" },
+    { "path": "packages/ai" },
+    { "path": "packages/payments" },
+    { "path": "packages/storage" },
+    { "path": "packages/logistics" },
     { "path": "apps/api" },
-    { "path": "apps/worker" }
+    { "path": "apps/worker" },
+    { "path": "apps/worker-life" }
   ]
 }

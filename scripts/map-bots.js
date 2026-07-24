@@ -11,7 +11,7 @@ async function remap() {
         whatsappPhoneId: '2347011925076',
         config: { 
             botPhone: '2347011925076',
-            adminPhone: '2349015772541', // Recognizes Zynux phone as admin
+            adminPhone: '2347072139935', // Recognizes Zynux phone as admin
             isMaster: true 
         }
     }, { merge: true });
@@ -23,18 +23,18 @@ async function remap() {
         whatsappPhoneId: '2347011925076',
         config: { 
             botPhone: '2347011925076',
-            adminPhone: '2349015772541',
+            adminPhone: '2347072139935',
             isMaster: true 
         }
     }, { merge: true });
 
     // Map Zynux (using the bot's number as orgId for client bots)
-    await db.collection('organizations').doc('2349015772541').set({
+    await db.collection('organizations').doc('2347072139935').set({
         name: 'Zynux Client Bot',
         isActive: true,
-        whatsappPhoneId: '2349015772541',
+        whatsappPhoneId: '2347072139935',
         config: { 
-            botPhone: '2349015772541',
+            botPhone: '2347072139935',
             adminPhone: '2347011925076' // Recognizes Aelixxr phone as admin
         }
     }, { merge: true });

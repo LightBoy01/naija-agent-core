@@ -1,3 +1,13 @@
+# 🦅 Naija Agent Core - Hermes Agent Integration
+
+> **Sovereign Empire Note (Phase 10 Fusion):** 
+> This directory houses the **Hermes Agent** submodule. In the Naija Agent ecosystem, Hermes acts as the "Body" (High-Capability execution engine) while Aelixxr acts as the "Soul" (Empathetic Supervisor). 
+> Aelixxr connects to this isolated Python sidecar via the **Model Context Protocol (MCP)** to delegate deep research, python scripting, and heavy background automation tasks without exhausting its own context window. 
+> 
+> *The documentation below is the official upstream README from NousResearch.*
+
+---
+
 <p align="center">
   <img src="assets/banner.png" alt="Hermes Agent" width="100%">
 </p>

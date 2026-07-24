@@ -27,11 +27,11 @@ A high-scale, multi-tenant AI Business Operating System built specifically for t
 5.  **Run:** `npm start` (Runs both API and Worker).
 
 ## 🌍 Strategic Documentation
+*   [Master Strategy 2026](docs/core/MASTER_STRATEGY_2026.md)
+*   [Monorepo Codebase Review & Architecture](docs/core/CODEBASE_REVIEW_2026-06-17.md)
+*   [Aelixxr Sovereign Protocol](docs/core/AELIXXR_SOVEREIGN_PROTOCOL_V1.md)
+*   [Technical Heritage & Friction](docs/core/TECHNICAL_HERITAGE.md)
 *   [Alajo Financial Guide](docs/guides/ALAJO_SYSTEM_GUIDE.md)
-*   [Constitution (Sovereign Directive 2026)](docs/SOVEREIGN_DIRECTIVE_2026_03_10.md)
-*   [Empire Roadmap](docs/GROWTH_BLUEPRINT.md)
-*   [Onboarding Strategy](docs/ONBOARDING_STRATEGY_2026.md)
-*   [Red Team Report](docs/RED_TEAM_REPORT.md)
 
 ---
 _⚡ Powered by Naija Agent AI. Built for the Hustle._

@@ -161,10 +161,13 @@ export const energyLedger = pgTable('energy_ledger', {
 export const referrals = pgTable('referrals', {
   id: varchar('id', { length: 128 }).primaryKey(),
   referrerPhone: varchar('referrer_phone', { length: 64 }).references(() => users.phone).notNull(),
-  referredOrgId: varchar('referred_org_id', { length: 64 }).references(() => organizations.id).notNull(),
-  status: varchar('status', { length: 20 }).default('active').notNull(), // 'active', 'expired'
+  referredOrgId: varchar('referred_org_id', { length: 64 }).references(() => organizations.id),
+  referredPhone: varchar('referred_phone', { length: 64 }), // Life OS user-to-user referral target
+  status: varchar('status', { length: 20 }).default('active').notNull(), // 'active', 'expired', 'pending', 'rewarded'
   commissionEarnedKobo: bigint('commission_earned_kobo', { mode: 'number' }).default(0).notNull(), // Tracks total accumulated 30% RevShare
+  rewardAmount: integer('reward_amount').default(0).notNull(), // Life OS energy credit reward
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  completedAt: timestamp('completed_at'),
   expiresAt: timestamp('expires_at'), // Exactly 365 days from activation
 });
 

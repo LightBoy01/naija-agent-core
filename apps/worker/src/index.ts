@@ -1,6 +1,11 @@
 import { Worker, Job } from 'bullmq';
 import { Redis } from 'ioredis';
 import dotenv from 'dotenv';
+dotenv.config();
+
+import { getEnv } from '@naija-agent/types';
+const env = getEnv();
+
 import pino from 'pino';
 import { JobData, SystemConfig, StaffData, parseAndFormatPhone } from '@naija-agent/types';
 import { WhatsAppService } from './services/whatsapp.js';
@@ -26,8 +31,6 @@ import { handleMessage, MessagingDependencies } from './handlers/messaging.js';
 import { formatCurrency } from './utils/currency.js';
 import { CountryCode } from 'libphonenumber-js';
 import { getSectorPack } from './sectors/index.js';
-
-dotenv.config();
 
 logger.info('🚀 [VERSION 1.2.0] Zynux Worker Starting... (AI Abstraction)');
 
@@ -253,7 +256,27 @@ const worker = new Worker<JobData>(
 
 worker.on('failed', async (job, err) => {
   logger.error({ jobId: job?.id, error: err.message }, 'Job failed permanently');
-  if (process.env.MASTER_ADMIN_PHONE && process.env.WHATSAPP_API_TOKEN) {
+
+  // Dead-letter queue — ship final failures for inspection
+  if (job && job.attemptsMade >= (job.opts?.attempts ?? 3)) {
+    try {
+      const dlq = new Queue('dead-letter', { connection: redisClient });
+      await dlq.add('failed-job', {
+        originalJobId: job.id,
+        originalName: job.name,
+        originalData: job.data,
+        error: err.message,
+        stack: err.stack,
+        failedAt: new Date().toISOString(),
+      });
+      logger.warn({ jobId: job.id, originalName: job.name }, '📤 Moved to dead-letter queue');
+      await dlq.close();
+    } catch (dlqErr) {
+      logger.warn({ err: dlqErr }, '⚠️ Failed to ship to dead-letter queue');
+    }
+  }
+
+  // Sovereign Snitch alerts
      try {
        const snitchService = new WhatsAppService(process.env.WHATSAPP_API_TOKEN, process.env.WHATSAPP_PHONE_ID || '');
        
@@ -271,8 +294,9 @@ worker.on('failed', async (job, err) => {
            const circuitAlert = `🛑 *CIRCUIT BREAKER ENGAGED*\n\nMultiple jobs are failing rapidly. The Sovereign Snitch is muting alerts for the next minute to prevent spam.\n\nPlease check server logs immediately!`;
            await snitchService.sendText(process.env.MASTER_ADMIN_PHONE, circuitAlert);
        }
-     } catch (snitchErr: any) {}
-  }
+       } catch (snitchErr) {
+         logger.warn({ err: snitchErr }, '⚠️ Sovereign Snitch notification failed (non-critical)');
+       }
 });
 
 // --- Graceful Shutdown ---

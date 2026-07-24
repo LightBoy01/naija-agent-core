@@ -88,7 +88,7 @@
     - [x] Implement Gemini Vision for receipt extraction.
     - [x] **Anti-Fraud Protocol:** Enhanced vision prompt for Photoshop detection.
     - [x] **Sector Unlock:** Generic activities to support all business types.
-    - [ ] Integrate Monnify/Paystack for real-time bank verification.
+    - [x] Integrate Monnify/Paystack for real-time bank verification.
 - [ ] **SMS Relay Prototype (PAUSED)**
     - [x] **Bridge API:** /bridge/sms endpoint for external bank alert syncing.
     - [x] **Android Bridge:** Python script blueprint for Termux SMS relay.
@@ -253,7 +253,7 @@
 ## Phase 10: The Agentic Network Architecture (Planning) 🟡
 - [x] **Migrate to Sovereign VPS PostgreSQL:** Completed data migration and decommissioned Supabase.
 - [x] **Frictionless Onboarding 2.0:** Deployed WhatsApp Pairing Codes replacing QR scans.
-- [ ] **Migrate to Triad Architecture:** Extract hardcoded TS prompts into `Soul.md`, `Agent.md`, and `Skill.md`.
+- [x] **Migrate to Triad Architecture:** Extract hardcoded TS prompts into `Soul.md`, `Agent.md`, and `Skill.md`.
 - [ ] **Implement RAM Caching:** Build memory loader with `fs.watch` for hot-reloading markdown brains.
 - [ ] **Constitutional Hybrid Middleware:** Build a deterministic router that intercepts high-stakes tool execution (e.g., Vault deletion) and enforces strict Playbooks/PIN auth before hitting the LLM.
 - [ ] **Sector Packs Execution:** Implement dynamic routing of both Native and MCP tools using Sector Packs (Education, Health, Commerce, Core) to prevent Tool Overload.
