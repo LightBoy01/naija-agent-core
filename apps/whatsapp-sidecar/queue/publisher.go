@@ -144,3 +144,19 @@ func (p *Publisher) IsChatOptedIn(orgId, chatId string) bool {
 	val, _ := p.client.Get(ctx, optInKey).Result()
 	return val == "true"
 }
+
+// SetFreshlyPaired marks a session as newly paired — the first user message
+// will carry a welcome context for the AI to deliver naturally.
+func (p *Publisher) SetFreshlyPaired(orgId string) error {
+	ctx := context.Background()
+	return p.client.Set(ctx, fmt.Sprintf("freshly_paired:%s", orgId), "true", 48*time.Hour).Err()
+}
+
+// PopFreshlyPaired checks and clears the freshly-paired flag atomically.
+// Returns true if this was the first message after pairing.
+func (p *Publisher) PopFreshlyPaired(orgId string) bool {
+	ctx := context.Background()
+	key := fmt.Sprintf("freshly_paired:%s", orgId)
+	val, err := p.client.GetDel(ctx, key).Result()
+	return err == nil && val == "true"
+}

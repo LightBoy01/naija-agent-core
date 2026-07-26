@@ -245,9 +245,10 @@ func (m *Manager) createEventHandler(orgID string) whatsmeow.EventHandler {
 		case *events.PairSuccess:
 			m.log.Infof("🎉 Successfully paired %s! Waiting for first user message...", orgID)
 			m.sessionStartAt[orgID] = time.Now()
-			// Welcome-to-self removed — new companion devices messaging themselves
-			// immediately after pairing triggers WhatsApp bot detection and ghost ban.
-			// The session stays silent until a human messages first.
+			// Flag the session as freshly paired — first user message will carry
+			// an injected welcome context for the AI to deliver naturally.
+			// No self-message needed (prevents WhatsApp bot detection ghost ban).
+			_ = m.publisher.SetFreshlyPaired(orgID)
 		case *events.StreamReplaced:
 			m.log.Warnf("🔌 Session stream replaced for %s — another client paired with same phone", orgID)
 			m.withdrawClient(orgID)
@@ -439,6 +440,21 @@ func (m *Manager) handleMessage(orgID string, evt *events.Message) {
 			MimeType: mimeType,
 			Caption:  caption,
 		},
+	}
+
+	// Inject welcome context on first user message after pairing — no self-message needed.
+	if text != "" && m.publisher.PopFreshlyPaired(orgID) {
+		displayName := orgID
+		if orgID == "aelixxr-life-companion" || orgID == "aelixxr" {
+			displayName = "Aelixxr"
+		} else if orgID == "zynux" {
+			displayName = "Zynux"
+		}
+		welcomePrefix := fmt.Sprintf("[SYSTEM_WELCOME: This is the user's first message after connecting %s. ", displayName)
+		welcomePrefix += "Naturally include this in your first reply: 🎉 Welcome! Your privacy is protected — "
+		welcomePrefix += "you control who I talk to. Use #pause, #resume, #mute, #unmute, #optin to steer me. "
+		welcomePrefix += "Make them feel in control and safe.]\n\n"
+		text = welcomePrefix + text
 	}
 
 	// 2. Publish to Redis
