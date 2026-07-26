@@ -133,21 +133,21 @@ export async function handleInventoryTools(name: string, args: any, ctx: Handler
       return { status: 'success', message: `Product ${args.key} saved.` };
 
     case 'manage_stock': {
-        const { getDb, schema } = await import('@naija-agent/database');
+        const { getDb, products } = await import('@naija-agent/database');
         const { eq, and, sql } = await import('drizzle-orm');
         const db = getDb();
         
         let stockUpdate;
-        if (args.action === 'add') stockUpdate = sql`${schema.products.stock} + ${args.amount}`;
-        else if (args.action === 'reduce') stockUpdate = sql`${schema.products.stock} - ${args.amount}`;
+        if (args.action === 'add') stockUpdate = sql`${products.stock} + ${args.amount}`;
+        else if (args.action === 'reduce') stockUpdate = sql`${products.stock} - ${args.amount}`;
         else if (args.action === 'set') stockUpdate = args.amount;
         
         const updateData: any = { stock: stockUpdate };
         if (args.threshold !== undefined) updateData.lowStockThreshold = args.threshold;
         
-        await db.update(schema.products)
+        await db.update(products)
             .set(updateData)
-            .where(and(eq(schema.products.id, args.productId), eq(schema.products.orgId, orgId)));
+            .where(and(eq(products.id, args.productId), eq(products.orgId, orgId)));
             
         return { status: 'success', message: `Stock for ${args.productId} updated.` };
     }

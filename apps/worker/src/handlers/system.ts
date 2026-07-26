@@ -7,6 +7,7 @@ import {
   getActiveOrganizations,
   releaseExpiredReservations
 } from '@naija-agent/firebase';
+import { logSystemEvent } from '@naija-agent/database';
 import { logger } from '../utils/logger.js';
 
 export async function handleInventoryCleanup(

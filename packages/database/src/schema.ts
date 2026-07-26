@@ -1,18 +1,23 @@
-import { 
-  pgTable, 
-  varchar, 
-  text, 
-  bigint, 
-  timestamp, 
-  boolean, 
-  jsonb, 
+import {
+  pgTable,
+  varchar,
+  text,
+  bigint,
+  timestamp,
+  boolean,
+  jsonb,
   decimal,
   integer,
   customType,
   primaryKey,
-  index
+  index,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import type { Config } from '@naija-agent/types';
+
+// Loose config type for jsonb columns — config is assembled piecemeal
+// across the codebase and stores extra runtime keys beyond the typed Config schema.
+type OrgConfig = Partial<Config> & Record<string, unknown>;
 
 // --- Custom Types ---
 export const vector = customType<{
@@ -61,7 +66,7 @@ export const organizations = pgTable('organizations', {
   onboardingStep: varchar('onboarding_step', { length: 50 }).default('NONE').notNull(),
   onboardingData: jsonb('onboarding_data'),
   systemPrompt: text('system_prompt'),
-  config: jsonb('config'),
+  config: jsonb('config').$type<OrgConfig>(),
   trialStartedAt: timestamp('trial_started_at'),
   isBetaPartner: boolean('is_beta_partner').default(false).notNull(),
   isBetaCohort: boolean('is_beta_cohort').default(false).notNull(),

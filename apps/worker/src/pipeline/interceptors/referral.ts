@@ -20,7 +20,7 @@ export const ReferralInterceptor: Interceptor = {
         extractedPhone = extractedPhone.replace('+', '');
         
         // Block self-referral
-        const adminPhone = ctx.org?.config?.adminPhone || ctx.org?.adminPhone;
+        const adminPhone = ctx.org?.config?.adminPhone;
         const botPhone = ctx.org?.config?.botPhone || ctx.org?.whatsappPhoneId; // approximate checking
         
         if (extractedPhone === adminPhone || extractedPhone === botPhone || extractedPhone === ctx.from) {

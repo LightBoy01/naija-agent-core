@@ -47,7 +47,7 @@ describe('FeedbackInterceptor', () => {
 
     it('should ignore feedback if org is NOT in beta cohort', async () => {
         const ctx = { ...baseCtx } as PipelineContext;
-        ctx.org.isBetaCohort = false;
+        ctx.org!.isBetaCohort = false;
         ctx.job.data.content.text = '#feedback It broke';
         
         await FeedbackInterceptor.execute(ctx);

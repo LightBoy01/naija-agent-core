@@ -33,7 +33,7 @@ export class AuditService {
   /**
    * Updates an existing audit log (e.g., from pending to success/failed).
    */
-  async updateLogStatus(logId: string, status: 'success' | 'failed', metadata?: Record<string, unknown>): Promise<void> {
+  async updateLogStatus(logId: string, status: 'success' | 'failed' | 'pending', metadata?: Record<string, unknown>): Promise<void> {
       try {
           const db = getDb();
           const docRef = db.collection(this.collection).doc(logId);

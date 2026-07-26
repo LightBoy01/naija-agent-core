@@ -4,7 +4,7 @@
 
 The `@naija-agent/firebase` package serves as the primary data access layer for Google Cloud Firestore within the Naija Agent Core ecosystem. As the project evolves, this package currently functions as a **Firestore legacy layer and a dual-write bridge**.
 
-With the ongoing architectural overhaul (Phase 9.3) migrating core state from Firebase Firestore to PostgreSQL (`@naija-agent/database`), this module encapsulates all direct Firebase Admin SDK interactions. It provides a structured, domain-driven API that isolates database logic from the application logic, facilitating a smoother transition by allowing the system to maintain data consistency across both databases during the migration phase.
+With the ongoing architectural overhaul (Phase 10) migrating core state from Firebase Firestore to PostgreSQL (`@naija-agent/database`), this module encapsulates all direct Firebase Admin SDK interactions. It provides a structured, domain-driven API that isolates database logic from the application logic, facilitating a smoother transition by allowing the system to maintain data consistency across both databases during the migration phase.
 
 ## Key Dependencies
 

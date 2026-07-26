@@ -1,5 +1,5 @@
 # Naija Agent Core — Codebase Review
-**Date:** 2026-07-23 (Updated) | **Branch:** master | **Node.js:** v25.8.2 | **TypeScript:** 5.9.3
+**Date:** 2026-07-26 (Updated) | **Branch:** master | **TypeScript:** 5.9.3
 
 ---
 
@@ -85,13 +85,15 @@ naija-agent-core/
 
 **Pipeline (Chain of Responsibility):**
 1. **org-load** — Load organization/tenant context
-2. **media** — Download attached media (images, audio, documents)
-3. **spam** — Spam detection
-4. **rate-limit** — Rate limiting
-5. **fraud** — Fake receipt detection
-6. **security** — PIN/authentication verification
-7. **mfa** — Multi-factor authentication
-8. **billing** — Credit deduction (with rollback on failure)
+2. **referral** — Referral tracking
+3. **feedback** — Feedback collection
+4. **media** — Download attached media (images, audio, documents)
+5. **spam** — Spam detection
+6. **rate-limit** — Rate limiting
+7. **fraud** — Fake receipt detection
+8. **security** — PIN/authentication verification
+9. **mfa** — Multi-factor authentication
+10. **billing** — Credit deduction (with rollback on failure)
 
 Any interceptor can `shortCircuit` the message, stopping further processing.
 
@@ -118,11 +120,12 @@ Any interceptor can `shortCircuit` the message, stopping further processing.
 | **Dependencies** | `@naija-agent/ai`, `@naija-agent/database`, `@naija-agent/firebase`, `@naija-agent/types`, `@google/genai`, `@modelcontextprotocol/sdk`, `bullmq`, `cheerio`, `ioredis`, `pdf-parse`, `pino` |
 
 **Pipeline (Chain of Responsibility):**
-1. **battery** — Energy credit checks
-2. **context** — Life memory/context loading
-3. **media** — Media download
-4. **security** — PIN/authentication
-5. **spam** — Spam detection
+1. **context** — Life memory/context loading
+2. **spam** — Spam detection
+3. **security** — PIN/authentication
+4. **media** — Media download
+
+Note: Energy credit checks happen at tool execution time via `billingService.ts`, not as a pipeline interceptor.
 
 **Handlers:**
 - `chatHandler.ts` — Life chat & resume
@@ -478,16 +481,17 @@ Each tool call has a cost in Kobo defined in `TOOL_COSTS`. Deducted from user ba
 ### Technical Debt & Issues
 1. **`.tsbuildinfo` files tracked in git** — These are build artifacts and should be added to `.gitignore`
 2. **The Great Firebase Purge (Pending):** The dual-writing safety net is working, but it needs a hard timeline for when Firebase will be entirely excised from the Node applications.
-3. **`@naija-agent/logistics` is unused** — Not consumed by any app; either dead code or future feature
-4. **`packages/storage` undeclared dependency** — Runtime imports `@naija-agent/firebase` but doesn't declare it in its `package.json`
+3. **`@naija-agent/logistics` is unused** — Not consumed by any app; planned future feature for Terminal.africa shipping integration
+4. **`packages/storage` undeclared dependencies** — Runtime imports `@naija-agent/firebase` and `@naija-agent/database` but doesn't declare either in its `package.json`
 5. **No visible test suites** — Vitest is configured but test files were not found in packages; coverage appears absent
 6. **Mixed module systems** — Most packages are ESM (`"type": "module"`) but `payments` and `logistics` are CJS
-7. **`hermes-agent/` directory unclear** — ~2,500+ Python files; unclear if vendored source, submodule, or documentation reference
+7. **Worker README interceptor count outdated** — `apps/worker/README.md` lists 8 interceptors but the code has 10 (referral and feedback were added)
+8. **Web README references `@ai-sdk/react`** — Lists it as a dependency but doesn't mention the parent `ai` package (Vercel AI SDK) in tech stack
 
 ### Recommendations
 1. Add `*.tsbuildinfo` to `.gitignore`
 2. Document the Firestore → Postgres migration end-state and timeline
 3. Either wire up `@naija-agent/logistics` or remove it
-4. Add `@naija-agent/firebase` to `@naija-agent/storage`'s declared dependencies
+4. Add `@naija-agent/firebase` and `@naija-agent/database` to `@naija-agent/storage`'s declared dependencies
 5. Add test coverage, at minimum for `@naija-agent/types` (schemas/validation) and `@naija-agent/payments` (gateway verification)
-6. Clarify the `hermes-agent/` directory's role — if it's a git submodule, add `.gitmodules`; if vendored, document it
+6. Update `apps/worker/README.md` interceptor list to match code (10, not 8)

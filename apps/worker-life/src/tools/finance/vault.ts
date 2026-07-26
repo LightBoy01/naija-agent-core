@@ -225,7 +225,7 @@ export async function executeVaultTool(name: string, args: Record<string, any>, 
       case 'confirm_pin_reset':
         try {
             const context = await lifeMemory.getContext(args.userId);
-            if (!context.resetOtp || !context.resetOtpExpiry || Date.now() > context.resetOtpExpiry) {
+            if (!context.resetOtp || !context.resetOtpExpiry || Date.now() > Number(context.resetOtpExpiry)) {
                 return { error: 'Your OTP has expired or was not requested. Please request a new PIN reset.' };
             }
             if (context.resetOtp !== String(args.otp).trim()) {

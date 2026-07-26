@@ -103,8 +103,9 @@ export async function executePayoutTool(name: string, args: Record<string, any>,
             metadata: { bankCode: args.bankCode, accountNumber: args.accountNumber }
         }, jobId);
 
+        const totalToDeductKobo = withdrawAmountKobo + 5000; // ₦50 fee = 5000 Kobo
+
         try {
-            const totalToDeductKobo = withdrawAmountKobo + 5000; // ₦50 fee = 5000 Kobo
             const newBalanceKobo = await lifeMemory.deductVaultBalance(args.userId, totalToDeductKobo);
             if (newBalanceKobo === null) {
                 if (auditLogIdW) await auditService.updateLogStatus(auditLogIdW, 'failed', { error: 'Insufficient Vault Funds' });

@@ -141,13 +141,13 @@ export interface LifeContext {
     pin?: string; // Hashed 4-digit PIN for security (legacy name)
     pinHash?: string; // Salted Bcrypt PIN hash
     pinAttempts?: number; // Added for lockout logic
-    pinLockUntil?: FirestoreTimestamp | Date; // Added for lockout logic
+    pinLockUntil?: FirestoreTimestamp | Date | null; // Added for lockout logic
     sessionStatus?: string; // e.g. 'IDLE', 'AWAITING_PIN'
     sessionExpiry?: FirestoreTimestamp | Date;
     activeAgent?: string;
     hermesSessionId?: string;
-    resetOtp?: string;
-    resetOtpExpiry?: number | Date | FirestoreTimestamp;
+    resetOtp?: string | null;
+    resetOtpExpiry?: number | Date | FirestoreTimestamp | null;
     kycStatus?: string;
     kycData?: Record<string, unknown>;
 }

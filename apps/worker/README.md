@@ -23,14 +23,14 @@ To ensure scalability, security, and O(1) domain logic organization, the worker 
 The pipeline executes sequentially:
 1. `OrgLoadInterceptor` (Loads organization data)
 2. `ReferralInterceptor` (Tracks referrals)
-3. `FeedbackInterceptor`
+3. `FeedbackInterceptor` (Feedback collection)
 4. `MediaInterceptor` (Parses and manages incoming images/audio)
-5. `SpamInterceptor`
+5. `SpamInterceptor` (Spam detection)
 6. `RateLimitInterceptor` (Ensures fair usage)
 7. `FraudInterceptor` (AI forensic analysis of receipts/transactions)
-8. `SecurityInterceptor`
-9. `MfaInterceptor` (Handles Multi-Factor Authentication/PIN drops)
-10. `BillingInterceptor` (Manages Energy Credits and billing state)
+8. `SecurityInterceptor` (PIN verification)
+9. `MfaInterceptor` (Handles Multi-Factor Authentication)
+10. `BillingInterceptor` (Manages Energy Credits and billing)
 
 If an interceptor identifies an issue (e.g., rate limit exceeded or invalid PIN), it sets a `shortCircuit` flag. The pipeline immediately halts, skips the AI handler, and directly returns a pre-configured response to the user. This creates a highly secure **Iron Shield** against abuse.
 
