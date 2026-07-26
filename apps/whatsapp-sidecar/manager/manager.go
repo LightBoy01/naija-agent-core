@@ -246,7 +246,8 @@ func (m *Manager) createEventHandler(orgID string) whatsmeow.EventHandler {
 			m.log.Infof("🎉 Successfully paired %s! Scheduling Welcome Message...", orgID)
 			m.sessionStartAt[orgID] = time.Now()
 			go func() {
-				time.Sleep(10 * time.Second)
+				// Wait 30s to let history sync + prekey upload finish before sending.
+				time.Sleep(30 * time.Second)
 
 				// Use org-specific name
 				displayName := "Your AI Agent"
@@ -508,10 +509,23 @@ func (m *Manager) SendMessage(orgID, to, text string) error {
 		return fmt.Errorf("invalid JID: %v", err)
 	}
 
-	_, err = client.SendMessage(context.Background(), jid, &waProto.Message{
-		Conversation: &text,
-	})
-	return err
+	// Retry up to 3 times with backoff — after pairing, the WebSocket state
+	// machine may not be fully primed for outbound sends (history sync, prekeys).
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		_, lastErr = client.SendMessage(context.Background(), jid, &waProto.Message{
+			Conversation: &text,
+		})
+		if lastErr == nil {
+			return nil
+		}
+		if attempt < 2 {
+			delay := time.Duration(2+attempt*2) * time.Second
+			m.log.Warnf("SendMessage retry %d/%d for %s after %v, waiting %v", attempt+1, 3, orgID, lastErr, delay)
+			time.Sleep(delay)
+		}
+	}
+	return lastErr
 }
 
 func contains(s, substr string) bool {
