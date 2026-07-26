@@ -17,6 +17,7 @@ import {
   createTenant as pgCreateTenant,
   activateTenant as pgActivateTenant,
   getDb as getSqlDb,
+  sql
 } from '@naija-agent/database';
 import { Redis } from 'ioredis';
 import { formatCurrency } from '../utils/currency.js';
@@ -24,7 +25,6 @@ import { logger } from '../utils/logger.js';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import axios from 'axios';
-import { sql } from 'drizzle-orm';
 
 // ─── PROSPECT FLOW (Sovereign Lead Capture) ─────────────────────────
 

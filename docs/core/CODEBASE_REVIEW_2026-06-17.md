@@ -12,7 +12,7 @@ Naija Agent Core is a **WhatsApp-first AI Business Operating System** targeting 
 | **Zynux** | Business AI Agent | Customer chat, order-taking, payment verification (receipt scanning), inventory management, daily reports. Sector packs: Commerce, Health, Property, Legal. |
 | **Aelixxr** | Personal "Life OS" AI | Saving goals, bill payments, proactive nudges, heartbeats, study buddy, vault document ingestion, sovereign cron autonomy, market scraping. |
 
-A third component, **Hermes Agent** (Nous Research, Python v0.13.0), sits in `hermes-agent/` as the upstream open-source agent framework — a full-featured multi-platform AI agent with its own CLI, gateway, plugin system, and RL training infrastructure. It appears to be vendored or used as a reference implementation.
+A third component, **Hermes Agent** (Nous Research, Python v0.13.0), sits in `hermes-agent/` as a git submodule — an upstream open-source agent framework used as a high-capability MCP execution engine. Aelixxr delegates heavy autonomous tasks (deep research, Python scripting, multi-step workflows) to Hermes via the Model Context Protocol.
 
 ---
 
@@ -68,7 +68,8 @@ naija-agent-core/
 - Idempotency via Redis `processed:{orgId}:{messageId}` keys
 - Dynamic WhatsApp app secret per org
 - Webhook signature verification (HMAC-SHA256)
-- Paystack/Monnify payment webhook processing with top-up notifications
+- Paystack/Monnify payment webhook processing with per-organization API keys (no global fallback)
+- Dispute and refund event handling (create, resolve, refund status updates)
 
 ---
 
@@ -186,17 +187,22 @@ Note: Energy credit checks happen at tool execution time via `billingService.ts`
 |---|---|---|
 | POST | `/connect` | QR code pairing |
 | POST | `/pair` | Phone number pairing code |
-| POST | `/send` | Outbound message |
+| POST | `/send` | Outbound text message |
+| POST | `/send-media` | Image/media send (multipart with buffer) |
 | POST | `/typing` | Typing indicator |
-| GET | `/download/{mediaId}` | Media download |
+| GET | `/download/{mediaId}` | Media download (placeholder / not yet implemented) |
 
 **Key features:**
 - Multi-tenant WhatsApp sessions (one `whatsmeow.Client` per org, stored in PostgreSQL via `sqlstore.Container`)
 - BullMQ native protocol — writes jobs directly into Redis in BullMQ-compatible format, bypassing the Node.js BullMQ library
 - Two-queue routing based on org type (master/life orgs → `life-queue`, others → `whatsapp-queue`)
 - Per-org proxy support for IP rotation via `proxy_url` column
-- Human intervention detection — if a human sends from the bot's phone, AI is paused for 30 minutes for that chat
+- Human intervention detection — if a human sends from the bot's phone, AI is paused for 5 minutes for that chat (sliding window). 60-second grace period after pairing suppresses history-sync false positives
 - Media handling — downloads all media types and saves to `/tmp/sidecar-media/`
+- Welcome context injection — first user message after pairing carries privacy notice and steering wheel commands naturally via AI response (no self-message to avoid WhatsApp bot detection)
+- `GetClient()` checks both `IsConnected()` and `IsLoggedIn()` before returning, preventing 463 errors on dead sessions
+- `SendMessage` retries with 2/4/6s backoff for transient session state after pairing
+- WhatsApp send retry with exponential backoff (Node worker side, 3 attempts)
 
 ---
 
@@ -248,7 +254,7 @@ Unified abstraction over multiple AI providers with automatic failover routing.
 
 Complete PostgreSQL schema and data access layer — the "SQL truth" side of the dual-database architecture.
 
-**18 Drizzle table definitions:**
+**22 Drizzle table definitions plus 17 whatsmeow session tables:**
 `organizations`, `users`, `transactions`, `memories` (pgvector), `referrals`, `chats`, `messages` (with `vector` + `reasoning` columns), `products`, `activities`, `cartItems`, `cronJobs`, `fraudRegistry`, `vaultSecrets`, `heartbeats`, `knowledge`, `staff`, `systemLogs`, `dailySnapshots`, `networkMetadata`, `stagingProducts`, `vaultDocuments` (vector embedding + extractedData)
 
 **Query modules:**
@@ -370,16 +376,17 @@ apps/api (Fastify)
 │ apps/worker (Zynux)     │  │ apps/worker-life (Aelixxr)│
 │                         │  │                          │
 │ Pipeline interceptors:  │  │ Pipeline interceptors:   │
-│ org-load → media →      │  │ battery → context →      │
-│ spam → rate-limit →     │  │ media → security → spam  │
-│ fraud → security →      │  │                          │
-│ mfa → billing           │  │ Handlers:                │
-│                         │  │ Chat, Heartbeat, SLM,    │
-│ Handlers:               │  │ Cron, Nudge, Memory      │
-│ Messaging, Onboarding,  │  │                          │
-│ Reporting, Reminders,   │  │ MCP Protocol for tools   │
-│ System, Bridge          │  │                          │
-│                         │  │ Energy credits billing   │
+│ org-load → referral →   │  │ context → spam →         │
+│ feedback → media →      │  │ security → media         │
+│ spam → rate-limit →     │  │                          │
+│ fraud → security →      │  │ Handlers:                │
+│ mfa → billing           │  │ Chat, Heartbeat, SLM,    │
+│                         │  │ Cron, Nudge, Memory      │
+│ Handlers:               │  │                          │
+│ Messaging, Onboarding,  │  │ MCP Protocol for tools   │
+│ Reporting, Reminders,   │  │                          │
+│ System, Bridge          │  │ Energy credits billing   │
+│                         │  │ (at tool execution)      │
 │ AI via sector packs     │  │                          │
 │ Dynamic model routing   │  │                          │
 └────────┬────────────────┘  └───────────┬──────────────┘
@@ -429,7 +436,7 @@ Each tool call has a cost in Kobo defined in `TOOL_COSTS`. Deducted from user ba
 
 | Component | Technology |
 |---|---|
-| **Runtime** | Node.js 25.8.2, Go 1.26.3 (sidecar) |
+| **Runtime** | Node.js 22+ (Docker), Go 1.26.3 (sidecar) |
 | **Language** | TypeScript 5.9.3, Go |
 | **Monorepo** | npm workspaces |
 | **Web Framework** | Fastify v4 (API), Next.js 15 (Web) |
@@ -479,19 +486,21 @@ Each tool call has a cost in Kobo defined in `TOOL_COSTS`. Deducted from user ba
 - Energy credits billing is fine-grained and transparent
 
 ### Technical Debt & Issues
-1. **`.tsbuildinfo` files tracked in git** — These are build artifacts and should be added to `.gitignore`
-2. **The Great Firebase Purge (Pending):** The dual-writing safety net is working, but it needs a hard timeline for when Firebase will be entirely excised from the Node applications.
-3. **`@naija-agent/logistics` is unused** — Not consumed by any app; planned future feature for Terminal.africa shipping integration
-4. **`packages/storage` undeclared dependencies** — Runtime imports `@naija-agent/firebase` and `@naija-agent/database` but doesn't declare either in its `package.json`
-5. **No visible test suites** — Vitest is configured but test files were not found in packages; coverage appears absent
-6. **Mixed module systems** — Most packages are ESM (`"type": "module"`) but `payments` and `logistics` are CJS
-7. **Worker README interceptor count outdated** — `apps/worker/README.md` lists 8 interceptors but the code has 10 (referral and feedback were added)
-8. **Web README references `@ai-sdk/react`** — Lists it as a dependency but doesn't mention the parent `ai` package (Vercel AI SDK) in tech stack
+1. **The Great Firebase Purge (Pending):** The dual-writing safety net is working, but it needs a hard timeline for when Firebase will be entirely excised from the Node applications.
+2. **`@naija-agent/logistics` is unused** — Not consumed by any app; planned future feature for Terminal.africa shipping integration
+3. **`packages/storage` undeclared dependencies** — Runtime imports `@naija-agent/firebase` and `@naija-agent/database` but doesn't declare either in its `package.json`
+4. **No visible test suites on worker-life** — Vitest is configured but coverage is absent for the 10 handler files, 4 interceptors, and services
+5. **Mixed module systems** — All apps are CJS (bundled by esbuild), packages are mostly ESM (`"type": "module"`). `payments` and `logistics` are CJS. This is intentional but creates dual-package hazard for packages imported by ESM consumers
+6. **Sidecar `/download/{mediaId}` returns placeholder** — whatsmeow doesn't support direct download by ID without message context; media retrieval from sovereign path is incomplete
+7. **Energy Ledger table missing** — Energy credits are mutated via bare `UPDATE` with no immutable audit trail
 
 ### Recommendations
-1. Add `*.tsbuildinfo` to `.gitignore`
-2. Document the Firestore → Postgres migration end-state and timeline
-3. Either wire up `@naija-agent/logistics` or remove it
-4. Add `@naija-agent/firebase` and `@naija-agent/database` to `@naija-agent/storage`'s declared dependencies
-5. Add test coverage, at minimum for `@naija-agent/types` (schemas/validation) and `@naija-agent/payments` (gateway verification)
-6. Update `apps/worker/README.md` interceptor list to match code (10, not 8)
+1. Document the Firestore → Postgres migration end-state and timeline (priority: complete before adding new data-heavy features)
+2. Wire up `@naija-agent/logistics` or remove it from the monorepo
+3. Add `@naija-agent/firebase` and `@naija-agent/database` to `@naija-agent/storage`'s declared dependencies
+4. Add test coverage for `@naija-agent/types` (schemas/validation), `@naija-agent/payments` (gateway verification), and worker-life handlers
+5. Add `energy_ledger` table for immutable energy credit audit trail (schema designed in aelixxr-hardening plan)
+6. Implement sidecar media download endpoint for sovereign media retrieval
+7. Complete ESM migration or standardize on CJS across all packages (currently split between the two)
+8. Route future Aelixxr WhatsApp pairing through a clean proxy via `proxy_url` column (pair-code method is flagged by Meta)
+9. Replace pair-code with QR code linking for new sessions to reduce bot-detection risk

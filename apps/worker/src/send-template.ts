@@ -1,12 +1,10 @@
 import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
 import path from 'path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const currentDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
 
 // Load .env
-dotenv.config({ path: path.join(__dirname, '../../.env') });
+dotenv.config({ path: path.join(currentDir, '../../.env') });
 
 const TOKEN = process.env.WHATSAPP_API_TOKEN;
 const PHONE_ID = process.env.WHATSAPP_PHONE_ID;

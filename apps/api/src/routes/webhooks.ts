@@ -117,7 +117,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
     }
 
     const org = await getOrgById(orgId);
-    const paystackKey = org?.config?.payment?.paystackSecretKey;
+    const paystackKey = org?.config?.payment?.secretKey || process.env.PAYSTACK_SECRET_KEY;
     if (!paystackKey) {
       logger.warn({ orgId }, 'Org has no Paystack key configured — rejecting webhook');
       return reply.status(501).send('Paystack integration not configured for this organization');

@@ -16,7 +16,6 @@ A high-scale, multi-tenant AI Business Operating System built specifically for t
 *   🏦 **Alajo Sovereign Finance:** Automated personal vaults with Monnify Virtual Accounts, bill payments, and goal-based savings.
 *   🛒 **Conversational Commerce:** Full Shopping Cart lifecycle (`add`, `view`, `remove`, `clear`) integrated into checkout.
 *   🛡️ **Deterministic Price Guard:** Algorithmic verification of AI-quoted prices against live product data to prevent fraud.
-*   📱 **SMS Bridge Relay:** Real-time bank alert matching via Termux-based bridge devices.
 *   👁️ **Vision-First Verification:** Automated receipt scanning for instant payment confirmation (Manual fallback for high-value deals).
 *   📊 **Proactive Pulse:** Daily morning sales reports for the Boss and automated appointment reminders for customers.
 *   👮 **Global Fraud Guard:** Shared blacklist of fraudulent numbers across the entire network.
