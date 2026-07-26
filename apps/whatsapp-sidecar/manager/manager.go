@@ -243,42 +243,11 @@ func (m *Manager) createEventHandler(orgID string) whatsmeow.EventHandler {
 			m.log.Warnf("🔌 Session logged out for %s: reason=%s", orgID, v.Reason)
 			m.withdrawClient(orgID)
 		case *events.PairSuccess:
-			m.log.Infof("🎉 Successfully paired %s! Scheduling Welcome Message...", orgID)
+			m.log.Infof("🎉 Successfully paired %s! Waiting for first user message...", orgID)
 			m.sessionStartAt[orgID] = time.Now()
-			go func() {
-				// Wait 30s to let history sync + prekey upload finish before sending.
-				time.Sleep(30 * time.Second)
-
-				// Use org-specific name
-				displayName := "Your AI Agent"
-				if orgID == "aelixxr-life-companion" || orgID == "aelixxr" {
-					displayName = "Aelixxr"
-				} else if orgID == "zynux" {
-					displayName = "Zynux"
-				} else if orgID == "naija-agent-master" {
-					displayName = "Naija Agent"
-				}
-
-				welcomeText := fmt.Sprintf("🎉 *Connection Successful! %s is now live.*\n\n"+
-					"Privacy is your right. By default, I will NEVER reply to people saved in your contacts.\n\n"+
-					"*Your Steering Wheel Commands:*\n"+
-					"- `#pause`: Puts me to sleep for 24 hours.\n"+
-					"- `#resume`: Wakes me back up instantly.\n"+
-					"- `#mute`: Permanently bans me from a specific chat.\n"+
-					"- `#unmute`: Reverses a mute.\n"+
-					"- `#optin`: Forces me to talk to a saved VIP contact.\n\n"+
-					"*Save this message!*", displayName)
-				
-				if m.clients[orgID].Store.ID != nil {
-					me := m.clients[orgID].Store.ID.ToNonAD().String()
-					err := m.SendMessage(orgID, me, welcomeText)
-					if err != nil {
-						m.log.Errorf("Failed to send Welcome Message for %s: %v", orgID, err)
-					}
-				} else {
-					m.log.Errorf("Could not send Welcome Message for %s: Store.ID is nil after 10s.", orgID)
-				}
-			}()
+			// Welcome-to-self removed — new companion devices messaging themselves
+			// immediately after pairing triggers WhatsApp bot detection and ghost ban.
+			// The session stays silent until a human messages first.
 		case *events.StreamReplaced:
 			m.log.Warnf("🔌 Session stream replaced for %s — another client paired with same phone", orgID)
 			m.withdrawClient(orgID)
