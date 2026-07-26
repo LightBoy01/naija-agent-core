@@ -24,21 +24,23 @@ import (
 )
 
 type Manager struct {
-	container *sqlstore.Container
-	db        *sql.DB // PostgreSQL connection for org config
-	publisher *queue.Publisher
-	clients   map[string]*whatsmeow.Client
-	mu        sync.RWMutex
-	log       waLog.Logger
+	container        *sqlstore.Container
+	db               *sql.DB // PostgreSQL connection for org config
+	publisher        *queue.Publisher
+	clients          map[string]*whatsmeow.Client
+	sessionStartAt   map[string]time.Time // when each org's session was last established (pair/connect)
+	mu               sync.RWMutex
+	log              waLog.Logger
 }
 
 func NewManager(container *sqlstore.Container, db *sql.DB, publisher *queue.Publisher) *Manager {
 	mgr := &Manager{
-		container: container,
-		db:        db,
-		publisher: publisher,
-		clients:   make(map[string]*whatsmeow.Client),
-		log:       waLog.Stdout("Manager", "INFO", true),
+		container:        container,
+		db:               db,
+		publisher:        publisher,
+		clients:          make(map[string]*whatsmeow.Client),
+		sessionStartAt:   make(map[string]time.Time),
+		log:              waLog.Stdout("Manager", "INFO", true),
 	}
 	// Automatically load existing sessions
 	go mgr.LoadSessions()
@@ -59,10 +61,16 @@ func (m *Manager) GetClient(orgID string) (*whatsmeow.Client, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	client, exists := m.clients[orgID]
-	if exists {
-		return client, nil
+	if !exists {
+		return nil, fmt.Errorf("client for org %s not found", orgID)
 	}
-	return nil, fmt.Errorf("client for org %s not found", orgID)
+	if !client.IsConnected() {
+		return nil, fmt.Errorf("client for org %s exists but is not connected", orgID)
+	}
+	if !client.IsLoggedIn() {
+		return nil, fmt.Errorf("client for org %s is connected but not logged in", orgID)
+	}
+	return client, nil
 }
 
 func (m *Manager) getProxyForOrg(orgID string) string {
@@ -129,6 +137,7 @@ func (m *Manager) ConnectClientWithDevice(orgID string, device *store.Device) er
 	}
 
 	m.clients[orgID] = client
+	m.sessionStartAt[orgID] = time.Now()
 	m.log.Infof("✅ Hydrated session for Org: %s", orgID)
 	return nil
 }
@@ -169,6 +178,7 @@ func (m *Manager) ConnectClient(orgID string) (<-chan whatsmeow.QRChannelItem, e
 	}
 
 	m.clients[orgID] = client
+	m.sessionStartAt[orgID] = time.Now()
 	return qrChan, nil
 }
 
@@ -234,17 +244,29 @@ func (m *Manager) createEventHandler(orgID string) whatsmeow.EventHandler {
 			m.withdrawClient(orgID)
 		case *events.PairSuccess:
 			m.log.Infof("🎉 Successfully paired %s! Scheduling Welcome Message...", orgID)
+			m.sessionStartAt[orgID] = time.Now()
 			go func() {
 				time.Sleep(10 * time.Second)
-				welcomeText := "🎉 *Connection Successful! Zynux is now live.*\n\n" +
-					"Privacy is your right. By default, I will NEVER reply to people saved in your contacts.\n\n" +
-					"*Your Steering Wheel Commands:*\n" +
-					"- `#pause`: Puts me to sleep for 24 hours.\n" +
-					"- `#resume`: Wakes me back up instantly.\n" +
-					"- `#mute`: Permanently bans me from a specific chat.\n" +
-					"- `#unmute`: Reverses a mute.\n" +
-					"- `#optin`: Forces me to talk to a saved VIP contact.\n\n" +
-					"*Save this message!*"
+
+				// Use org-specific name
+				displayName := "Your AI Agent"
+				if orgID == "aelixxr-life-companion" || orgID == "aelixxr" {
+					displayName = "Aelixxr"
+				} else if orgID == "zynux" {
+					displayName = "Zynux"
+				} else if orgID == "naija-agent-master" {
+					displayName = "Naija Agent"
+				}
+
+				welcomeText := fmt.Sprintf("🎉 *Connection Successful! %s is now live.*\n\n"+
+					"Privacy is your right. By default, I will NEVER reply to people saved in your contacts.\n\n"+
+					"*Your Steering Wheel Commands:*\n"+
+					"- `#pause`: Puts me to sleep for 24 hours.\n"+
+					"- `#resume`: Wakes me back up instantly.\n"+
+					"- `#mute`: Permanently bans me from a specific chat.\n"+
+					"- `#unmute`: Reverses a mute.\n"+
+					"- `#optin`: Forces me to talk to a saved VIP contact.\n\n"+
+					"*Save this message!*", displayName)
 				
 				if m.clients[orgID].Store.ID != nil {
 					me := m.clients[orgID].Store.ID.ToNonAD().String()
@@ -277,6 +299,7 @@ func (m *Manager) withdrawClient(orgID string) {
 	}
 
 	delete(m.clients, orgID)
+	delete(m.sessionStartAt, orgID)
 
 	// Disconnect in a goroutine so it doesn't block the event handler
 	go func(c *whatsmeow.Client) {
@@ -299,15 +322,17 @@ func (m *Manager) handleMessage(orgID string, evt *events.Message) {
 	}
 
 	// Detect Human Intervention
+	// Skip detection during the 60-second grace period after session start
+	// to avoid false positives from WhatsApp history sync replaying old messages.
 	if evt.Info.IsFromMe {
 		chatId := evt.Info.Chat.ToNonAD().String()
 		text := evt.Message.GetConversation()
 		if text == "" && evt.Message.GetExtendedTextMessage() != nil {
 			text = evt.Message.GetExtendedTextMessage().GetText()
 		}
-		
+
 		textLower := strings.ToLower(strings.TrimSpace(text))
-		
+
 		if textLower == "#resume" || textLower == "#ai take over" || textLower == "#unmute" || textLower == "#optin" {
 			m.log.Infof("🟢 [HUMAN AWARE] Boss explicitly handed control back for %s. AI Resumed.", chatId)
 			_ = m.publisher.ReleaseHumanLock(orgID, chatId)
@@ -333,12 +358,19 @@ func (m *Manager) handleMessage(orgID string, evt *events.Message) {
 				"- `#mute`: Permanently bans me from this chat.\n" +
 				"- `#unmute`: Reverses a mute.\n" +
 				"- `#optin`: Forces me to talk to a saved VIP contact."
-			
+
 			me := m.clients[orgID].Store.ID.ToNonAD().String()
 			_ = m.SendMessage(orgID, me, helpText)
 		} else {
-			m.log.Infof("🤫 [HUMAN AWARE] Boss sent a message to %s. Pausing AI for 5 mins (Sliding Window).", chatId)
-			_ = m.publisher.SetHumanLock(orgID, chatId, 5 * time.Minute)
+			// HISTORY SYNC GUARD: Skip 5-min lock during the first 60s after session start.
+			// whatsmeow replays old IsFromMe messages during initial history sync,
+			// which would falsely trigger HUMAN AWARE pauses on every reconnect.
+			if startAt, ok := m.sessionStartAt[orgID]; ok && time.Since(startAt) < 60*time.Second {
+				m.log.Infof("📥 [HISTORY SYNC] Ignoring IsFromMe message during grace period for %s (message: %s)", orgID, chatId)
+			} else {
+				m.log.Infof("🤫 [HUMAN AWARE] Boss sent a message to %s. Pausing AI for 5 mins (Sliding Window).", chatId)
+				_ = m.publisher.SetHumanLock(orgID, chatId, 5 * time.Minute)
+			}
 		}
 		return
 	}
