@@ -130,9 +130,9 @@ export async function executeRechargeTool(name: string, args: Record<string, any
 
         let verifiedAmountNaira = 0;
         
-        if (reference.includes('HACK') || reference.includes('DEBUG') || reference.startsWith('TEST_')) {
-             if (auditLogIdTopup) await auditService.updateLogStatus(auditLogIdTopup, 'failed', { error: 'Fraud/Test Attempt Detected' });
-             return { error: "FRAUD ALERT: This transaction reference looks like a test attempt. I cannot process this." };
+        if (reference.startsWith('TEST_')) {
+             if (auditLogIdTopup) await auditService.updateLogStatus(auditLogIdTopup, 'failed', { error: 'Test reference rejected' });
+             return { error: "That Transaction ID looks like a test reference. Please use a valid receipt reference." };
         } else if (pocketfi) {
              const tx = await pocketfi.verify(reference, amountPaidNairaInput > 0 ? amountPaidNairaInput : 0);
              if (tx && tx.status === 'success') {

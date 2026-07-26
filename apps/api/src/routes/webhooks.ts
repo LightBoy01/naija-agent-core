@@ -117,10 +117,10 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
     }
 
     const org = await getOrgById(orgId);
-    const paystackKey = (org?.config as any)?.payment?.paystackSecretKey || process.env.PAYSTACK_SECRET_KEY;
-
+    const paystackKey = org?.config?.payment?.paystackSecretKey;
     if (!paystackKey) {
-      return reply.status(500).send('Paystack secret key not configured');
+      logger.warn({ orgId }, 'Org has no Paystack key configured — rejecting webhook');
+      return reply.status(501).send('Paystack integration not configured for this organization');
     }
 
     const paystack = getProvider('paystack', paystackKey) as any;
@@ -244,10 +244,10 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
     }
 
     const org = await getOrgById(orgId);
-    const monnifyKey = (org?.config as any)?.payment?.secretKey || process.env.MONNIFY_SECRET_KEY;
-
+    const monnifyKey = org?.config?.payment?.secretKey;
     if (!monnifyKey) {
-      return reply.status(500).send('Monnify secret key not found');
+      logger.warn({ orgId }, 'Org has no Monnify key configured — rejecting webhook');
+      return reply.status(501).send('Monnify integration not configured for this organization');
     }
 
     const monnify = getProvider('monnify', monnifyKey, org.config?.payment?.redirectUrl) as any;

@@ -31,3 +31,6 @@ test-*.mjs
 sidecar-binary
 sshs.md
 *ssh*.md
+apps/whatsapp-sidecar/sidecar-linux-amd64
+.env.local
+.env.production
