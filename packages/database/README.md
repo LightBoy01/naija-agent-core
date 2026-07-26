@@ -1,7 +1,7 @@
 # `@naija-agent/database`
 
 ## 1. Overview and Purpose
-The `@naija-agent/database` package serves as the core data persistence and access layer for the Naija Agent ecosystem. It acts as a specialized module providing type-safe PostgreSQL database operations using [Drizzle ORM](https://orm.drizzle.team/). This package encapsulates connection management, schema definitions, and domain-specific query operations, enabling decoupled and scalable data access across the monolithic architecture.
+The `@naija-agent/database` package serves as the core data persistence and access layer for the Naija Agent ecosystem. It acts as a specialized module providing type-safe PostgreSQL database operations using [Drizzle ORM](https://orm.drizzle.team/). This package encapsulates connection management, schema definitions, and domain-specific query operations, enabling decoupled and scalable data access across the monorepo architecture.
 
 ## 2. Key Dependencies
 This package relies on modern and high-performance tools in the Node.js database ecosystem:

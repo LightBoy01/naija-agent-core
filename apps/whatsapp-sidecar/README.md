@@ -15,8 +15,9 @@ The sidecar operates as a **Hybrid Hub**, handling both inbound events from What
 
 ### Inbound Data Flow (WhatsApp -> Sidecar -> Workers)
 1. **Event Listening**: The Manager module listens for events on all connected `whatsmeow` clients.
-2. **Message Processing**: Incoming messages are intercepted. The sidecar handles automatic media downloading to a shared filesystem (`/tmp/sidecar-media`) and detects human-intervention commands (e.g., `#pause`, `#resume`, `#mute`, `#optin`).
+2. **Message Processing**: Incoming messages are intercepted. The sidecar handles automatic media downloading to a shared filesystem (`/tmp/sidecar-media`) and detects human-intervention commands (e.g., `#pause`, `#resume`, `#mute`, `#optin`). A 60-second grace period after pairing suppresses history-sync false positives — messages replayed during initial sync are ignored instead of triggering Human Locks.
 3. **Queue Publishing**: If a message requires AI processing and is not muted or locked, it is transformed into a `JobData` payload and pushed directly to Redis in **BullMQ format**. It targets either the `whatsapp-queue` (business) or `life-queue` (Aelixxr/masterbot) based on the tenant.
+4. **Welcome Context Injection**: First user message after pairing carries a `[SYSTEM_WELCOME]` prefix with privacy notice and steering wheel commands (`#pause`, `#resume`, `#mute`, `#unmute`, `#optin`) — delivered naturally by the AI in its first reply. No self-message is sent (avoids WhatsApp bot detection ghost ban).
 
 ### Outbound Data Flow (Workers -> API -> WhatsApp)
 1. **Internal API**: The Sidecar exposes an HTTP API (protected by `X-API-Key`) for outbound operations.

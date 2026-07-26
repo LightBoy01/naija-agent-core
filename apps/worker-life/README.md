@@ -26,8 +26,9 @@ The worker is organized around domain-specific Job Handlers which decouple logic
 
 ### The Life Pipeline & Interceptors
 Before a chat message reaches the AI Orchestrator, it passes through the `LifePipeline` — an interceptor pattern designed to sanitize, validate, and enrich the context.
-- **Interceptors:** `context.ts`, `media.ts`, `security.ts`, `spam.ts`
+- **Interceptors** (executed in order): `context.ts` → `spam.ts` → `security.ts` → `media.ts`
 - If an interceptor flags an issue (e.g., spam detected, unauthorized access), it triggers a `shortCircuit` on the context, preventing expensive LLM calls.
+- Energy credit checks happen at tool execution time via `billingService.ts`, not as a pipeline interceptor.
 
 ### Dynamic AI Routing
 Instead of hardcoding a single AI provider, the worker leverages `@naija-agent/ai` (`AIFactory.createRouter`). This allows the Orchestrator to dynamically route intents to the cheapest or most capable model (e.g., Gemini for reasoning, DeepSeek/DashScope for specialized fallback tasks).
@@ -52,7 +53,7 @@ apps/worker-life/
 ├── src/
 │   ├── config/       # Configuration constants (billing rules, sector definitions).
 │   ├── handlers/     # BullMQ job processors (Chat, Cron, Heartbeat, SLM, Webhooks).
-│   ├── pipeline/     # LifePipeline and Interceptors (Spam, Security, Media, Context).
+│   ├── pipeline/     # LifePipeline and Interceptors (Context → Spam → Security → Media).
 │   ├── prompts/      # Core System Prompts (Aelixxr Soul, Alajo Skill).
 │   ├── services/     # Core logic (Billing, MCP, Memory, Docker, Vault, Prompt, Whatsapp).
 │   ├── tools/        # Static tool definitions & Executors (Finance, Vault, Utility, Education).

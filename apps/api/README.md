@@ -22,7 +22,7 @@ Instead of processing complex business logic synchronously, the API acts as a hi
 ### 1. Webhooks (`/webhook`)
 The API exposes endpoints to receive real-time events:
 - **WhatsApp Webhooks:** Validates the `X-Hub-Signature-256`, parses incoming WhatsApp messages (text, audio, images), checks user opt-in/out status, handles rate limiting, and queues the message. Messages intended for `aelixxr` are routed to the `life-queue`, while others (e.g., `zynux`) go to the `whatsapp-queue`.
-- **Payment Webhooks:** Handles events from Paystack (`/webhook/paystack`), Monnify (`/webhook/monnify`), and PocketFi (`/webhook/pocketfi`). It verifies cryptographic signatures, processes successful top-ups/vault deposits via the database, handles dispute tracking, and dispatches notification jobs to the WhatsApp queue.
+- **Payment Webhooks:** Handles events from Paystack (`/webhook/paystack`), Monnify (`/webhook/monnify`), and PocketFi (`/webhook/pocketfi`). It verifies cryptographic signatures, processes successful top-ups/vault deposits via the database, handles dispute tracking, and dispatches notification jobs to the WhatsApp queue. Payment webhooks require per-organization API keys — no global key fallback.
 
 ### 2. Queues (BullMQ)
 The API does not perform heavy processing. Instead, it enqueues tasks:
