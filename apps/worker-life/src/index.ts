@@ -9,10 +9,6 @@ import { getLifeTools, getOrchestratorTools } from './tools/index.js';
 import { mcpClient } from './services/mcpClient.js';
 import { promptService } from './services/promptService.js';
 import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // --- AI Abstraction ---
 import { AIOrchestrator, GeminiProvider, OpenAIProvider, AIFactory, GlobalModelRegistry } from '@naija-agent/ai';

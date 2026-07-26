@@ -9,7 +9,7 @@
     "vercel-build": "cd ../.. && npm run build"
   },
   "dependencies": {
-    "@fastify/cors": "^10",
+    "@fastify/cors": "^9",
     "@naija-agent/firebase": "*",
     "@naija-agent/types": "*",
     "bullmq": "^5.1.0",
