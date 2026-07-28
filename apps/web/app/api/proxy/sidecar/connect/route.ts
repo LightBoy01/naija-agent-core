@@ -9,7 +9,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'orgId is required' }, { status: 400 });
     }
 
-    const sidecarUrl = process.env.SOVEREIGN_SIDECAR_URL || 'http://159.195.150.66:8080';
+    const sidecarUrl = process.env.SOVEREIGN_API_URL || 'http://159.195.150.66:80';
     const apiKey = process.env.ADMIN_API_KEY;
 
     if (!apiKey) {
@@ -17,8 +17,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
     }
 
-    // Call the Sovereign Go Sidecar
-    const res = await fetch(`${sidecarUrl}/connect`, {
+    // Proxy through the API Gateway (port 80/3000) which forwards to the Go sidecar internally
+    const res = await fetch(`${sidecarUrl}/sidecar/connect`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
