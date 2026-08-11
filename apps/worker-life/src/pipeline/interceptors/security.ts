@@ -15,6 +15,8 @@ export const SecurityInterceptor: LifeInterceptor = {
     let pin: string | null = null;
     if (keywordPinMatch) {
         pin = keywordPinMatch[1] || keywordPinMatch[2];
+    } else if (/^\d{4}$/.test(text)) {
+        pin = text;
     }
     
     if (pin) {
