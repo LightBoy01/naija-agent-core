@@ -50,6 +50,30 @@ async function handleProspectFlow(
     }
   }
 
+  // Fallback: detect referral intent when WhatsApp transforms the URL prefix
+  if (!isReferral) {
+    const hasReferralIntent = text.match(/Ref:\s*(\+?\d+)/i) 
+        || text.match(/(?:referred|invited)\s+me/i);
+    
+    if (hasReferralIntent) {
+      const phoneMatch = text.match(/(\+?\d{10,14})/);
+      if (phoneMatch) {
+        const possibleRefPhone = phoneMatch[1];
+        try {
+          const { getPartnerStatus } = await import('@naija-agent/database');
+          const partnerStatus = await getPartnerStatus(possibleRefPhone);
+          if (partnerStatus.isPartner) {
+            isReferral = true;
+            await redisClient.set(`referral:${from}`, possibleRefPhone, 'EX', 7 * 24 * 60 * 60);
+            logger.info({ from, referrerPhone: possibleRefPhone }, '🔗 [REFERRAL] Detected via natural language fallback');
+          }
+        } catch (lookupErr: any) {
+          logger.warn({ from, error: lookupErr.message }, '⚠️ [REFERRAL] Partner lookup failed, falling through');
+        }
+      }
+    }
+  }
+
   if (!isReferral && !state) return { handled: false };
 
   logger.info({ from, step: state?.step }, '🛠️ [PROSPECT FLOW] Processing step');
@@ -599,16 +623,44 @@ async function handleBossSetup(
                  logger.info({ orgId, jid }, '🔗 [AUTO-ONBOARDING] Hydrated sidecar mapping in Redis');
              }
 
-             // 4b. Check for Referral
-             try {
-                const { createReferral } = await import('@naija-agent/database');
-                const referrerPhone = await redisClient.get(`referral:${from}`);
-                if (referrerPhone) {
-                    await createReferral(referrerPhone, orgId);
-                    logger.info({ orgId, referrerPhone }, '🤝 [REFERRAL] Referral logged for new tenant');
-                }
-             } catch (refErr: any) {
-                logger.error({ orgId, error: refErr.message }, '⚠️ [REFERRAL] Failed to log referral');
+             // 4b. Check for Referral and seed trial credit
+             const referrerPhone = await redisClient.get(`referral:${from}`);
+             if (referrerPhone) {
+                 try {
+                     const { createReferral } = await import('@naija-agent/database');
+                     await createReferral(referrerPhone, orgId);
+                     logger.info({ orgId, referrerPhone }, '🤝 [REFERRAL] Referral logged for new tenant');
+                 } catch (refErr: any) {
+                     logger.error({ orgId, error: refErr.message }, '⚠️ [REFERRAL] Failed to log referral');
+                 }
+
+                 // Seed ₦500 trial credit for referred business
+                 try {
+                     const { topupOrg } = await import('@naija-agent/database');
+                     const trialRef = `trial_${orgId}`;
+                     await topupOrg(orgId, 500, trialRef);
+                     logger.info({ orgId, amount: 500 }, '🎁 [TRIAL] Seeded ₦500 trial credit for referred business');
+                 } catch (creditErr: any) {
+                     if (creditErr.message === 'DUPLICATE_REFERENCE') {
+                         logger.info({ orgId }, '🎁 [TRIAL] Trial credit already seeded (idempotent, likely retry)');
+                     } else {
+                         logger.error({ orgId, error: creditErr.message }, '⚠️ [TRIAL] Failed to seed trial credit');
+                     }
+                 }
+             } else {
+                 // Seed ₦100 trial credit for organic signup
+                 try {
+                     const { topupOrg } = await import('@naija-agent/database');
+                     const trialRef = `trial_${orgId}`;
+                     await topupOrg(orgId, 100, trialRef);
+                     logger.info({ orgId, amount: 100 }, '🎁 [TRIAL] Seeded ₦100 trial credit for organic business');
+                 } catch (creditErr: any) {
+                     if (creditErr.message === 'DUPLICATE_REFERENCE') {
+                         logger.info({ orgId }, '🎁 [TRIAL] Trial credit already seeded (idempotent)');
+                     } else {
+                         logger.error({ orgId, error: creditErr.message }, '⚠️ [TRIAL] Failed to seed organic trial credit');
+                     }
+                 }
              }
 
              // 5. Update Org with Pending Setup

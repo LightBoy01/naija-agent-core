@@ -1,5 +1,5 @@
 # Naija Agent Core — Codebase Review
-**Date:** 2026-07-26 (Updated) | **Branch:** master | **TypeScript:** 5.9.3
+**Date:** 2026-07-27 (Updated) | **Branch:** master | **TypeScript:** 5.9.3
 
 ---
 
@@ -486,21 +486,17 @@ Each tool call has a cost in Kobo defined in `TOOL_COSTS`. Deducted from user ba
 - Energy credits billing is fine-grained and transparent
 
 ### Technical Debt & Issues
-1. **The Great Firebase Purge (Pending):** The dual-writing safety net is working, but it needs a hard timeline for when Firebase will be entirely excised from the Node applications.
-2. **`@naija-agent/logistics` is unused** — Not consumed by any app; planned future feature for Terminal.africa shipping integration
-3. **`packages/storage` undeclared dependencies** — Runtime imports `@naija-agent/firebase` and `@naija-agent/database` but doesn't declare either in its `package.json`
-4. **No visible test suites on worker-life** — Vitest is configured but coverage is absent for the 10 handler files, 4 interceptors, and services
-5. **Mixed module systems** — All apps are CJS (bundled by esbuild), packages are mostly ESM (`"type": "module"`). `payments` and `logistics` are CJS. This is intentional but creates dual-package hazard for packages imported by ESM consumers
-6. **Sidecar `/download/{mediaId}` returns placeholder** — whatsmeow doesn't support direct download by ID without message context; media retrieval from sovereign path is incomplete
-7. **Energy Ledger table missing** — Energy credits are mutated via bare `UPDATE` with no immutable audit trail
+1. **The Great Firebase Purge (Pending):** The dual-writing safety net is working, but it needs a hard timeline for when Firebase will be entirely excised from the Node applications. Worker-life still has 7 active `@naija-agent/firebase` imports (org lookup, PIN auth, vault tools).
+2. **`packages/storage` undeclared dependencies** — Runtime imports `@naija-agent/database`, `@naija-agent/types`, `drizzle-orm`, `pino`, and `zod` but doesn't declare them in its `package.json`.
+3. **Sparse test coverage** — 193 tests across 27 files, but 8 of 12 packages/apps have zero tests (api, web, ai, firebase, logistics, payments, storage, whatsapp-sidecar). Worker and worker-life account for 22 of 27 test files.
+4. **Mixed module systems** — All apps are CJS (bundled by esbuild), packages are mostly ESM (`"type": "module"`). `payments` and `logistics` are CJS. This is intentional but creates dual-package hazard for packages imported by ESM consumers.
+5. **Sidecar `/download/{mediaId}` returns 501 Not Implemented** — whatsmeow doesn't support direct download by ID without message context; media retrieval from sovereign path is incomplete. Current workaround: sidecar saves media to shared `/tmp/sidecar-media/` filesystem accessible by the worker container.
 
 ### Recommendations
 1. Document the Firestore → Postgres migration end-state and timeline (priority: complete before adding new data-heavy features)
-2. Wire up `@naija-agent/logistics` or remove it from the monorepo
-3. Add `@naija-agent/firebase` and `@naija-agent/database` to `@naija-agent/storage`'s declared dependencies
-4. Add test coverage for `@naija-agent/types` (schemas/validation), `@naija-agent/payments` (gateway verification), and worker-life handlers
-5. Add `energy_ledger` table for immutable energy credit audit trail (schema designed in aelixxr-hardening plan)
-6. Implement sidecar media download endpoint for sovereign media retrieval
-7. Complete ESM migration or standardize on CJS across all packages (currently split between the two)
-8. Route future Aelixxr WhatsApp pairing through a clean proxy via `proxy_url` column (pair-code method is flagged by Meta)
-9. Replace pair-code with QR code linking for new sessions to reduce bot-detection risk
+2. Add `@naija-agent/database`, `@naija-agent/types`, `drizzle-orm`, `pino`, and `zod` to `@naija-agent/storage`'s declared dependencies in `package.json`
+3. Add test coverage for `@naija-agent/types` (schemas/validation), `@naija-agent/payments` (gateway verification), `@naija-agent/ai` (routing/failover), and `apps/api` (webhook verification)
+4. Implement sidecar media download endpoint for sovereign media retrieval
+5. Complete ESM migration or standardize on CJS across all packages (currently split between the two)
+6. Route future Aelixxr WhatsApp pairing through a clean proxy via `proxy_url` column (pair-code method is flagged by Meta)
+7. Replace pair-code with QR code linking for new sessions to reduce bot-detection risk

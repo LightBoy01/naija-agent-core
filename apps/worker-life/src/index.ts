@@ -125,6 +125,13 @@ const worker: Worker = new Worker(
             case 'life-vault-deposit':
                 return await handleVaultDeposit(job, deps);
 
+            case 'send-system-notification':
+                // Non-AI system notification — just sends WhatsApp text
+                const { to, message } = job.data;
+                const { whatsappService } = await import('./services/whatsapp.js');
+                await whatsappService.sendText(to, message);
+                return { success: true };
+
             default:
                 logger.warn({ jobName: job.name }, 'Unknown job name');
                 return { success: false, error: 'unknown_job' };

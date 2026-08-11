@@ -116,7 +116,7 @@ func (m *Manager) ConnectClientWithDevice(orgID string, device *store.Device) er
 		return nil
 	}
 
-	client := whatsmeow.NewClient(device, waLog.Stdout("Client-"+orgID, "ERROR", true))
+	client := whatsmeow.NewClient(device, waLog.Stdout("Client-"+orgID, "INFO", true))
 	client.EnableAutoReconnect = true
 
 	// --- IP ROTATION: Set Proxy if assigned ---

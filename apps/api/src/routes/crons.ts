@@ -178,4 +178,32 @@ export default async function cronRoutes(fastify: FastifyInstance, opts: CronRou
       return reply.status(500).send({ error: 'Failed to settle referrals' });
     }
   });
+
+  fastify.get('/commission-sweep', async (request, reply) => {
+    const cronSecret = (request.headers as any)['x-cron-secret'];
+    if (cronSecret !== process.env.CRON_SECRET) return reply.status(401).send('Unauthorized');
+
+    try {
+      logger.info("🕒 Running Commission Sweep Cron...");
+      const { sweepMaturedCommissions } = await import('@naija-agent/database');
+      
+      const sweeps = await sweepMaturedCommissions();
+      
+      for (const sweep of sweeps) {
+        const formattedAmount = '₦' + sweep.totalSwept;
+        
+        await lifeQueue.add('send-system-notification', {
+          to: sweep.partnerPhone,
+          message: `💰 *Commission Sweep!*\n\n${formattedAmount} of your referral commissions have cleared (7-day hold complete) and been added to your Aelixxr Vault Balance.`
+        }, { removeOnComplete: true });
+        
+        logger.info({ partner: sweep.partnerPhone, amount: sweep.amountKobo }, "✅ Swept commissions to Vault.");
+      }
+
+      return reply.send({ status: 'success', message: `Swept commissions for ${sweeps.length} partners.` });
+    } catch (error: any) {
+      logger.error({ error: error.message }, "❌ Failed to sweep commissions");
+      return reply.status(500).send({ error: 'Failed to sweep commissions' });
+    }
+  });
 }

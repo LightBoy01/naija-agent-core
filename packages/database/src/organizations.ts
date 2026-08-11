@@ -420,12 +420,32 @@ export async function getPartnerStats(referrerPhone: string) {
     }
   }
 
+  // Build per-referral details
+  const referralDetails = await Promise.all(
+    partnerReferrals.map(async (ref) => {
+      const org = ref.referredOrgId 
+        ? await db.select({ name: organizations.name, status: organizations.status })
+            .from(organizations).where(eq(organizations.id, ref.referredOrgId)).limit(1)
+        : null;
+      return {
+        id: ref.id,
+        orgName: org?.[0]?.name || 'Unknown',
+        orgStatus: org?.[0]?.status || ref.status,
+        commissionEarnedKobo: ref.commissionEarnedKobo,
+        createdAt: ref.createdAt,
+        expiresAt: ref.expiresAt,
+        isActive: ref.status === 'active' && ref.expiresAt && new Date(ref.expiresAt) > now
+      };
+    })
+  );
+
   return {
     totalReferrals: partnerReferrals.length,
     activeReferrals: activeCount,
     totalEarnedKobo,
     totalClearedKobo,
-    totalPendingKobo
+    totalPendingKobo,
+    referrals: referralDetails
   };
 }
 
@@ -500,6 +520,58 @@ export async function claimCommissions(partnerPhone: string) {
     
     return { success: true, message: `Successfully claimed ${totalToClaimKobo / 100} NGN to vault.`, amountClaimed: totalToClaimKobo };
   });
+}
+
+export async function sweepMaturedCommissions() {
+    const db = getDb();
+    const clearedThreshold = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    
+    const maturedCommissions = await db.select({
+        userId: transactions.userId,
+        totalKobo: sql<number>`SUM(ROUND(${transactions.amount}::numeric * 100))`.as('total_kobo'),
+        count: sql<number>`COUNT(*)`.as('count')
+    }).from(transactions).where(
+        sql`${transactions.type} = 'commission_pending' AND ${transactions.status} = 'pending' AND ${transactions.createdAt} < ${clearedThreshold}`
+    ).groupBy(transactions.userId);
+    
+    const results: { partnerPhone: string; amountKobo: number; totalSwept: string }[] = [];
+    
+    for (const group of maturedCommissions) {
+        if (!group.userId || !group.totalKobo || group.totalKobo <= 0) continue;
+        
+        const phone = group.userId;
+        const kobo = group.totalKobo;
+        
+        await db.transaction(async (tx) => {
+            await tx.select().from(users).where(eq(users.phone, phone)).for('update');
+            
+            await tx.update(transactions)
+                .set({ status: 'success', type: 'commission_cleared' })
+                .where(sql`${transactions.userId} = ${phone} AND ${transactions.type} = 'commission_pending' AND ${transactions.status} = 'pending' AND ${transactions.createdAt} < ${clearedThreshold}`);
+            
+            await tx.update(users)
+                .set({ vaultBalanceKobo: sql`${users.vaultBalanceKobo} + ${kobo}` })
+                .where(eq(users.phone, phone));
+            
+            await tx.insert(transactions).values({
+                id: `sweep_${crypto.randomUUID()}`,
+                userId: phone,
+                type: 'commission_sweep',
+                amount: (kobo / 100).toFixed(2),
+                currency: 'NGN',
+                status: 'success',
+                reference: `auto_sweep_${Date.now()}_${phone}`
+            });
+        });
+        
+        results.push({
+            partnerPhone: phone,
+            amountKobo: kobo,
+            totalSwept: (kobo / 100).toLocaleString()
+        });
+    }
+    
+    return results;
 }
 
 

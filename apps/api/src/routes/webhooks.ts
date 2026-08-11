@@ -320,10 +320,31 @@ export default async function webhookRoutes(fastify: FastifyInstance, opts: Webh
   fastify.post('/webhook/pocketfi', async (request, reply) => {
     const signature = request.headers['http_pocketfi_signature'] as string;
     const rawBody = (request as any).rawBody as string;
-    const secret = process.env.POCKETFI_SECRET_KEY;
 
-    if (!signature || !secret || !rawBody) {
-      return reply.status(400).send({ message: 'Missing signature, secret key, or body' });
+    if (!signature || !rawBody) {
+      return reply.status(400).send({ message: 'Missing signature or body' });
+    }
+
+    // Per-tenant key resolution: parse reference from raw body BEFORE verifying signature
+    // to identify the owning org (same pattern as Paystack webhook).
+    let secret = process.env.POCKETFI_SECRET_KEY;
+    try {
+      const prePayload = JSON.parse(rawBody);
+      const preRef = prePayload?.transaction?.reference;
+      if (preRef?.startsWith('refill_')) {
+        const refillOrgId = preRef.split('_')[1];
+        const refillOrg = await getOrgById(refillOrgId);
+        if (refillOrg?.config?.payment?.secretKey) {
+          secret = refillOrg.config.payment.secretKey;
+        }
+      }
+      // aelixxr_vault_ and unknown prefixes stay on global key
+    } catch {
+      // If body isn't parseable JSON, fall through to global key verification
+    }
+
+    if (!secret) {
+      return reply.status(400).send({ message: 'PocketFi secret key not configured' });
     }
 
     const hashkey = crypto.createHmac('sha512', secret).update(rawBody).digest('hex');

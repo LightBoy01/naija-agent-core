@@ -178,29 +178,78 @@ export class PocketFiProvider implements PaymentProvider {
 
   // --- 5. Identity Verification (KYC) ---
 
-  async verifyBVN(bvn: string): Promise<{ success: boolean; data?: any; message?: string }> {
-      try {
-          const response = await this.api.post('/identity/bvn', { bvn });
-          if (response.data.status === true || response.data.status === 'success') {
-              return { success: true, data: response.data.data };
-          }
-          return { success: false, message: response.data.message || 'BVN Verification failed' };
-      } catch (error: any) {
-          console.error('PocketFi BVN Error:', error.response?.data || error.message);
-          return { success: false, message: error.response?.data?.message || error.message };
+  /**
+   * Unified identity verification via PocketFi /verification endpoint.
+   * @param verifyType "basic" or "enhanced"
+   * @param idType "bvn" or "nin"
+   * @param idNumber The BVN or NIN number
+   */
+  private async verifyIdentity(verifyType: 'basic' | 'enhanced', idType: 'bvn' | 'nin', idNumber: string): Promise<{ success: boolean; data?: any; message?: string; _fallback?: boolean }> {
+    try {
+      const response = await this.api.post('/verification', {
+        type: verifyType,
+        verify_type: idType,
+        number: idNumber
+      });
+      if (response.data.status === true || response.data.status === 'success') {
+        return { success: true, data: response.data.data };
       }
+      return { success: false, message: response.data.message || `${idType.toUpperCase()} Verification failed` };
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return { success: false, message: 'Verification endpoint not found', _fallback: true };
+      }
+      console.error(`PocketFi ${idType.toUpperCase()} Error:`, error.response?.data || error.message);
+      return { success: false, message: error.response?.data?.message || error.message };
+    }
+  }
+
+  async verifyBVN(bvn: string): Promise<{ success: boolean; data?: any; message?: string }> {
+    // Try the documented /verification endpoint first, fall back to legacy /identity/bvn
+    const result = await this.verifyIdentity('basic', 'bvn', bvn);
+    if (result.success || !result._fallback) return result;
+
+    try {
+      const response = await this.api.post('/identity/bvn', { bvn });
+      if (response.data.status === true || response.data.status === 'success') {
+        return { success: true, data: response.data.data };
+      }
+      return { success: false, message: response.data.message || 'BVN Verification failed' };
+    } catch (error: any) {
+      console.error('PocketFi BVN Error:', error.response?.data || error.message);
+      return { success: false, message: error.response?.data?.message || error.message };
+    }
   }
 
   async verifyNIN(nin: string): Promise<{ success: boolean; data?: any; message?: string }> {
-      try {
-          const response = await this.api.post('/identity/nin', { nin });
-          if (response.data.status === true || response.data.status === 'success') {
-              return { success: true, data: response.data.data };
-          }
-          return { success: false, message: response.data.message || 'NIN Verification failed' };
-      } catch (error: any) {
-          console.error('PocketFi NIN Error:', error.response?.data || error.message);
-          return { success: false, message: error.response?.data?.message || error.message };
+    const result = await this.verifyIdentity('basic', 'nin', nin);
+    if (result.success || !result._fallback) return result;
+
+    try {
+      const response = await this.api.post('/identity/nin', { nin });
+      if (response.data.status === true || response.data.status === 'success') {
+        return { success: true, data: response.data.data };
       }
+      return { success: false, message: response.data.message || 'NIN Verification failed' };
+    } catch (error: any) {
+      console.error('PocketFi NIN Error:', error.response?.data || error.message);
+      return { success: false, message: error.response?.data?.message || error.message };
+    }
+  }
+
+  /**
+   * Full BVN verification (returns complete KYC profile).
+   */
+  async verifyBVNFull(bvn: string): Promise<{ success: boolean; data?: any; message?: string }> {
+    try {
+      const response = await this.api.post('/verification/bvn', { bvn });
+      if (response.data.status === true || response.data.status === 'success') {
+        return { success: true, data: response.data.data };
+      }
+      return { success: false, message: response.data.message || 'BVN Full Verification failed' };
+    } catch (error: any) {
+      console.error('PocketFi BVN Full Error:', error.response?.data || error.message);
+      return { success: false, message: error.response?.data?.message || error.message };
+    }
   }
 }
