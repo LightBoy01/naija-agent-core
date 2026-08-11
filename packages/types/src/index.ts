@@ -144,6 +144,7 @@ export const ConfigSchema = z.object({
     'deepseek-v4-pro',
     'deepseek-v4-flash',
     'gemma-4-26b-a4b-it',
+    'models/gemma-4-36b',
   ]).default('deepseek-v4-flash'),
   tools: z.array(z.string()).default([]), // List of enabled tool names
   payment: PaymentConfigSchema.optional(), // Per-tenant payment config

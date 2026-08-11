@@ -35,7 +35,7 @@ export const SystemConfig = {
         ZYNUX_FALLBACK: 'models/gemini-3.1-flash-lite',
 
         // --- AELIXXR (Life OS) ---
-        AELIXXR_PRIMARY: 'deepseek-v4-pro',
+        AELIXXR_PRIMARY: 'models/gemma-4-36b',
         AELIXXR_WORKER: 'deepseek-v4-flash',
         AELIXXR_FALLBACK: 'models/gemini-3.1-flash-lite',
 

@@ -74,5 +74,14 @@ export const GlobalModelRegistry: ModelCapability[] = [
         skills: ['reasoning', 'tool-calling', 'summarization', 'data-processing'],
         costProfile: 'ultra-low',
         maxContext: 1000000
+    },
+    {
+        id: 'models/gemma-4-36b',
+        provider: 'gemini',
+        baseURL: 'https://generativelanguage.googleapis.com',
+        apiKeyEnv: 'GEMINI_API_KEY_STUDIO',
+        skills: ['reasoning', 'tool-calling', 'summarization'],
+        costProfile: 'ultra-low',
+        maxContext: 128000
     }
 ];
