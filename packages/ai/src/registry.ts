@@ -76,7 +76,7 @@ export const GlobalModelRegistry: ModelCapability[] = [
         maxContext: 1000000
     },
     {
-        id: 'models/gemma-4-31b-it',
+        id: 'models/gemma-2-27b-it',
         provider: 'gemini',
         baseURL: 'https://generativelanguage.googleapis.com',
         apiKeyEnv: 'GEMINI_API_KEY_STUDIO',
