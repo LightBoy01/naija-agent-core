@@ -43,7 +43,9 @@ ${ctx.ingestionSummary}
 - Energy: ${ctx.energyCredits}
 - Goals: ${JSON.stringify(ctx.lifeContext.goals || [])}
 - Active Monitors: ${JSON.stringify(ctx.activeMonitors)}${semanticMemories}
----`;
+---
+
+CRITICAL: Reply directly to the user with your final message. Do NOT include your internal thoughts, planning, or reasoning in the final text. Do not wrap your message in JSON or markdown code blocks.`;
 }
 
 export interface ChatInput {

@@ -58,7 +58,7 @@ export const UTILITY_TOOLS = [
           validationReference: { type: Type.STRING },
           pin: { type: Type.STRING, description: 'The user\'s 4-digit PIN.' }
         },
-        required: ['amountNaira', 'productCode', 'customerId', 'validationReference', 'pin']
+        required: ['amountNaira', 'productCode', 'customerId', 'pin']
       }
     }
 ];
